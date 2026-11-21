@@ -1,0 +1,28 @@
+name: Protocol regression
+description: Report a previously working battery query that changed or fails
+title: "[Regression]: <device and library version>"
+labels: [regression]
+body:
+  - type: input
+    id: device
+    attributes:
+      label: Package, model, firmware and OS
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Last working and current library versions
+    validations:
+      required: true
+  - type: textarea
+    id: symptom
+    attributes:
+      label: Error category and observed behavior
+      description: Use diagnose output without paths or serial numbers. Do not paste raw reports into the public issue by default.
+    validations:
+      required: true
+  - type: textarea
+    id: fixtures
+    attributes:
+      label: Old and new sanitized fixture availability

@@ -1,0 +1,8 @@
+/target/
+/tray/target/
+/tray/platforms/macos/.build/
+/tray/platforms/macos/dist/
+*.pcap
+*.pcapng
+*.log
+.DS_Store

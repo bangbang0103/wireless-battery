@@ -1,0 +1,772 @@
+//! Razer wireless mouse and headset battery protocols.
+
+use crate::error::BatteryError;
+use crate::model::{ChargeState, Endpoint, ProviderReading, Reachability, ReadingSource};
+use crate::providers::fixed::{
+    capabilities, charge_bool, checked_percentage, crc16_poly_1021, drain_input,
+    experimental_metadata, feature_frame, input_frame, query, reading, send_with_modes, sleep,
+    wait_frame, SendMode, OUTPUT,
+};
+use crate::providers::{Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata};
+use crate::transport::HidSession;
+use std::sync::Arc;
+use std::time::Duration;
+
+const RAZER_HEADSET_PIDS: &[u16] = &[
+    0x0528, 0x053A, 0x0550, 0x0552, 0x0555, 0x0565, 0x0576, 0x0577, 0x0579, 0x057A, 0x057C, 0x057D,
+    0x0A4E, 0x0A55,
+];
+
+const RAZER_WIRELESS_PIDS: &[u16] = &[
+    // Wireless mice & dongles
+    0x0013, 0x0015, 0x0016, 0x001F, 0x0020, 0x0024, 0x0025, 0x0029, 0x002E, 0x002F, 0x0032, 0x0034,
+    0x0036, 0x0037, 0x0038, 0x0039, 0x003E, 0x003F, 0x0040, 0x0041, 0x0042, 0x0043, 0x0044, 0x0045,
+    0x0046, 0x0048, 0x004C, 0x004F, 0x0050, 0x0053, 0x0054, 0x0059, 0x005A, 0x005B, 0x005C, 0x005E,
+    0x005F, 0x0060, 0x0062, 0x0064, 0x0065, 0x0067, 0x006A, 0x006B, 0x006C, 0x006E, 0x006F, 0x0070,
+    0x0071, 0x0072, 0x0073, 0x0077, 0x0078, 0x007A, 0x007B, 0x007C, 0x007D, 0x0080, 0x0083, 0x0084,
+    0x0085, 0x0086, 0x0088, 0x008A, 0x008C, 0x008D, 0x008F, 0x0090, 0x0091, 0x0094, 0x0095, 0x0096,
+    0x0098, 0x0099, 0x009A, 0x009C, 0x009E, 0x009F, 0x00A1, 0x00A3, 0x00A5, 0x00A6, 0x00A7, 0x00A8,
+    0x00AA, 0x00AB, 0x00AF, 0x00B0, 0x00B2, 0x00B3, 0x00B4, 0x00B6, 0x00B7, 0x00B8, 0x00B9, 0x00BE,
+    0x00BF, 0x00C0, 0x00C1, 0x00C2, 0x00C3, 0x00C4, 0x00C5, 0x00C7, 0x00C8, 0x00CB, 0x00CC, 0x00CD,
+    0x00D0, 0x00D1, 0x00D3, 0x00D4, 0x00D6, 0x00D7, 0x00DA, 0x00DB, 0x00DE, 0x00DF, 0x00E0, 0x00E5,
+    0x00E6, // Wireless keyboards
+    0x0258, 0x025A, 0x025C, 0x0271, 0x0290, 0x0292, 0x0296, 0x0298, 0x02B9, 0x02BA, 0x02C9, 0x02CD,
+    0x02D2, 0x02D4, 0x02D5, 0x02D7,
+];
+
+pub(crate) fn providers() -> Vec<Arc<dyn Provider>> {
+    vec![
+        Arc::new(RazerMouseProvider),
+        Arc::new(RazerHeadsetProvider),
+        Arc::new(BlackSharkV2HyperSpeedProvider),
+        Arc::new(BarracudaXProvider),
+        Arc::new(BlackSharkV2Pro2020Provider),
+        Arc::new(BlackSharkV3XProvider),
+        Arc::new(BlackSharkV3Provider),
+        Arc::new(BarracudaProProvider),
+    ]
+}
+
+struct RazerMouseProvider;
+
+impl Provider for RazerMouseProvider {
+    fn id(&self) -> &str {
+        "razer.mouse"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(capabilities(true, true, false), Duration::from_millis(160))
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Razer wireless mouse".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        if endpoint.vid == Some(0x1532)
+            && endpoint.pid.is_some_and(|pid| {
+                !RAZER_HEADSET_PIDS.contains(&pid) && RAZER_WIRELESS_PIDS.contains(&pid)
+            })
+            && endpoint.usage_page.is_some_and(|page| page >= 0xFF00)
+        {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        for attempt in 0..4_u8 {
+            let transaction = 0x20 + attempt;
+            let request = razer_request(transaction);
+            send_with_modes(session, device, &[SendMode::Feature], &request)?;
+            for _ in 0..8 {
+                deadline.check("Razer feature read")?;
+                let frame = feature_frame(session, device, 0, 90)?;
+                if frame.len() < 3 || frame[2] != transaction {
+                    continue;
+                }
+                match frame[1] {
+                    2 => return parse_razer_mouse(&frame),
+                    5 => {
+                        return Err(BatteryError::Unsupported {
+                            reason: "Razer receiver rejected battery query".to_owned(),
+                        });
+                    }
+                    3 | 4 => break,
+                    1 => sleep(deadline, Duration::from_millis(20))?,
+                    _ => continue,
+                }
+            }
+        }
+        Err(BatteryError::timeout("Razer battery query"))
+    }
+}
+
+fn razer_request(transaction: u8) -> Vec<u8> {
+    let mut frame = vec![0_u8; 91];
+    frame[2] = transaction;
+    frame[6] = 2;
+    frame[7] = 0x07;
+    frame[8] = 0x80;
+    frame[89] = frame[3..=88].iter().fold(0_u8, |crc, byte| crc ^ byte);
+    frame
+}
+
+fn parse_razer_mouse(frame: &[u8]) -> Result<ProviderReading, BatteryError> {
+    if frame.len() != 91 || frame[5] != 0 || frame[6] < 2 || frame[7] != 0x07 || frame[8] != 0x80 {
+        return Err(BatteryError::invalid_response("invalid Razer response"));
+    }
+    let crc = frame[3..=88].iter().fold(0_u8, |crc, byte| crc ^ byte);
+    if frame[89] != crc {
+        return Err(BatteryError::ChecksumFailed);
+    }
+    let raw = frame[10];
+    let percentage = ((u16::from(raw) * 100 + 127) / 255) as u8;
+    Ok(reading(Some(percentage), charge_bool(frame[9]), None))
+}
+
+struct RazerHeadsetProvider;
+
+impl Provider for RazerHeadsetProvider {
+    fn id(&self) -> &str {
+        "razer.headset"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(capabilities(true, true, false), Duration::from_millis(150))
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Razer BlackShark V2 Pro".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        if endpoint.vid == Some(0x1532)
+            && endpoint.usage_page == Some(0xFF00)
+            && endpoint.pid == Some(0x0555)
+        {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        let battery = razer_headset_query(session, device, deadline, 0x21)?;
+        let percentage = checked_percentage(battery[15])?;
+        let charge = match razer_headset_query(session, device, deadline, 0x2A) {
+            Ok(frame) => charge_bool(frame[15]),
+            Err(BatteryError::Timeout { .. }) => ChargeState::Unknown,
+            Err(error) => return Err(error),
+        };
+        Ok(reading(Some(percentage), charge, None))
+    }
+}
+
+fn razer_headset_query(
+    session: &mut dyn HidSession,
+    device: &DeviceContext<'_>,
+    deadline: Deadline,
+    field: u8,
+) -> Result<Vec<u8>, BatteryError> {
+    let mut request = vec![0_u8; 64];
+    request[0] = 0x02;
+    request[1] = 0x80;
+    request[2] = 0x09;
+    request[5] = 0x50;
+    request[6] = 0x41;
+    request[7] = 0x08;
+    request[9] = 0x04;
+    request[10] = field;
+    request[12] = 1;
+    request[13] = 1;
+    query(
+        session,
+        device,
+        deadline,
+        request,
+        Duration::from_millis(150),
+        |frame| {
+            Ok(frame.len() >= 16
+                && frame[0] == 0x02
+                && frame[2..4] == [0x50, 0x49]
+                && frame[12] == field
+                && frame[13..15] == [1, 1])
+        },
+    )
+}
+
+struct BlackSharkV2HyperSpeedProvider;
+
+impl Provider for BlackSharkV2HyperSpeedProvider {
+    fn id(&self) -> &str {
+        "razer.blackshark_v2_hs"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(capabilities(true, true, false), Duration::from_millis(500))
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Razer BlackShark V2 HyperSpeed".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        if endpoint.vid == Some(0x1532)
+            && endpoint.pid == Some(0x0565)
+            && matches!(endpoint.usage_page, Some(0xFF14) | Some(0xFF00))
+            && endpoint.usage == Some(0x0001)
+        {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        let ask = |session: &mut dyn HidSession, cmd: u8, seq: u8| {
+            drain_input(session, device, deadline, 6)?;
+            let mut req = vec![0_u8; 64];
+            req[0] = 0x02;
+            req[2] = seq;
+            req[6] = 0x04;
+            req[9] = 0x80;
+            req[10] = cmd;
+            req[62] = req[..62].iter().fold(0_u8, |a, b| a ^ b);
+            send_with_modes(session, device, OUTPUT, &req)?;
+            wait_frame(
+                session,
+                device,
+                deadline,
+                Duration::from_millis(500),
+                12,
+                |r| {
+                    if r.len() < 64 || r[0] != 0x02 || r[2] != seq || r[10] != cmd || r[12] < 1 {
+                        return Ok(false);
+                    }
+                    let xor = r[1..62].iter().fold(0_u8, |a, b| a ^ b);
+                    if r[62] != xor {
+                        return Err(BatteryError::ChecksumFailed);
+                    }
+                    Ok(true)
+                },
+            )
+        };
+        let bat = ask(session, 0x21, 0x60)?;
+        let pct = checked_percentage(bat[13])?;
+        let charge = match ask(session, 0x2A, 0x61) {
+            Ok(chg) => {
+                if chg[13] > 0 {
+                    ChargeState::Charging
+                } else {
+                    ChargeState::Discharging
+                }
+            }
+            Err(BatteryError::Timeout { .. }) => ChargeState::Unknown,
+            Err(error) => return Err(error),
+        };
+        Ok(reading(Some(pct), charge, None))
+    }
+}
+
+struct BarracudaXProvider;
+
+impl Provider for BarracudaXProvider {
+    fn id(&self) -> &str {
+        "razer.barracuda_x"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(capabilities(true, true, false), Duration::from_millis(600))
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Razer Barracuda X (2022)".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        let matched = match endpoint.pid {
+            Some(0x0550) => endpoint.usage_page == Some(0xFF00) && endpoint.usage == Some(0x0001),
+            Some(0x0552) => endpoint.usage_page == Some(0xFF00) && endpoint.usage == Some(0x0000),
+            _ => false,
+        };
+        if endpoint.vid == Some(0x1532) && matched {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        let macronix = device.endpoint.pid == Some(0x0552);
+        drain_input(session, device, deadline, 6)?;
+        if macronix {
+            let mut init = vec![0_u8; 64];
+            init[0] = 0x01;
+            init[1] = 0x40;
+            send_with_modes(session, device, OUTPUT, &init)?;
+            let _ = wait_frame(
+                session,
+                device,
+                deadline,
+                Duration::from_millis(400),
+                8,
+                |r| Ok(r.len() >= 4 && r[..4] == [0x01, 0x40, 0x01, 0x01]),
+            )?;
+        }
+        let send_airoha = |session: &mut dyn HidSession, group: u8, seq: u8, body: &[u8]| {
+            let mut payload = Vec::with_capacity(4 + body.len());
+            payload.extend_from_slice(&[0x50, 0x41, group, seq]);
+            payload.extend_from_slice(body);
+            let mut pkt = vec![0_u8; 64];
+            if macronix {
+                pkt[0] = 0x01;
+                pkt[1] = 0x80;
+                pkt[2] = payload.len() as u8;
+                pkt[3..3 + payload.len()].copy_from_slice(&payload);
+                send_with_modes(session, device, OUTPUT, &pkt)
+            } else {
+                pkt[0] = 0x02;
+                pkt[1] = 0x80;
+                pkt[2] = payload.len() as u8;
+                pkt[5..5 + payload.len()].copy_from_slice(&payload);
+                let crc = crc16_poly_1021(&pkt, 0x0000);
+                pkt[3] = (crc & 0xFF) as u8;
+                pkt[4] = (crc >> 8) as u8;
+                send_with_modes(session, device, OUTPUT, &pkt)?;
+                let status = input_frame(session, device, 0x02, 63)?;
+                if status.len() >= 2 && status[1] == b'O' {
+                    Ok(())
+                } else {
+                    Err(BatteryError::DeviceBusy {
+                        endpoint: device.endpoint.id.to_string(),
+                    })
+                }
+            }
+        };
+        send_airoha(session, 0x0E, 1, &[0x02, 0xE1, 0x01])?;
+        let _ack = wait_airoha_pi_frame(session, device, deadline, macronix, |f| {
+            f.len() >= 13 && f[10] == 0x0E && f[11] == 0x81 && f[12] == 0x00
+        })?;
+        send_airoha(session, 0x08, 2, &[0x03, 0x21, 0x00, 0x00])?;
+        let bat = wait_airoha_pi_frame(session, device, deadline, macronix, |f| {
+            f.len() >= 14 && f[2] == 0x08 && f[10] == 0x21 && f[11] == 0x01 && f[12] >= 1
+        })?;
+        let pct = checked_percentage(bat[13])?;
+        let charge = match send_airoha(session, 0x08, 3, &[0x03, 0x2A, 0x00, 0x00]).and_then(|()| {
+            wait_airoha_pi_frame(session, device, deadline, macronix, |f| {
+                f.len() >= 14 && f[2] == 0x08 && f[10] == 0x2A && f[11] == 0x01 && f[12] >= 1
+            })
+        }) {
+            Ok(f) => charge_bool(f[13]),
+            Err(BatteryError::Timeout { .. }) => ChargeState::Unknown,
+            Err(error) => return Err(error),
+        };
+        let _ = send_airoha(session, 0x0E, 4, &[0x02, 0xE1, 0x00]);
+        Ok(reading(Some(pct), charge, None))
+    }
+}
+
+fn wait_airoha_pi_frame(
+    session: &mut dyn HidSession,
+    device: &DeviceContext<'_>,
+    deadline: Deadline,
+    macronix: bool,
+    pred: impl Fn(&[u8]) -> bool,
+) -> Result<Vec<u8>, BatteryError> {
+    let mut stream = Vec::new();
+    for _ in 0..16 {
+        let frame = wait_frame(
+            session,
+            device,
+            deadline,
+            Duration::from_millis(500),
+            8,
+            |r| {
+                if macronix {
+                    Ok(r.len() >= 4 && r[0] == 0x01 && r[1] == 0x80)
+                } else {
+                    Ok(r.len() >= 3 && r[0] == 0x02)
+                }
+            },
+        )?;
+        let chunk = if macronix {
+            let n = usize::from(frame[2]).min(frame.len().saturating_sub(3));
+            &frame[3..3 + n]
+        } else {
+            let n = usize::from(frame[1]).min(frame.len().saturating_sub(2));
+            &frame[2..2 + n]
+        };
+        stream.extend_from_slice(chunk);
+        while let Some(pos) = stream.windows(2).position(|w| w == [0x50, 0x49]) {
+            if pos > 0 {
+                stream.drain(..pos);
+            }
+            if stream.len() < 10 {
+                break;
+            }
+            let total = 10 + usize::from(u16::from_le_bytes([stream[8], stream[9]]));
+            if stream.len() < total {
+                break;
+            }
+            let msg: Vec<u8> = stream.drain(..total).collect();
+            if pred(&msg) {
+                return Ok(msg);
+            }
+        }
+    }
+    Err(BatteryError::timeout("Razer Barracuda X"))
+}
+
+struct BlackSharkV2Pro2020Provider;
+
+impl Provider for BlackSharkV2Pro2020Provider {
+    fn id(&self) -> &str {
+        "razer.blackshark_v2_pro_2020"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(capabilities(true, true, true), Duration::from_millis(400))
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Razer BlackShark V2 Pro (2020)".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        if endpoint.vid == Some(0x1532)
+            && endpoint.pid == Some(0x0528)
+            && endpoint.usage_page == Some(0xFF00)
+            && endpoint.usage == Some(0x0001)
+        {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        let mut req = vec![0_u8; 64];
+        req[..9].copy_from_slice(&[0xFF, 0x0A, 0x00, 0xFD, 0x04, 0x12, 0xF1, 0x02, 0x05]);
+        send_with_modes(session, device, &[SendMode::Feature], &req)?;
+        for attempt in 0..5 {
+            sleep(deadline, Duration::from_millis(100))?;
+            let r = feature_frame(session, device, 0xFF, 63)?;
+            if r.len() >= 15 && r[..9] == [0xFF, 0x0F, 0x05, 0xFE, 0x12, 0x04, 0x1F, 0x08, 0x05] {
+                let mv = u32::from(u16::from_be_bytes([r[12], r[13]]));
+                if mv == 0 {
+                    return Ok(ProviderReading {
+                        reachability: Reachability::Offline,
+                        source: ReadingSource::VendorHid,
+                        ..ProviderReading::default()
+                    });
+                }
+                let charging = r[11] == 0x09;
+                let pct = if charging {
+                    None
+                } else {
+                    Some(checked_percentage(r[14])?)
+                };
+                return Ok(reading(
+                    pct,
+                    if charging {
+                        ChargeState::Charging
+                    } else {
+                        ChargeState::Discharging
+                    },
+                    Some(mv),
+                ));
+            }
+            if attempt == 4
+                && r.len() >= 9
+                && r[..9] == [0xFF, 0x01, 0x00, 0xFE, 0x12, 0x04, 0x1F, 0x08, 0x05]
+            {
+                return Ok(ProviderReading {
+                    reachability: Reachability::Offline,
+                    source: ReadingSource::VendorHid,
+                    ..ProviderReading::default()
+                });
+            }
+        }
+        Err(BatteryError::timeout("Razer BlackShark V2 Pro (2020)"))
+    }
+}
+
+struct BlackSharkV3XProvider;
+
+impl Provider for BlackSharkV3XProvider {
+    fn id(&self) -> &str {
+        "razer.blackshark_v3_x"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(capabilities(true, true, false), Duration::from_millis(300))
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Razer BlackShark V3 X".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        if endpoint.vid == Some(0x1532)
+            && matches!(endpoint.pid, Some(0x057C | 0x057D))
+            && endpoint.interface_number == Some(0)
+        {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        let ask = |session: &mut dyn HidSession, cmd: u8, txid: u8| {
+            let mut req = vec![0_u8; 64];
+            req[0] = 0x07;
+            req[2] = txid;
+            req[6] = 0x02;
+            req[7] = 0x07;
+            req[8] = cmd;
+            req[62] = req[3..=60].iter().fold(0_u8, |a, b| a ^ b);
+            send_with_modes(session, device, &[SendMode::Feature], &req)?;
+            for _ in 0..4 {
+                sleep(deadline, Duration::from_millis(60))?;
+                let r = feature_frame(session, device, 0x07, 63)?;
+                if r.len() >= 63 && r[2] == txid && r[7] == 0x07 && r[8] == cmd && r[6] >= 2 {
+                    match r[1] {
+                        0x02 => return Ok(r[10]),
+                        0x01 => continue,
+                        _ => {
+                            return Err(BatteryError::DeviceDisconnected {
+                                endpoint: device.endpoint.id.to_string(),
+                            })
+                        }
+                    }
+                }
+            }
+            Err(BatteryError::timeout("Razer BlackShark V3 X"))
+        };
+        let pct = checked_percentage(ask(session, 0x80, 0x41)?)?;
+        let charge = match ask(session, 0x84, 0x42) {
+            Ok(v) => charge_bool(v),
+            Err(BatteryError::Timeout { .. }) => ChargeState::Unknown,
+            Err(error) => return Err(error),
+        };
+        Ok(reading(Some(pct), charge, None))
+    }
+}
+
+struct BlackSharkV3Provider;
+
+impl Provider for BlackSharkV3Provider {
+    fn id(&self) -> &str {
+        "razer.blackshark_v3"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(capabilities(true, true, false), Duration::from_millis(600))
+    }
+
+    fn display_name(&self, endpoint: &Endpoint) -> Option<String> {
+        Some(match endpoint.pid {
+            Some(0x0576 | 0x0577) => "Razer BlackShark V3 Pro".to_owned(),
+            Some(0x0A4E | 0x0A55) => "Razer BlackShark V3 Pro for Xbox".to_owned(),
+            _ => "Razer BlackShark V3".to_owned(),
+        })
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        if endpoint.vid == Some(0x1532)
+            && matches!(
+                endpoint.pid,
+                Some(0x0576 | 0x0577 | 0x0579 | 0x057A | 0x0A4E | 0x0A55)
+            )
+            && endpoint.interface_number == Some(5)
+        {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        let packet = |dir: u8, cls: u8| {
+            let mut b = vec![0_u8; 64];
+            b[0] = 0x02;
+            b[2] = 0x60;
+            b[6] = 0x04;
+            b[9] = dir;
+            b[10] = cls;
+            b[62] = b[..62].iter().fold(0_u8, |a, x| a ^ x);
+            b
+        };
+        send_with_modes(session, device, OUTPUT, &packet(0x00, 0x02))?;
+        send_with_modes(session, device, OUTPUT, &packet(0x00, 0x2A))?;
+        send_with_modes(session, device, OUTPUT, &packet(0x80, 0x2A))?;
+        sleep(deadline, Duration::from_millis(200))?;
+        drain_input(session, device, deadline, 6)?;
+
+        send_with_modes(session, device, OUTPUT, &packet(0x80, 0x21))?;
+        let bat = wait_frame(
+            session,
+            device,
+            deadline,
+            Duration::from_millis(500),
+            12,
+            |r| Ok(r.len() >= 15 && r[0] == 0x02 && r[2] == 0x60 && r[10] == 0x21),
+        )?;
+        let pct = checked_percentage(bat[13])?;
+        let mut charging = bat[14] != 0;
+        if !charging {
+            send_with_modes(session, device, OUTPUT, &packet(0x80, 0x2A))?;
+            if let Ok(chg) = wait_frame(
+                session,
+                device,
+                deadline,
+                Duration::from_millis(300),
+                8,
+                |r| Ok(r.len() >= 15 && r[0] == 0x02 && r[2] == 0x60 && r[10] == 0x2A),
+            ) {
+                charging = chg[13] == 1;
+            }
+        }
+        Ok(reading(
+            Some(pct),
+            if charging {
+                ChargeState::Charging
+            } else {
+                ChargeState::Discharging
+            },
+            None,
+        ))
+    }
+}
+
+struct BarracudaProProvider;
+
+impl Provider for BarracudaProProvider {
+    fn id(&self) -> &str {
+        "razer.barracuda_pro"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(capabilities(true, true, false), Duration::from_millis(400))
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Razer Barracuda Pro".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        if endpoint.vid == Some(0x1532)
+            && endpoint.pid == Some(0x053A)
+            && endpoint.usage_page == Some(0xFF00)
+        {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        let remote = |on: bool| {
+            let mut b = vec![0_u8; 64];
+            b[..10].copy_from_slice(&[
+                0x01,
+                0x80,
+                0x07,
+                b'P',
+                b'A',
+                0x0E,
+                0x08,
+                0x02,
+                0xE1,
+                u8::from(on),
+            ]);
+            b
+        };
+        let ask = |session: &mut dyn HidSession, cmd: u8| {
+            let mut b = vec![0_u8; 64];
+            b[..9].copy_from_slice(&[0x01, 0x80, 0x08, b'P', b'A', 0x08, 0x08, 0x03, cmd]);
+            send_with_modes(session, device, OUTPUT, &b)?;
+            wait_frame(
+                session,
+                device,
+                deadline,
+                Duration::from_millis(400),
+                8,
+                |r| {
+                    Ok(r.len() >= 17
+                        && r[13] == cmd
+                        && matches!(r[14], 0x01 | 0x02)
+                        && r[15] > 0
+                        && r[15] <= 32)
+                },
+            )
+        };
+        drain_input(session, device, deadline, 6)?;
+        send_with_modes(session, device, OUTPUT, &remote(true))?;
+        sleep(deadline, Duration::from_millis(50))?;
+        let bat = ask(session, 0x21);
+        let result = match bat {
+            Ok(b) => {
+                let pct = checked_percentage(b[16])?;
+                let charge = match ask(session, 0x2A) {
+                    Ok(c) => {
+                        if c[16] > 0 {
+                            ChargeState::Charging
+                        } else {
+                            ChargeState::Discharging
+                        }
+                    }
+                    Err(BatteryError::Timeout { .. }) => ChargeState::Unknown,
+                    Err(error) => return Err(error),
+                };
+                Ok(reading(Some(pct), charge, None))
+            }
+            Err(error) => Err(error),
+        };
+        let _ = send_with_modes(session, device, OUTPUT, &remote(false));
+        result
+    }
+}

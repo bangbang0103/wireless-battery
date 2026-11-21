@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "target": {"kind": "bluetooth_bas", "id": "bluetooth.bas"},
+  "case": "bluetooth_bas_55_percent",
+  "source": "synthetic",
+  "environment": {"os": null, "connection": "bluetooth_le", "firmware": null},
+  "endpoint": {
+    "id": "ep_synthetic_bas", "transport": "bluetooth_le", "vid": null, "pid": null,
+    "usage_page": null, "usage": null, "input_report_length": null,
+    "output_report_length": null, "feature_report_length": null,
+    "product_name": "Synthetic BLE mouse", "manufacturer": null
+  },
+  "steps": [
+    {
+      "operation": "read_bas",
+      "report_id": null,
+      "request_hex": null,
+      "length": null,
+      "outcome": {"kind": "bas", "percentage": 55}
+    }
+  ],
+  "expect": {"kind": "reading", "percentage": 55, "level": null, "voltage_mv": null, "charge_state": "unknown", "reachability": "online", "precision": "percentage"}
+}

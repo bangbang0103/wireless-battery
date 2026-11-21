@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.76.0
+          components: rustfmt, clippy
+      - name: Install Linux HID dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev libusb-1.0-0-dev
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-1.76-${{ hashFiles('Cargo.lock') }}
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - run: cargo clippy --locked --no-default-features -- -D warnings
+      - run: cargo test --locked --all-features
+      - run: cargo run --locked --quiet -- validate
+      - name: Replay every synthetic fixture
+        shell: bash
+        run: |
+          for fixture in fixtures/synthetic/*.json; do
+            cargo run --locked --quiet -- replay --fixture "$fixture" || exit 1
+          done
+      - name: Replay every vendor and OS fixture
+        shell: bash
+        run: |
+          while IFS= read -r fixture; do
+            cargo run --locked --quiet -- replay --fixture "$fixture" || exit 1
+          done < <(find fixtures/vendors -type f -name '*.json' | sort)
+      - name: Check synthetic devices stay out of real support
+        shell: bash
+        run: |
+          ! grep -R 'synthetic\.' docs/support-matrix.md docs/support-matrix.zh-CN.md packages/vendors
+
+  tray:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.76.0
+          components: rustfmt, clippy
+      - name: Install Linux HID dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev libusb-1.0-0-dev
+      - name: Cache Tray Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tray/target
+          key: ${{ runner.os }}-tray-cargo-1.76-${{ hashFiles('tray/Cargo.lock') }}
+      - working-directory: tray
+        run: cargo fmt --all -- --check
+      - working-directory: tray
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - working-directory: tray
+        run: cargo test --locked
+      - name: Build Windows native tray release
+        if: runner.os == 'Windows'
+        working-directory: tray
+        run: cargo build --locked --release -p wireless-battery-tray
+      - name: Build macOS native SwiftUI tray bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: bash tray/platforms/macos/scripts/bundle-app.sh

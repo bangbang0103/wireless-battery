@@ -1,0 +1,33 @@
+name: New device
+description: Request or propose a peripheral battery protocol
+title: "[Device]: <vendor and model>"
+labels: [device]
+body:
+  - type: input
+    id: identity
+    attributes:
+      label: Device identity
+      description: Model, VID/PID if known, usage page, receiver and firmware. Do not include serial numbers.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Battery behavior
+      description: Percentage or levels, charging/full states, connection type, and manufacturer software behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Available evidence
+      description: Protocol documentation, sanitized fixtures, source licenses, and hardware you can test. No PCAP or raw system paths.
+  - type: checkboxes
+    id: permission
+    attributes:
+      label: Contribution safety
+      options:
+        - label: I have removed serial numbers, usernames, paths, keystrokes, and unrelated traffic.
+          required: true
+        - label: I will not claim verified support without real-hardware evidence.
+          required: true

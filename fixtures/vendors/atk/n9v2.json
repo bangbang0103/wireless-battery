@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "target": {
+    "kind": "provider",
+    "id": "atk.n9v2"
+  },
+  "case": "atk_n9v2",
+  "source": "synthetic",
+  "environment": {
+    "os": null,
+    "connection": "synthetic",
+    "firmware": null
+  },
+  "endpoint": {
+    "id": "ep_atk_n9v2",
+    "transport": "mock",
+    "vid": 14139,
+    "pid": 4706,
+    "usage_page": 65424,
+    "usage": null,
+    "input_report_length": null,
+    "output_report_length": null,
+    "feature_report_length": null,
+    "product_name": "atk_n9v2",
+    "manufacturer": "Synthetic fixture"
+  },
+  "steps": [
+    {
+      "operation": "read_input",
+      "report_id": null,
+      "request_hex": null,
+      "length": null,
+      "outcome": {
+        "kind": "error",
+        "error": "timeout"
+      }
+    },
+    {
+      "operation": "write_output",
+      "report_id": 85,
+      "request_hex": "65 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "length": null,
+      "outcome": {
+        "kind": "ok"
+      }
+    },
+    {
+      "operation": "read_input",
+      "report_id": null,
+      "request_hex": null,
+      "length": null,
+      "outcome": {
+        "kind": "response",
+        "report_id": 85,
+        "hex": "65 64 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+      }
+    }
+  ],
+  "expect": {
+    "kind": "reading",
+    "percentage": 100,
+    "level": null,
+    "voltage_mv": null,
+    "charge_state": "discharging",
+    "reachability": "online",
+    "precision": "percentage"
+  }
+}

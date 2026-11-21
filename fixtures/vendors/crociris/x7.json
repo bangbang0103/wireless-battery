@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "target": {
+    "kind": "provider",
+    "id": "crociris.x7"
+  },
+  "case": "crociris_x7",
+  "source": "synthetic",
+  "environment": {
+    "os": null,
+    "connection": "synthetic",
+    "firmware": null
+  },
+  "endpoint": {
+    "id": "ep_crociris_x7",
+    "transport": "mock",
+    "vid": 14073,
+    "pid": 43552,
+    "usage_page": 65290,
+    "usage": null,
+    "input_report_length": null,
+    "output_report_length": null,
+    "feature_report_length": null,
+    "product_name": "crociris_x7",
+    "manufacturer": "Synthetic fixture"
+  },
+  "steps": [
+    {
+      "operation": "read_input",
+      "report_id": null,
+      "request_hex": null,
+      "length": null,
+      "outcome": {
+        "kind": "error",
+        "error": "timeout"
+      }
+    },
+    {
+      "operation": "write_output",
+      "report_id": 0,
+      "request_hex": "AA 12 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "length": null,
+      "outcome": {
+        "kind": "ok"
+      }
+    },
+    {
+      "operation": "read_input",
+      "report_id": null,
+      "request_hex": null,
+      "length": null,
+      "outcome": {
+        "kind": "response",
+        "report_id": 0,
+        "hex": "55 12 00 00 01 50 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+      }
+    }
+  ],
+  "expect": {
+    "kind": "reading",
+    "percentage": 80,
+    "level": null,
+    "voltage_mv": null,
+    "charge_state": "charging",
+    "reachability": "online",
+    "precision": "percentage"
+  }
+}

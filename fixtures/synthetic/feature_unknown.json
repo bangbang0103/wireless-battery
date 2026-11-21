@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "target": {"kind": "package", "id": "synthetic.feature.mouse"},
+  "case": "feature_unknown_percentage",
+  "source": "synthetic",
+  "environment": {"os": null, "connection": "2.4g_receiver", "firmware": null},
+  "endpoint": {
+    "id": "ep_synthetic_feature", "transport": "mock", "vid": 4660, "pid": 22136,
+    "usage_page": 65280, "usage": null, "input_report_length": null,
+    "output_report_length": null, "feature_report_length": null,
+    "product_name": "Synthetic feature mouse", "manufacturer": null
+  },
+  "steps": [
+    {"operation": "send_feature", "report_id": 9, "request_hex": "01 00 00 00", "length": null, "outcome": {"kind": "ok"}},
+    {"operation": "get_feature", "report_id": 9, "request_hex": null, "length": 4, "outcome": {"kind": "response", "report_id": 9, "hex": "01 FF 01 01"}}
+  ],
+  "expect": {"kind": "reading", "percentage": null, "level": null, "voltage_mv": null, "charge_state": "charging", "reachability": "online", "precision": "none"}
+}
