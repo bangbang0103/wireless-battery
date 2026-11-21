@@ -178,9 +178,10 @@ impl HidSession for HidApiSession {
     }
 
     fn set_output(&mut self, report_id: u8, payload: &[u8]) -> Result<(), TransportError> {
-        let mut report = Self::with_report_id(report_id, payload)?;
+        let report = Self::with_report_id(report_id, payload)?;
         #[cfg(windows)]
         {
+            let mut report = report;
             if self.windows.is_none() {
                 self.windows = Some(super::windows::WindowsHid::open(&self.path)?);
             }

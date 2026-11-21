@@ -1,4 +1,4 @@
 module CTrayCore {
-    header "../../../crates/tray-ffi/include/wireless_battery_tray.h"
+    header "../../../../crates/tray-ffi/include/wireless_battery_tray.h"
     export *
 }

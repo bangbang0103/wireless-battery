@@ -23,36 +23,40 @@ impl XInputTransport {
     }
 
     pub(crate) fn enumerate_slots(&self) -> Result<Vec<Endpoint>, TransportError> {
-        let mut active = HashMap::new();
-        let mut endpoints = Vec::new();
         #[cfg(windows)]
-        for slot in 0..4_u32 {
-            if native::connected(slot) {
-                let stable = format!("xinput:{slot}");
-                let id = identity::endpoint_id(&stable);
-                active.insert(id.clone(), slot);
-                endpoints.push(Endpoint {
-                    id,
-                    transport: TransportKind::XInput,
-                    vid: None,
-                    pid: None,
-                    usage_page: None,
-                    usage: None,
-                    interface_number: None,
-                    bus_type: None,
-                    input_report_length: None,
-                    output_report_length: None,
-                    feature_report_length: None,
-                    product_name: Some(format!("Xbox controller {}", slot + 1)),
-                    manufacturer: Some("XInput".to_owned()),
-                    system_path: stable,
-                });
+        let (active, endpoints) = {
+            let mut active = HashMap::new();
+            let mut endpoints = Vec::new();
+            for slot in 0..4_u32 {
+                if native::connected(slot) {
+                    let stable = format!("xinput:{slot}");
+                    let id = identity::endpoint_id(&stable);
+                    active.insert(id.clone(), slot);
+                    endpoints.push(Endpoint {
+                        id,
+                        transport: TransportKind::XInput,
+                        vid: None,
+                        pid: None,
+                        usage_page: None,
+                        usage: None,
+                        interface_number: None,
+                        bus_type: None,
+                        input_report_length: None,
+                        output_report_length: None,
+                        feature_report_length: None,
+                        product_name: Some(format!("Xbox controller {}", slot + 1)),
+                        manufacturer: Some("XInput".to_owned()),
+                        system_path: stable,
+                    });
+                }
             }
-        }
+            (active, endpoints)
+        };
         #[cfg(not(windows))]
-        {
+        let (active, endpoints) = {
             // XInput is a Windows-only operating-system API.
-        }
+            (HashMap::new(), Vec::new())
+        };
         *self
             .slots
             .write()
