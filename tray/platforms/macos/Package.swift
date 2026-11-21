@@ -25,6 +25,7 @@ let package = Package(
             path: "Sources/WirelessBatteryTray",
             linkerSettings: [
                 .unsafeFlags(["-L", rustReleaseLibDir, "-lwireless_battery_tray_ffi"]),
+                .linkedFramework("CoreBluetooth"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("CoreFoundation"),
                 .linkedFramework("AppKit"),
