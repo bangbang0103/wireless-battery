@@ -5,11 +5,10 @@
 //! registered as real device support.
 
 mod client;
-pub(crate) mod codec;
+pub mod codec;
 mod error;
 mod identity;
 pub mod model;
-pub mod package;
 pub mod providers;
 pub mod registry;
 pub mod transport;

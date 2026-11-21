@@ -22,6 +22,7 @@ pub const WM_TRAY_CALLBACK: u32 = WM_APP + 10;
 pub const MENU_CMD_OPEN_PANEL: u32 = 1001;
 pub const MENU_CMD_TOGGLE_AUTOSTART: u32 = 1002;
 pub const MENU_CMD_QUIT: u32 = 1003;
+pub const MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY: u32 = 1004;
 
 const TRAY_ICON_UID: u32 = 1;
 
@@ -137,8 +138,12 @@ impl TrayIconHost {
         unsafe { Shell_NotifyIconGetRect(&ident).ok() }
     }
 
-    /// Show a native Win32 context menu on tray right-click: Open Panel, Autostart (checked), Quit.
-    pub fn show_context_menu(&self, autostart_enabled: bool) -> Option<u32> {
+    /// Show a native Win32 context menu on tray right-click: Open Panel, Low Battery Notify, Autostart, Quit.
+    pub fn show_context_menu(
+        &self,
+        autostart_enabled: bool,
+        low_battery_notify: bool,
+    ) -> Option<u32> {
         unsafe {
             let menu = CreatePopupMenu().ok()?;
             let _ = AppendMenuW(
@@ -146,6 +151,18 @@ impl TrayIconHost {
                 MF_STRING,
                 MENU_CMD_OPEN_PANEL as usize,
                 w!("打开面板"),
+            );
+            let notify_flags = MF_STRING
+                | if low_battery_notify {
+                    MF_CHECKED
+                } else {
+                    MF_UNCHECKED
+                };
+            let _ = AppendMenuW(
+                menu,
+                notify_flags,
+                MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY as usize,
+                w!("低电量提醒"),
             );
             let autostart_flags = MF_STRING
                 | if autostart_enabled {

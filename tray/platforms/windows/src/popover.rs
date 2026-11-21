@@ -49,8 +49,6 @@ pub enum PopoverAction {
     RefreshDevice(String),
     CopyDiagnostic(String),
     SetPollInterval(u64),
-    ToggleExperimental,
-    ToggleStale,
     ToggleLowBatteryNotify,
     ToggleAutostart,
     Quit,
@@ -642,8 +640,6 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) {
         HitTarget::RefreshDevice(id) => (inner.on_action)(PopoverAction::RefreshDevice(id)),
         HitTarget::CopyDiagnostic(id) => (inner.on_action)(PopoverAction::CopyDiagnostic(id)),
         HitTarget::SetPollInterval(secs) => (inner.on_action)(PopoverAction::SetPollInterval(secs)),
-        HitTarget::ToggleExperimental => (inner.on_action)(PopoverAction::ToggleExperimental),
-        HitTarget::ToggleStale => (inner.on_action)(PopoverAction::ToggleStale),
         HitTarget::ToggleLowBatteryNotify => {
             (inner.on_action)(PopoverAction::ToggleLowBatteryNotify)
         }

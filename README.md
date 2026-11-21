@@ -14,9 +14,9 @@ The project prioritizes protocol safety and reproducibility over device count:
 
 ## Current support
 
-> **Supported Product Matrix**: See [**Support Matrix (`docs/support-matrix.md`)**](docs/support-matrix.md) for the full table organized by **Vendor**, **Device**, and **Support Method** (Built-in Rust HID, OS XInput API, or BLE BAS; Verified vs. Experimental).
+> **Supported Product Matrix**: See [**Support Matrix (`docs/support-matrix.md`)**](docs/support-matrix.md) for the full table organized by **Vendor**, **Device**, and **Support Method**.
 
-**152 built-in vendor and OS provider paths** (plus Bluetooth LE BAS) are included, covering Logitech / Astro, Razer, SteelSeries, Corsair, HyperX, ASUS ROG, Sony, Nintendo, Valve, GameSir, Flydigi, 8BitDo, Beitong, Keychron, Cherry, Akko, NuPhy, AULA, MCHOSE, ATK / VXE / VGN, DAREU, EWEADN, Rapoo, WOB, Glorious, Lamzu, WLmouse, Pulsar, VAXEE, Ninjutso, Endgame Gear, Finalmouse, ZOWIE, Audeze, JBL, Jabra, Turtle Beach, AKG, Fractal, Alienware, Moondrop, Maono, XInput, and others listed in the [support matrix](docs/support-matrix.md). They are experimental unless a specific device and capability are marked verified in the matrix. Strict wire-level synthetic replay exists for every built-in provider; this does not independently verify hardware. WOB Rainy75 and Logitech GPW3 real-hardware verification is tracked in the [hardware verification checklist](docs/hardware-verification.md). A fictional declarative mouse remains available for interpreter tests and is excluded from real support.
+**152 built-in vendor and OS provider paths** (plus Bluetooth LE BAS) are included, covering Logitech / Astro, Razer, SteelSeries, Corsair, HyperX, ASUS ROG, Sony, Nintendo, Valve, GameSir, Flydigi, 8BitDo, Beitong, Keychron, Cherry, Akko, NuPhy, AULA, MCHOSE, ATK / VXE / VGN, DAREU, EWEADN, Rapoo, WOB, Glorious, Lamzu, WLmouse, Pulsar, VAXEE, Ninjutso, Endgame Gear, Finalmouse, ZOWIE, Audeze, JBL, Jabra, Turtle Beach, AKG, Fractal, Alienware, Moondrop, Maono, XInput, and others listed in the [support matrix](docs/support-matrix.md). All built-in devices are enabled by default; if you encounter issues on specific hardware or firmware, please open an Issue.
 
 Built-in vendor protocol definitions reference [Wireless-Device-Battery-Monitor / BatteryHub](NOTICE) (GPL-3.0-or-later) and [Voltide](NOTICE) (MIT); see [NOTICE](NOTICE) for full attribution.
 
@@ -65,12 +65,13 @@ wireless-battery list --read
 wireless-battery list --read --json --timeout-ms 5000
 wireless-battery read <device-id> --json --timeout-ms 1000
 wireless-battery diagnose <device-id> --json
-wireless-battery capture --device <device-id> --output fixture.json --timeout-ms 5000
-wireless-battery replay --fixture fixtures/synthetic/feature_normal.json
-wireless-battery validate
+wireless-battery probe <device-id> --listen 3000
+wireless-battery probe <device-id> --report-id 0 --send "5A A5 01 02 00"
 ```
 
-Use `--include-experimental` on `list`, `read`, `diagnose`, or `capture` to opt into experimental providers. `list` includes every enumerated endpoint, including unmatched and ambiguous ones. Default `list` remains passive and displays battery as `not read`; `list --read` explicitly queries only currently readable devices. Its JSON entries contain the original device fields plus `reading` and `read_error`; one device failure does not fail the whole list. JSON is written only to stdout; warnings and progress go to stderr.
+All built-in vendor and OS providers are enabled by default. `list` includes every enumerated endpoint, including unmatched and ambiguous ones. Default `list` remains passive and displays battery as `not read`; `list --read` explicitly queries only currently readable devices. Its JSON entries contain the original device fields plus `reading` and `read_error`; one device failure does not fail the whole list. JSON is written only to stdout; warnings and progress go to stderr.
+
+For unsupported HID endpoints, use `probe` to passively listen (`--listen`) or send raw Output/Feature reports (`--send`, `--send-feature`, `--get-feature`, `--get-input`) for reverse engineering.
 
 Device IDs are opaque hashes, not serial numbers. They are intended for session-local use. On platforms where the OS path is stable, they are also deterministic enough for a later CLI `read` invocation, but persistence across reboots, machines, or path reassignment is not guaranteed.
 
@@ -80,9 +81,9 @@ Exit codes: 0 success; 2 arguments; 3 absent/unsupported; 4 permission; 5 timeou
 
 ```bash
 cargo run --quiet -- replay \
-  --fixture fixtures/synthetic/feature_normal.json \
-  --fixture fixtures/synthetic/feature_unknown.json \
-  --fixture fixtures/synthetic/bluetooth_bas.json
+  --fixture tests/fixtures/synthetic/feature_normal.json \
+  --fixture tests/fixtures/synthetic/feature_unknown.json \
+  --fixture tests/fixtures/synthetic/bluetooth_bas.json
 ```
 
 The replay transport checks operation order, report IDs, complete request payloads, response consumption, extra calls, final stable fields, and error categories. See [capture and replay](docs/capture-and-replay.md).
@@ -99,49 +100,33 @@ cargo build --locked --release -p wireless-battery-tray   # Windows native tray
 
 See the [Tray README](tray/README.md) for architecture, macOS bundling, and BLE support details.
 
-## AI Collaboration
+## Unsupported Devices
 
-You can hand the following prompt directly to an AI coding agent (such as Antigravity, Claude Code, Cursor, or Codex) to **detect connected devices, collect sanitized battery/charging fixtures, and reverse-engineer or integrate unsupported devices** via the `wireless-battery` CLI:
+If your device shows up as `unmatched` or reports `null` / `unknown` battery readings, try these 3 steps:
 
-```text
-Help me detect, collect, and reverse-engineer the battery percentage and charging/discharging state of my currently connected wireless peripherals using the wireless-battery CLI.
+1. **Check the Connection Mode & Endpoints**
+   - Run `wireless-battery list --json` to inspect all enumerated endpoints.
+   - Many multi-mode peripherals and gamepads (e.g., Flydigi, 8BitDo) expose only a Windows-reserved XInput endpoint (`045E:028E`) in XInput mode, and most third-party controllers do not report battery over XInput. Switch to **2.4G dongle, wired, DInput / vendor mode**, or **BLE mode** (standard BAS `0x2A19` works directly), then re-run `list` to check for a vendor HID endpoint (`usage_page >= 0xFF00`).
 
-Follow these steps in order:
-0. **Prepare the CLI Binary**:
-   - First check if `wireless-battery` / `wireless-battery.exe` is already available in the current directory or PATH. If not, guide me to download the prebuilt binary for my OS (e.g., `wireless-battery.exe` on Windows from the project's Releases) and place it in the working directory or PATH (if we are inside the source repository, `cargo run --locked --` can also be used).
-   - Run all subsequent commands using that binary (written below as `wireless-battery`; on Windows use `.\wireless-battery.exe` if in the current directory).
+2. **Probe Raw Packets with `probe`**
+   - Passively listen for unsolicited reports: `wireless-battery probe <device-id> --listen 5000` (plug/unplug the cable or interact with the device).
+   - Send candidate queries (e.g., captured via **Wireshark + USBPcap** / `usbmon`):
+     `wireless-battery probe <device-id> --report-id 0 --send "5A A5 ..."` or `--get-feature 0x03`, comparing raw bytes between **discharging** and **charging** states.
 
-1. **Detect & Inspect**:
-   - Run `wireless-battery list --json --include-experimental` to passively enumerate all HID/BLE endpoints, then run `wireless-battery list --read --json --include-experimental` to query currently readable devices.
-   - Summarize every detected device (name, VID/PID, `usage_page`, `usage`, `interface_number`, `match_status`, `support_status`, `provider_id`, current battery percentage, and charge state). For any matched or conflicting device, run `wireless-battery diagnose <device-id> --json --include-experimental` if needed.
-
-2. **Collect Real-Hardware Fixtures (Matched / Experimental Devices)**:
-   - For any matched device that needs verification, guide me to test both **discharging** (wireless) and **charging** (plugged in) states.
-   - Capture sanitized fixtures without overwriting existing files:
-     `wireless-battery capture --device <device-id> --output fixtures/<vendor_device>/discharging.json --include-experimental --timeout-ms 5000`
-     `wireless-battery capture --device <device-id> --output fixtures/<vendor_device>/charging.json --include-experimental --timeout-ms 5000`
-   - Verify captured fixtures with `wireless-battery replay --fixture ...` and `wireless-battery validate`.
-
-3. **Reverse-Engineer & Integrate (Unmatched / Incomplete Devices)**:
-   - If a target device is `unmatched` or its charging/discharging/battery reading is missing or inaccurate, inspect its enumerated HID endpoint fields from `list --json` (VID/PID, `usage_page`, `usage`, `interface_number`) and compare against existing protocols in `src/providers/vendors/`, `docs/contributing-device.md`, and `schemas/`.
-   - Propose a minimal, safe HID query/decode hypothesis (never guess percentages from voltage/levels; map unknown sentinels to `unknown`), implement it either as a declarative YAML package under `packages/vendors/<vendor>/<device>.yaml` (for <=4 static Feature/Output/Input rounds) or a focused Rust provider under `src/providers/vendors/`, and ask me to test both **discharging** and **charging** states to confirm the raw bytes and state transitions.
-   - Once confirmed, add normal/malformed/invalid-field fixtures, `provenance/<device>.md`, and update `docs/support-matrix.md` & `docs/support-matrix.zh-CN.md`.
-   - Finish by verifying with `replay`, `validate`, and the test suite.
-```
+3. **Open an Issue or PR**
+   - **Issue**: Share your device model, connection mode, `wireless-battery list --json` output, and raw `probe` packets for discharging/charging states.
+   - **PR**: Add a `FixedSpec` or `Provider` in `src/providers/vendors/`, add tests, and verify with `cargo test --locked`.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Support matrix](docs/support-matrix.md)
 - [Platform support](docs/platform-support.md)
-- [Capture and replay](docs/capture-and-replay.md)
 - [Contributing a device](docs/contributing-device.md)
-- [Hardware verification checklist](docs/hardware-verification.md)
 - [Native system tray](tray/README.md)
-- [Fixtures guide](fixtures/README.md) · [Provenance guide](provenance/README.md)
 
 ## Contributing
 
-Start with [device contributions](docs/contributing-device.md). Simple fixed protocols should require only YAML, fixtures, provenance, and support metadata. Dynamic negotiation belongs in a focused Rust Provider, not an expanding YAML scripting language.
+Start with [device contributions](docs/contributing-device.md). Simple fixed protocols should use declarative YAML packages; dynamic negotiation belongs in `src/providers/vendors/`.
 
 Licensed under the [GNU General Public License v3.0 or later](LICENSE).

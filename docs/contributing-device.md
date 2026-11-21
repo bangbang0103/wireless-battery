@@ -2,25 +2,16 @@
 
 > **Language / 语言**: **English** | [简体中文](contributing-device.zh-CN.md)
 
-## Choose the extension path
+## Adding a built-in provider
 
-Use a YAML package only for static AND matching and at most four fixed Feature or Output/Input request-response rounds. Supported extraction is `u8`, boolean bits, enum maps, fixed constants, and `sum8`/`xor8`.
-
-Use a built-in Rust Provider for dynamic indexes, version fallback, conditional requests, state, bounded unrelated-event filtering, or other protocol logic. Do not add scripts, file access, network access, dynamic libraries, or general loops to YAML.
-
-## Simple package checklist
-
-1. Add `packages/vendors/<vendor>/<device>.yaml`.
-2. Add at least a normal, truncated/wrong-report, and invalid-field fixture. Add timeout or fallback coverage where applicable.
-3. Add `provenance/<device>.md` documenting protocol source, code license if reused, hardware model, OS, connection, firmware, and who verified each capability.
-4. Update per-capability evidence and `docs/support-matrix.md`.
-5. Run `cargo test --all-features`, `cargo run -- validate`, and all relevant replay fixtures.
-
-A new simple package must not require scheduler, public model, CLI, or another Provider changes.
+1. Reverse-engineer unknown HID endpoints using `wireless-battery probe <device-id> --listen` or `--send` / `--get-feature` (and Wireshark/USBPcap if needed).
+2. Add a `FixedSpec` (for simple fixed request-response protocols) or a focused `Provider` implementation under `src/providers/vendors/` and register it in `src/providers/vendors/mod.rs`.
+3. Add replay fixtures under `tests/fixtures/vendors/` (normal, truncated/wrong-report, invalid-field, and timeout/fallback cases where applicable) and update `docs/support-matrix.md` & `docs/support-matrix.zh-CN.md`.
+4. Run `cargo test --locked --all-features`.
 
 ## Matching safety
 
-Prefer VID/PID plus usage page and other static discriminators. VID/PID-only rules need provenance explaining why they are sufficient. `list_devices()` and `Provider::matches()` must never probe. Multiple exact matches are a conflict, not a reason to loosen matching or pick the first provider.
+Prefer VID/PID plus usage page and other static discriminators. `list_devices()` and `Provider::matches()` must never probe. Multiple exact matches are a conflict, not a reason to loosen matching or pick the first provider.
 
 The current HIDAPI version does not expose report lengths during enumeration on all platforms. Do not rely on a report-length match being available everywhere.
 
@@ -41,4 +32,4 @@ Preserve applicable licenses and attribution when referring to another implement
 
 ---
 
-Related docs: [Capture and replay](capture-and-replay.md) · [Support matrix](support-matrix.md) · [Provenance guide](../provenance/README.md) · [Back to README](../README.md)
+Related docs: [Capture and replay](capture-and-replay.md) · [Support matrix](support-matrix.md) · [Back to README](../README.md)

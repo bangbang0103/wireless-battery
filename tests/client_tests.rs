@@ -143,19 +143,33 @@ fn record_transport_reproduces_exact_provider_session() {
 
 #[test]
 fn matching_conflict_is_diagnostic_and_never_probed() {
-    let yaml = std::fs::read_to_string(
-        common::root().join("fixtures/synthetic/packages/feature_mouse.yaml"),
-    )
+    struct ConflictProvider(&'static str);
+    impl wireless_battery::Provider for ConflictProvider {
+        fn id(&self) -> &str {
+            self.0
+        }
+        fn metadata(&self) -> wireless_battery::ProviderMetadata {
+            wireless_battery::ProviderMetadata {
+                version: "1.0.0".to_owned(),
+                support_status: wireless_battery::SupportStatus::Verified,
+                capabilities: wireless_battery::Capabilities::default(),
+                io_timeout: std::time::Duration::from_millis(200),
+                cooldown: std::time::Duration::ZERO,
+            }
+        }
+        fn matches(&self, endpoint: &Endpoint) -> wireless_battery::MatchDecision {
+            if endpoint.vid == Some(0x1234) && endpoint.pid == Some(0x5678) {
+                wireless_battery::MatchDecision::Exact
+            } else {
+                wireless_battery::MatchDecision::NoMatch
+            }
+        }
+    }
+    let registry = Registry::new(vec![
+        Arc::new(ConflictProvider("synthetic.feature.mouse")),
+        Arc::new(ConflictProvider("synthetic.feature.conflict")),
+    ])
     .unwrap();
-    let first = wireless_battery::providers::declarative::DeclarativeProvider::from_yaml(
-        &yaml,
-        "first.yaml",
-    )
-    .unwrap();
-    let mut second_package = first.package().clone();
-    second_package.id = "synthetic.feature.conflict".to_owned();
-    let second = wireless_battery::providers::declarative::DeclarativeProvider::new(second_package);
-    let registry = Registry::new(vec![Arc::new(first), Arc::new(second)]).unwrap();
     let transport = Arc::new(DiscoveryTransport {
         endpoints: vec![fixture("feature_normal.json").endpoint],
         opens: AtomicUsize::new(0),
@@ -282,7 +296,7 @@ fn zero_timeout_fails_before_enumerating_and_known_device_avoids_re_enumeration(
 #[test]
 fn record_transport_delegates_read_xinput() {
     let fixture =
-        common::load_fixture(&common::root().join("fixtures/vendors/os/xinput_slot0.json"));
+        common::load_fixture(&common::root().join("tests/fixtures/vendors/os/xinput_slot0.json"));
     let replay = Arc::new(ReplayTransport::new(&fixture));
     let recorder = Arc::new(RecordTransport::new(replay.clone()));
     let client = BatteryClient::with_transport(

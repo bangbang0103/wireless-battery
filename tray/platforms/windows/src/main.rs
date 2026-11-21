@@ -35,6 +35,7 @@ mod win_app {
     use crate::theme::SystemTheme;
     use crate::tray::{
         TrayIconHost, MENU_CMD_OPEN_PANEL, MENU_CMD_QUIT, MENU_CMD_TOGGLE_AUTOSTART,
+        MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY,
         WM_TRAY_CALLBACK,
     };
     use std::sync::{mpsc, Arc, Mutex};
@@ -285,12 +286,18 @@ mod win_app {
                     }
                     WM_CONTEXTMENU => {
                         host.popover.hide();
-                        let autostart = host.poller.service().config().autostart;
-                        match host.tray.show_context_menu(autostart) {
+                        let cfg = host.poller.service().config();
+                        match host
+                            .tray
+                            .show_context_menu(cfg.autostart, cfg.low_battery_notify)
+                        {
                             Some(MENU_CMD_OPEN_PANEL) => {
                                 let anchor = host.tray.anchor_rect();
                                 host.popover.show(anchor);
                                 maybe_refresh_on_open(host);
+                            }
+                            Some(MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY) => {
+                                dispatch_popover_action(host, PopoverAction::ToggleLowBatteryNotify);
                             }
                             Some(MENU_CMD_TOGGLE_AUTOSTART) => {
                                 dispatch_popover_action(host, PopoverAction::ToggleAutostart);
@@ -348,18 +355,6 @@ mod win_app {
             PopoverAction::SetPollInterval(secs) => {
                 let mut cfg = host.poller.service().config();
                 cfg.poll_interval_secs = secs;
-                let snap = host.poller.update_config(cfg);
-                host.popover.set_snapshot(snap);
-            }
-            PopoverAction::ToggleExperimental => {
-                let mut cfg = host.poller.service().config();
-                cfg.allow_experimental = !cfg.allow_experimental;
-                let snap = host.poller.update_config(cfg);
-                host.popover.set_snapshot(snap);
-            }
-            PopoverAction::ToggleStale => {
-                let mut cfg = host.poller.service().config();
-                cfg.allow_stale = !cfg.allow_stale;
                 let snap = host.poller.update_config(cfg);
                 host.popover.set_snapshot(snap);
             }

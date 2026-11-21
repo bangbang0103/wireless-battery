@@ -1,16 +1,15 @@
-//! Static provider registry and embedded package loading.
+//! Static provider registry.
 
 use crate::error::BatteryError;
-use crate::package::schema::PackageSource;
-use crate::providers::declarative::DeclarativeProvider;
-use crate::providers::{MatchDecision, Provider};
-use include_dir::{include_dir, Dir};
+use crate::model::{
+    Capabilities, ChargeState, Endpoint, ProviderReading, ReadingSource, SupportStatus,
+    TransportKind,
+};
+use crate::providers::{Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata};
+use crate::transport::HidSession;
 use std::collections::HashSet;
 use std::sync::Arc;
-
-static REAL_PACKAGES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/packages/vendors");
-static SYNTHETIC_PACKAGES: Dir<'_> =
-    include_dir!("$CARGO_MANIFEST_DIR/fixtures/synthetic/packages");
+use std::time::Duration;
 
 /// Immutable provider collection.
 #[derive(Default, Clone)]
@@ -32,22 +31,17 @@ impl Registry {
         Ok(Self { providers })
     }
 
-    /// Load only real embedded packages and built-in providers. Synthetic fixtures are never real support.
+    /// Load all built-in OS and vendor providers.
     pub fn builtin() -> Result<Self, BatteryError> {
-        let mut registry = Self::from_directory(&REAL_PACKAGES, PackageSource::Real)?;
-        registry.providers.extend(crate::providers::os::providers());
-        registry
-            .providers
-            .extend(crate::providers::vendors::providers());
-        Self::new(registry.providers)
+        let mut providers = crate::providers::os::providers();
+        providers.extend(crate::providers::vendors::providers());
+        Self::new(providers)
     }
 
-    /// Load real and explicitly synthetic packages for replay and tests.
+    /// Load built-in providers plus the synthetic test provider for replay and tests.
     pub fn with_synthetic() -> Result<Self, BatteryError> {
-        let real = Self::builtin()?;
-        let synthetic = Self::from_directory(&SYNTHETIC_PACKAGES, PackageSource::Synthetic)?;
-        let mut providers = real.providers;
-        providers.extend(synthetic.providers);
+        let mut providers = Self::builtin()?.providers;
+        providers.push(Arc::new(SyntheticFeatureMouseProvider));
         Self::new(providers)
     }
 
@@ -78,64 +72,94 @@ impl Registry {
             })
             .collect()
     }
-
-    fn from_directory(
-        directory: &Dir<'_>,
-        expected_source: PackageSource,
-    ) -> Result<Self, BatteryError> {
-        let mut files = Vec::new();
-        collect_yaml_files(directory, &mut files);
-        files.sort_by(|left, right| left.path().cmp(right.path()));
-        let mut providers: Vec<Arc<dyn Provider>> = Vec::new();
-        for file in files {
-            let name = file.path().display().to_string();
-            let yaml = file.contents_utf8().ok_or_else(|| BatteryError::Internal {
-                message: format!("embedded package is not UTF-8: {name}"),
-            })?;
-            let package = crate::package::parse_package(yaml, &name)?;
-            if package.source != expected_source {
-                return Err(BatteryError::invalid_package(
-                    name,
-                    "package source is not valid in this directory",
-                ));
-            }
-            providers.push(Arc::new(DeclarativeProvider::new(package)));
-        }
-        Self::new(providers)
-    }
 }
 
-fn collect_yaml_files<'a>(directory: &'a Dir<'a>, out: &mut Vec<&'a include_dir::File<'a>>) {
-    for file in directory.files() {
-        if file
-            .path()
-            .extension()
-            .and_then(|extension| extension.to_str())
-            == Some("yaml")
+/// Fictional HID Feature-report provider used exclusively by synthetic replay and client tests.
+struct SyntheticFeatureMouseProvider;
+
+impl Provider for SyntheticFeatureMouseProvider {
+    fn id(&self) -> &str {
+        "synthetic.feature.mouse"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        ProviderMetadata {
+            version: "1.0.0".to_owned(),
+            support_status: SupportStatus::Experimental,
+            capabilities: Capabilities {
+                percentage: true,
+                charge_state: true,
+                ..Capabilities::default()
+            },
+            io_timeout: Duration::from_millis(200),
+            cooldown: Duration::ZERO,
+        }
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Synthetic Feature Mouse".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        if (endpoint.transport == TransportKind::Hid || endpoint.transport == TransportKind::Mock)
+            && endpoint.vid == Some(0x1234)
+            && endpoint.pid == Some(0x5678)
+            && endpoint.usage_page == Some(0xFF00)
         {
-            out.push(file);
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
         }
     }
-    for subdir in directory.dirs() {
-        collect_yaml_files(subdir, out);
-    }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use include_dir::{DirEntry, File};
-
-    #[test]
-    fn from_directory_loads_nested_vendor_packages() {
-        const YAML: &[u8] = include_bytes!("../fixtures/synthetic/packages/feature_mouse.yaml");
-        static LEAF: &[DirEntry<'static>] = &[DirEntry::File(File::new(
-            "vendor_a/feature_mouse.yaml",
-            YAML,
-        ))];
-        static ROOT: &[DirEntry<'static>] = &[DirEntry::Dir(Dir::new("vendor_a", LEAF))];
-        let dir = Dir::new("", ROOT);
-        let registry = Registry::from_directory(&dir, PackageSource::Synthetic).unwrap();
-        assert!(registry.find("synthetic.feature.mouse").is_some());
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        deadline.check("synthetic query")?;
+        session
+            .send_feature(0x09, &[0x01, 0x00, 0x00, 0x00])
+            .map_err(|error| error.into_battery(&device.endpoint.id))?;
+        deadline.check("synthetic query round 1")?;
+        let report = session
+            .get_feature(0x09, 4)
+            .map_err(|error| error.into_battery(&device.endpoint.id))?;
+        if report.len() != 4 {
+            return Err(BatteryError::invalid_response(format!(
+                "response length mismatch: expected 4, got {}",
+                report.len()
+            )));
+        }
+        if report[0] != 0x01 {
+            return Err(BatteryError::invalid_response(
+                "constant mismatch at offset 0",
+            ));
+        }
+        let expected_sum = report[0].wrapping_add(report[1]).wrapping_add(report[2]);
+        if report[3] != expected_sum {
+            return Err(BatteryError::ChecksumFailed);
+        }
+        let percentage = match report[1] {
+            255 => None,
+            value if value <= 100 => Some(value),
+            _ => {
+                return Err(BatteryError::invalid_response(
+                    "percentage out of valid_range",
+                ))
+            }
+        };
+        let charge_state = if (report[2] & 1) != 0 {
+            ChargeState::Charging
+        } else {
+            ChargeState::Discharging
+        };
+        Ok(ProviderReading {
+            percentage,
+            charge_state,
+            source: ReadingSource::VendorHid,
+            ..ProviderReading::default()
+        })
     }
 }

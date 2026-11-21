@@ -1,6 +1,5 @@
 //! Built-in, OS-standard, and declarative protocol providers.
 
-pub mod declarative;
 pub(crate) mod fixed;
 pub(crate) mod os;
 pub(crate) mod vendors;
@@ -82,11 +81,6 @@ pub trait Provider: Send + Sync {
     fn display_name(&self, endpoint: &Endpoint) -> Option<String> {
         let _ = endpoint;
         None
-    }
-
-    /// Whether this provider was loaded from a declarative YAML package.
-    fn is_declarative(&self) -> bool {
-        false
     }
 
     /// Match only with operating-system enumeration information.

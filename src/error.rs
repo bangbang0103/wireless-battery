@@ -160,13 +160,6 @@ impl BatteryError {
         }
     }
 
-    pub(crate) fn invalid_package(package: impl Into<String>, reason: impl Into<String>) -> Self {
-        Self::InvalidPackage {
-            package: package.into(),
-            reason: reason.into(),
-        }
-    }
-
     pub(crate) fn remaining(
         deadline: std::time::Instant,
         operation: &str,

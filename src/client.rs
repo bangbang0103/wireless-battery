@@ -38,9 +38,14 @@ pub struct BatteryClient {
 impl BatteryClient {
     /// Construct a client using real HIDAPI, XInput, and optional BLE BAS transports.
     pub fn new(config: ClientConfig) -> Result<Self, BatteryError> {
+        Self::with_registry(config, Registry::builtin()?)
+    }
+
+    /// Construct a client using real system transports and a custom provider registry.
+    pub fn with_registry(config: ClientConfig, registry: Registry) -> Result<Self, BatteryError> {
         let transport = SystemTransport::new()
             .map_err(|error| error.into_battery(&EndpointId("system".to_owned())))?;
-        Self::with_transport(config, Arc::new(transport), Registry::builtin()?)
+        Self::with_transport(config, Arc::new(transport), registry)
     }
 
     /// Construct a client with an explicit transport and registry.
