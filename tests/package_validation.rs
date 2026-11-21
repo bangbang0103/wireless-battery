@@ -6,7 +6,9 @@ use wireless_battery::transport::replay::{Expectation, StepOutcome};
 use wireless_battery::ErrorKind;
 
 fn package_text() -> String {
-    std::fs::read_to_string(root().join("fixtures/synthetic/packages/feature_mouse.yaml")).unwrap()
+    std::fs::read_to_string(root().join("fixtures/synthetic/packages/feature_mouse.yaml"))
+        .unwrap()
+        .replace("\r\n", "\n")
 }
 
 #[test]
