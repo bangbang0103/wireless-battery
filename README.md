@@ -117,6 +117,30 @@ If your device shows up as `unmatched` or reports `null` / `unknown` battery rea
    - **Issue**: Share your device model, connection mode, `wireless-battery list --json` output, and raw `probe` packets for discharging/charging states.
    - **PR**: Add a `FixedSpec` or `Provider` in `src/providers/vendors/`, add tests, and verify with `cargo test --locked`.
 
+### Copy-Paste Prompt for an AI Agent
+
+You can paste the following prompt directly into an AI coding agent (such as Antigravity, Claude Code, Cursor, or Codex) to inspect connected devices, probe raw HID packets, and integrate support if you are inside the source repository:
+
+```text
+Help me inspect my connected wireless peripherals and reverse-engineer unsupported devices using the wireless-battery CLI.
+
+Follow these steps in order:
+0. **Prepare the CLI Binary**:
+   - Check if `wireless-battery` / `wireless-battery.exe` is available in the current directory or PATH (or use `cargo run --locked --` if we are inside the source repository). If not, guide me to download the prebuilt binary for my OS from Releases.
+
+1. **Enumerate & Read**:
+   - Run `wireless-battery list --json` and `wireless-battery list --read --json`, and summarize every detected device (name, VID/PID, `usage_page`, `usage`, `interface_number`, `match_status`, `provider_id`, battery percentage, and charge state).
+   - If the target device only exposes a Windows-reserved standard endpoint (e.g., XInput `045E:028E`, `usage_page=1, usage=5`) and no vendor HID endpoint (`usage_page >= 0xFF00`), guide me to switch connection modes (2.4G dongle / wired / DInput vendor mode / BLE) and re-run `list --json`.
+
+2. **Probe Raw Packets (`probe` on Vendor HID Endpoints)**:
+   - Run `wireless-battery probe <device-id> --listen 5000` while I plug/unplug the charging cable or interact with the device to check for unsolicited Input reports.
+   - If we have candidate query bytes (or captures from Wireshark + USBPcap / usbmon), test them with `wireless-battery probe <device-id> --report-id <id> --send "<hex>"` or `--get-feature <id>` in both **discharging** and **charging** states and compare the raw bytes (never guess percentages from voltage or discrete levels; unknown sentinels must map to `unknown`).
+
+3. **Next Steps**:
+   - If only the prebuilt binary is available (no source repo): format a clean summary with device model, connection mode, `list --json` endpoint metadata, and the discharging/charging `probe` request/response hex so I can open a GitHub Issue.
+   - If we are inside the cloned source repository: implement a `FixedSpec` or `Provider` under `src/providers/vendors/`, add replay fixtures under `tests/fixtures/vendors/`, update `docs/support-matrix.md` & `docs/support-matrix.zh-CN.md`, and verify everything passes with `cargo test --locked`.
+```
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)
@@ -127,6 +151,6 @@ If your device shows up as `unmatched` or reports `null` / `unknown` battery rea
 
 ## Contributing
 
-Start with [device contributions](docs/contributing-device.md). Simple fixed protocols should use declarative YAML packages; dynamic negotiation belongs in `src/providers/vendors/`.
+Start with [device contributions](docs/contributing-device.md). Simple fixed protocols should use `FixedSpec`; dynamic negotiation belongs in a focused `Provider` under `src/providers/vendors/`.
 
 Licensed under the [GNU General Public License v3.0 or later](LICENSE).

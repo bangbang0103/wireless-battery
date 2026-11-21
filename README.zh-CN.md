@@ -117,6 +117,30 @@ cargo build --locked --release -p wireless-battery-tray   # Windows 原生托盘
    - **提 Issue**：附上设备型号、连接模式、`wireless-battery list --json` 输出，以及 `probe` 抓到的放电/充电报文片段。
    - **提 PR**：在 `src/providers/vendors/` 中参考现有 `FixedSpec` 或 `Provider` 实现新增协议，补充测试并通过 `cargo test --locked`。
 
+### 直接复制给 AI Agent 的排查 / 逆向 Prompt
+
+你可以将下面这段 Prompt 直接发给 AI Agent（如 Antigravity、Claude Code、Cursor、Codex 等），让它用 `wireless-battery` CLI 帮你检测设备、探测原始报文，并在有源码时完成适配：
+
+```text
+请帮我使用 wireless-battery CLI 检测已连接的无线外设，并对未支持的设备进行报文探测与协议分析。
+
+请严格按以下步骤执行：
+0. **准备 CLI 工具**：
+   - 先检查当前目录或 PATH 是否已有 `wireless-battery` / `wireless-battery.exe`；若当前在项目源码仓库中，也可用 `cargo run --locked --` 代替。若都没有，请引导我从项目 Releases 下载对应系统的预编译可执行文件。
+
+1. **枚举与读取**：
+   - 运行 `wireless-battery list --json` 与 `wireless-battery list --read --json`，汇总所有检测到的设备（名称、VID/PID、`usage_page`、`usage`、`interface_number`、`match_status`、`provider_id`、电量百分比与充电状态）。
+   - 如果目标设备只出现了 Windows 保留的标准端点（例如 XInput `045E:028E`、`usage_page=1, usage=5`）而没有厂商自定义 HID 端点（通常 `usage_page >= 0xFF00`），请先引导我切换设备的连接模式（2.4G 接收器 / 有线 / DInput 厂商模式 / BLE 模式）后重新执行 `list --json`。
+
+2. **使用 `probe` 探测原始报文（仅针对未匹配或读数异常的厂商 HID 端点）**：
+   - 先运行 `wireless-battery probe <device-id> --listen 5000`，引导我在期间插拔充电线或操作设备，观察是否有主动上报的 Input 报文。
+   - 如有候选查询指令（或结合 Wireshark + USBPcap / usbmon 抓到的官方查询包），使用 `wireless-battery probe <device-id> --report-id <id> --send "<hex>"` 或 `--get-feature <id>` 分别在**放电**和**充电**两种状态下收集原始响应字节，并对比字段含义（严禁将电压或离散档位强行猜成百分比，未知哨兵值必须保持 `unknown`）。
+
+3. **输出与下一步**：
+   - 若当前只有可执行文件（无源码仓库）：请整理好「设备型号 + 连接模式 + `list --json` 端点信息 + 放电/充电态 `probe` 请求与响应报文」，方便我直接提交到 GitHub Issue。
+   - 若当前就在源码仓库中：请在 `src/providers/vendors/` 下参考现有 `FixedSpec` 或 `Provider` 实现新增协议并注册，在 `tests/fixtures/vendors/` 补充回放测试，更新 `docs/support-matrix.zh-CN.md` 与 `docs/support-matrix.md`，最后运行 `cargo test --locked` 验证全部通过。
+```
+
 ## 文档导航
 
 - [架构设计](docs/architecture.zh-CN.md)
@@ -127,6 +151,6 @@ cargo build --locked --release -p wireless-battery-tray   # Windows 原生托盘
 
 ## 参与贡献
 
-请从[设备贡献指南](docs/contributing-device.zh-CN.md)开始。简单的固定协议优先使用声明式 YAML 包；需要动态协商的逻辑在 `src/providers/vendors/` 下实现。
+请从[设备贡献指南](docs/contributing-device.zh-CN.md)开始。简单的固定协议优先使用 `FixedSpec`，需要动态协商的逻辑使用聚焦的 `Provider` 在 `src/providers/vendors/` 下实现。
 
 本项目基于 [GNU GPL-3.0 或更高版本](LICENSE)开源。
