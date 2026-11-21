@@ -49,7 +49,8 @@ fn logitech_1004_reads_charge_status_from_byte_6_and_fast_fails_hidpp_errors() {
     replay.finish().unwrap();
 
     // Charging (response[5] = 0x04 good, response[6] = 0x01 charging) must report Charging.
-    let mut charging = load_fixture(&root().join("tests/fixtures/vendors/logitech/hidpp_1004.json"));
+    let mut charging =
+        load_fixture(&root().join("tests/fixtures/vendors/logitech/hidpp_1004.json"));
     charging.steps.last_mut().unwrap().outcome = StepOutcome::Response {
         report_id: 17,
         hex: "01 05 1E 32 04 01 00 00 00 00 00 00 00 00 00 00 00 00 00".to_owned(),
@@ -62,7 +63,8 @@ fn logitech_1004_reads_charge_status_from_byte_6_and_fast_fails_hidpp_errors() {
 
     // HID++ 2.0 error frame (report[2] == 0xFF, report[3] == feature, report[4] == func|swid)
     // must fast-fail with InvalidResponse instead of hanging until timeout.
-    let mut hidpp_error = load_fixture(&root().join("tests/fixtures/vendors/logitech/hidpp_1004.json"));
+    let mut hidpp_error =
+        load_fixture(&root().join("tests/fixtures/vendors/logitech/hidpp_1004.json"));
     hidpp_error.steps.last_mut().unwrap().outcome = StepOutcome::Response {
         report_id: 17,
         hex: "01 FF 05 1E 09 00 00 00 00 00 00 00 00 00 00 00 00 00 00".to_owned(),
@@ -174,7 +176,8 @@ fn interface_number_matching_survives_capture_serialization_without_synthetic_pa
 #[test]
 fn xinput_and_bas_replay_validate_errors_and_edge_cases() {
     // Disconnected XInput (battery_type = 0) -> DeviceDisconnected
-    let mut disconnected = load_fixture(&root().join("tests/fixtures/vendors/os/xinput_slot0.json"));
+    let mut disconnected =
+        load_fixture(&root().join("tests/fixtures/vendors/os/xinput_slot0.json"));
     disconnected.steps[0].outcome = StepOutcome::XInput {
         battery_type: 0,
         battery_level: 0,
@@ -224,7 +227,8 @@ fn wob_rainy75_reads_charge_state_from_byte_9_and_keeps_unknown_values_unknown()
     replay.finish().unwrap();
 
     // Charging real capture (payload byte 8 / frame byte 9 == 0x01)
-    let charging = load_fixture(&root().join("tests/fixtures/vendors/wob/rainy75_charging_real.json"));
+    let charging =
+        load_fixture(&root().join("tests/fixtures/vendors/wob/rainy75_charging_real.json"));
     let (result, replay) = run_fixture(&charging);
     let reading = result.unwrap();
     assert_eq!(reading.percentage, Some(62));

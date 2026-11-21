@@ -39,11 +39,12 @@ struct ProbeEvent {
 }
 
 pub(super) fn run(options: ProbeOptions) -> Result<(), BatteryError> {
-    let hid = std::sync::Arc::new(HidApiTransport::new().map_err(|error| {
-        BatteryError::Transport {
-            message: error.to_string(),
-        }
-    })?);
+    let hid =
+        std::sync::Arc::new(
+            HidApiTransport::new().map_err(|error| BatteryError::Transport {
+                message: error.to_string(),
+            })?,
+        );
     let client =
         BatteryClient::with_transport(ClientConfig::default(), hid.clone(), Registry::builtin()?)?;
     let device = client
@@ -182,7 +183,14 @@ fn read_replies(
         }
         match session.read_input(remaining) {
             Ok(report) => {
-                record_event(events, started, "read_input", report.report_id, &report.data, json);
+                record_event(
+                    events,
+                    started,
+                    "read_input",
+                    report.report_id,
+                    &report.data,
+                    json,
+                );
             }
             Err(TransportError::Timeout) => break,
             Err(error) => return Err(error.into_battery(&device.endpoint_id)),
@@ -210,7 +218,14 @@ fn listen_loop(
         let step = remaining.min(Duration::from_millis(200));
         match session.read_input(step) {
             Ok(report) => {
-                record_event(events, started, "read_input", report.report_id, &report.data, json);
+                record_event(
+                    events,
+                    started,
+                    "read_input",
+                    report.report_id,
+                    &report.data,
+                    json,
+                );
             }
             Err(TransportError::Timeout) => continue,
             Err(error) => return Err(error.into_battery(&device.endpoint_id)),
