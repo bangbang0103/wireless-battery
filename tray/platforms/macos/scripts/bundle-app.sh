@@ -9,6 +9,8 @@ APP_NAME="Wireless Battery.app"
 DIST_DIR="${MACOS_DIR}/dist"
 APP_DIR="${DIST_DIR}/${APP_NAME}"
 
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
+
 echo "==> Building Rust C-ABI static library (wireless-battery-tray-ffi)..."
 (cd "${TRAY_DIR}" && cargo build --locked --release -p wireless-battery-tray-ffi "$@")
 
