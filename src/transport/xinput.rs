@@ -1,8 +1,11 @@
 //! Windows XInput slot transport. XInput exposes four discrete levels, not percentages.
 
 use super::{TransportError, XInputReport};
+#[cfg(windows)]
 use crate::identity;
-use crate::model::{Endpoint, EndpointId, TransportKind};
+#[cfg(windows)]
+use crate::model::TransportKind;
+use crate::model::{Endpoint, EndpointId};
 use std::collections::HashMap;
 use std::sync::RwLock;
 
