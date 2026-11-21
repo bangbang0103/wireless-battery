@@ -18,7 +18,7 @@ path = "src/main.rs"
 required-features = ["cli"]
 
 [features]
-default = ["cli"]
+default = ["cli", "bluetooth"]
 cli = ["dep:clap", "dep:walkdir"]
 bluetooth = ["dep:btleplug", "dep:tokio", "dep:uuid"]
 

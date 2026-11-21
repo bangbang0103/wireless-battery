@@ -17,11 +17,11 @@ cargo build --locked --release -p wireless-battery-tray
 .\target\release\wireless-battery-tray.exe
 ```
 
-启用可选 BLE BAS 支持：
+BLE BAS 支持（`bluetooth` feature）默认已启用。若需要禁用 BLE 支持：
 
 ```bash
 cd tray
-cargo build --locked --release -p wireless-battery-tray --features bluetooth
+cargo build --locked --release --no-default-features -p wireless-battery-tray
 ```
 
 ---

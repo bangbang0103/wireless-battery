@@ -49,6 +49,20 @@ jobs:
         shell: bash
         run: |
           ! grep -R 'synthetic\.' docs/support-matrix.md docs/support-matrix.zh-CN.md packages/vendors
+      - name: Build CLI release
+        run: cargo build --locked --release --bin wireless-battery
+      - name: Upload Windows CLI artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wireless-battery-cli-windows
+          path: target/release/wireless-battery.exe
+      - name: Upload macOS CLI artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wireless-battery-cli-macos
+          path: target/release/wireless-battery
 
   tray:
     strategy:
@@ -80,7 +94,21 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: tray
         run: cargo build --locked --release -p wireless-battery-tray
+      - name: Upload Windows tray artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wireless-battery-tray-windows
+          path: tray/target/release/wireless-battery-tray.exe
       - name: Build macOS native SwiftUI tray bundle
         if: runner.os == 'macOS'
         shell: bash
-        run: bash tray/platforms/macos/scripts/bundle-app.sh
+        run: |
+          bash tray/platforms/macos/scripts/bundle-app.sh
+          ditto -c -k --sequesterRsrc --keepParent "tray/platforms/macos/dist/Wireless Battery.app" "tray/platforms/macos/dist/wireless-battery-tray-macos.zip"
+      - name: Upload macOS tray artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wireless-battery-tray-macos
+          path: tray/platforms/macos/dist/wireless-battery-tray-macos.zip

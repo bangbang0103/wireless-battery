@@ -11,7 +11,7 @@ name = "wireless_battery_tray_ffi"
 crate-type = ["staticlib", "rlib"]
 
 [features]
-default = []
+default = ["bluetooth"]
 bluetooth = ["wireless-battery-tray-core/bluetooth"]
 
 [dependencies]

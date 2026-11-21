@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.76.0
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-release-cargo-1.76-${{ hashFiles('Cargo.lock') }}
+      - name: Cache Tray Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tray/target
+          key: ${{ runner.os }}-release-tray-cargo-1.76-${{ hashFiles('tray/Cargo.lock') }}
+      - name: Build CLI release
+        run: cargo build --locked --release --bin wireless-battery
+      - name: Build Windows tray release
+        if: runner.os == 'Windows'
+        working-directory: tray
+        run: cargo build --locked --release -p wireless-battery-tray
+      - name: Package Windows release archives
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path target/release/wireless-battery.exe, LICENSE, NOTICE -DestinationPath dist/wireless-battery-cli-windows.zip -Force
+          Compress-Archive -Path tray/target/release/wireless-battery-tray.exe, LICENSE, NOTICE -DestinationPath dist/wireless-battery-tray-windows.zip -Force
+      - name: Build macOS tray bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: bash tray/platforms/macos/scripts/bundle-app.sh
+      - name: Package macOS release archives
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -czf dist/wireless-battery-cli-macos.tar.gz -C target/release wireless-battery -C "${GITHUB_WORKSPACE}" LICENSE NOTICE
+          ditto -c -k --sequesterRsrc --keepParent "tray/platforms/macos/dist/Wireless Battery.app" dist/wireless-battery-tray-macos.zip
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-${{ runner.os }}
+          path: dist/*
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if (gh release view $tag 2>$null) {
+            gh release upload $tag dist/* --clobber
+          } else {
+            gh release create $tag dist/* --title $tag --generate-notes
+          }

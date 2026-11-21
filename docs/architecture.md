@@ -21,7 +21,7 @@ Providers depend on `HidSession`, not HIDAPI types. Report IDs are separate from
 - `HidApiTransport`: real enumeration and I/O, with sanitized error classification.
 - `RecordTransport`: wraps a real session and records only registered provider calls.
 - `ReplayTransport`: owns a shared ordered cursor and rejects changed, missing, or extra calls.
-- `BluetoothTransport` (optional): one bounded worker thread and async runtime for read-only BAS. It never scans during `list_devices()`.
+- `BluetoothTransport` (enabled by default via `bluetooth` feature): one bounded worker thread and async runtime for read-only BAS. It never scans during `list_devices()`.
 - `XInputTransport`: Windows OS slots with discrete levels only; no HID frame or fabricated percentage.
 - Windows `SetOutputReport` is a distinct recorded operation for devices that reject both WriteFile and SetFeature.
 

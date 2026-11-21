@@ -17,11 +17,11 @@ cargo build --locked --release -p wireless-battery-tray
 .\target\release\wireless-battery-tray.exe
 ```
 
-To enable optional BLE BAS support:
+BLE BAS support (`bluetooth` feature) is enabled by default. To build without BLE support:
 
 ```bash
 cd tray
-cargo build --locked --release -p wireless-battery-tray --features bluetooth
+cargo build --locked --release --no-default-features -p wireless-battery-tray
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 > **Language / 语言**: **English** | [简体中文](README.zh-CN.md)
 
-A synchronous Rust library and CLI for conservative peripheral battery readings over HID, with optional read-only Bluetooth LE Battery Service (BAS) support.
+A synchronous Rust library and CLI for conservative peripheral battery readings over HID, with built-in read-only Bluetooth LE Battery Service (BAS) support.
 
 The project prioritizes protocol safety and reproducibility over device count:
 
@@ -14,15 +14,17 @@ The project prioritizes protocol safety and reproducibility over device count:
 
 ## Current support
 
-**152 built-in vendor and OS provider paths** (plus optional Bluetooth LE BAS) are included, covering Logitech / Astro, Razer, SteelSeries, Corsair, HyperX, ASUS ROG, Sony, Nintendo, Valve, GameSir, Flydigi, 8BitDo, Beitong, Keychron, Cherry, Akko, NuPhy, AULA, MCHOSE, ATK / VXE / VGN, DAREU, EWEADN, Rapoo, WOB, Glorious, Lamzu, WLmouse, Pulsar, VAXEE, Ninjutso, Endgame Gear, Finalmouse, ZOWIE, Audeze, JBL, Jabra, Turtle Beach, AKG, Fractal, Alienware, Moondrop, Maono, XInput, and others listed in the [support matrix](docs/support-matrix.md). They are experimental unless a specific device and capability are marked verified in the matrix. Strict wire-level synthetic replay exists for every built-in provider; this does not independently verify hardware. WOB Rainy75 and Logitech GPW3 real-hardware verification is tracked in the [hardware verification checklist](docs/hardware-verification.md). A fictional declarative mouse remains available for interpreter tests and is excluded from real support.
+> **Supported Product Matrix**: See [**Support Matrix (`docs/support-matrix.md`)**](docs/support-matrix.md) for the full table organized by **Vendor**, **Device**, and **Support Method** (Built-in Rust HID, OS XInput API, or BLE BAS; Verified vs. Experimental).
+
+**152 built-in vendor and OS provider paths** (plus Bluetooth LE BAS) are included, covering Logitech / Astro, Razer, SteelSeries, Corsair, HyperX, ASUS ROG, Sony, Nintendo, Valve, GameSir, Flydigi, 8BitDo, Beitong, Keychron, Cherry, Akko, NuPhy, AULA, MCHOSE, ATK / VXE / VGN, DAREU, EWEADN, Rapoo, WOB, Glorious, Lamzu, WLmouse, Pulsar, VAXEE, Ninjutso, Endgame Gear, Finalmouse, ZOWIE, Audeze, JBL, Jabra, Turtle Beach, AKG, Fractal, Alienware, Moondrop, Maono, XInput, and others listed in the [support matrix](docs/support-matrix.md). They are experimental unless a specific device and capability are marked verified in the matrix. Strict wire-level synthetic replay exists for every built-in provider; this does not independently verify hardware. WOB Rainy75 and Logitech GPW3 real-hardware verification is tracked in the [hardware verification checklist](docs/hardware-verification.md). A fictional declarative mouse remains available for interpreter tests and is excluded from real support.
 
 Built-in vendor protocol definitions reference [Wireless-Device-Battery-Monitor / BatteryHub](NOTICE) (GPL-3.0-or-later) and [Voltide](NOTICE) (MIT); see [NOTICE](NOTICE) for full attribution.
 
-Standard HID battery usages and Classic Bluetooth/HFP battery reports are reserved for later versions. Optional BLE support implements only BAS Battery Level (`0x2A19`) reads, not pairing, notifications, charging state, or cross-transport device deduplication.
+Standard HID battery usages and Classic Bluetooth/HFP battery reports are reserved for later versions. BLE support implements only BAS Battery Level (`0x2A19`) reads, not pairing, notifications, charging state, or cross-transport device deduplication.
 
 ## Build
 
-Rust 1.76 or newer is supported. `Cargo.lock` pins dependency versions to preserve that MSRV (`--locked`). The `cli` feature is enabled by default; library consumers can disable it with `--no-default-features` to avoid compiling CLI-only dependencies (`clap`, `walkdir`).
+Rust 1.76 or newer is supported. `Cargo.lock` pins dependency versions to preserve that MSRV (`--locked`). Both `cli` and `bluetooth` features are enabled by default; library consumers can disable default features with `--no-default-features` to avoid compiling CLI (`clap`, `walkdir`) and BLE (`btleplug`, `tokio`, `uuid`) dependencies, or enable only `--features cli` / `--features bluetooth`.
 
 ```bash
 cargo build --locked
@@ -31,13 +33,7 @@ cargo test --locked --all-features
 cargo run --locked -- validate
 ```
 
-For optional BLE BAS support:
-
-```bash
-cargo build --locked --features bluetooth
-```
-
-The `bluetooth` feature is deliberately disabled by default. See [platform support](docs/platform-support.md) for system dependencies and permission limitations.
+See [platform support](docs/platform-support.md) for system dependencies and permission limitations.
 
 ## Rust API
 
@@ -101,7 +97,37 @@ cargo test --locked
 cargo build --locked --release -p wireless-battery-tray   # Windows native tray
 ```
 
-See the [Tray README](tray/README.md) for architecture, macOS bundling, and optional BLE support.
+See the [Tray README](tray/README.md) for architecture, macOS bundling, and BLE support details.
+
+## AI Collaboration
+
+You can hand the following prompt directly to an AI coding agent (such as Antigravity, Claude Code, Cursor, or Codex) to **detect connected devices, collect sanitized battery/charging fixtures, and reverse-engineer or integrate unsupported devices** via the `wireless-battery` CLI:
+
+```text
+Help me detect, collect, and reverse-engineer the battery percentage and charging/discharging state of my currently connected wireless peripherals using the wireless-battery CLI.
+
+Follow these steps in order:
+0. **Prepare the CLI Binary**:
+   - First check if `wireless-battery` / `wireless-battery.exe` is already available in the current directory or PATH. If not, guide me to download the prebuilt binary for my OS (e.g., `wireless-battery.exe` on Windows from the project's Releases) and place it in the working directory or PATH (if we are inside the source repository, `cargo run --locked --` can also be used).
+   - Run all subsequent commands using that binary (written below as `wireless-battery`; on Windows use `.\wireless-battery.exe` if in the current directory).
+
+1. **Detect & Inspect**:
+   - Run `wireless-battery list --json --include-experimental` to passively enumerate all HID/BLE endpoints, then run `wireless-battery list --read --json --include-experimental` to query currently readable devices.
+   - Summarize every detected device (name, VID/PID, `usage_page`, `usage`, `interface_number`, `match_status`, `support_status`, `provider_id`, current battery percentage, and charge state). For any matched or conflicting device, run `wireless-battery diagnose <device-id> --json --include-experimental` if needed.
+
+2. **Collect Real-Hardware Fixtures (Matched / Experimental Devices)**:
+   - For any matched device that needs verification, guide me to test both **discharging** (wireless) and **charging** (plugged in) states.
+   - Capture sanitized fixtures without overwriting existing files:
+     `wireless-battery capture --device <device-id> --output fixtures/<vendor_device>/discharging.json --include-experimental --timeout-ms 5000`
+     `wireless-battery capture --device <device-id> --output fixtures/<vendor_device>/charging.json --include-experimental --timeout-ms 5000`
+   - Verify captured fixtures with `wireless-battery replay --fixture ...` and `wireless-battery validate`.
+
+3. **Reverse-Engineer & Integrate (Unmatched / Incomplete Devices)**:
+   - If a target device is `unmatched` or its charging/discharging/battery reading is missing or inaccurate, inspect its enumerated HID endpoint fields from `list --json` (VID/PID, `usage_page`, `usage`, `interface_number`) and compare against existing protocols in `src/providers/vendors/`, `docs/contributing-device.md`, and `schemas/`.
+   - Propose a minimal, safe HID query/decode hypothesis (never guess percentages from voltage/levels; map unknown sentinels to `unknown`), implement it either as a declarative YAML package under `packages/vendors/<vendor>/<device>.yaml` (for <=4 static Feature/Output/Input rounds) or a focused Rust provider under `src/providers/vendors/`, and ask me to test both **discharging** and **charging** states to confirm the raw bytes and state transitions.
+   - Once confirmed, add normal/malformed/invalid-field fixtures, `provenance/<device>.md`, and update `docs/support-matrix.md` & `docs/support-matrix.zh-CN.md`.
+   - Finish by verifying with `replay`, `validate`, and the test suite.
+```
 
 ## Documentation
 
