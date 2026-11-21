@@ -51,9 +51,9 @@ mod win_app {
     use windows::Win32::UI::Shell::NIN_SELECT;
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, GetWindowLongPtrW,
-        PostMessageW, PostQuitMessage, RegisterClassExW, RegisterWindowMessageW, SetWindowLongPtrW,
-        TranslateMessage, GWLP_USERDATA, MSG, WINDOW_EX_STYLE, WM_APP, WM_CONTEXTMENU,
-        WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPED,
+        KillTimer, PostMessageW, PostQuitMessage, RegisterClassExW, RegisterWindowMessageW,
+        SetTimer, SetWindowLongPtrW, TranslateMessage, GWLP_USERDATA, MSG, WINDOW_EX_STYLE, WM_APP,
+        WM_CONTEXTMENU, WM_DEVICECHANGE, WM_SETTINGCHANGE, WM_TIMER, WNDCLASSEXW, WS_OVERLAPPED,
     };
 
     const NIN_KEYSELECT: u32 = NIN_SELECT + 1;
@@ -61,6 +61,8 @@ mod win_app {
 
     const WM_CORE_UPDATE: u32 = WM_APP + 20;
     const WM_POPOVER_ACTION: u32 = WM_APP + 21;
+    const DBT_DEVNODES_CHANGED: usize = 0x0007;
+    const TIMER_DEVICE_CHANGE: usize = 1;
 
     struct SingleInstanceGuard(HANDLE);
 
@@ -268,6 +270,16 @@ mod win_app {
                         .update(snap.icon_state, host.theme.taskbar_dark, &snap.tooltip);
                     host.popover.set_theme(host.theme);
                 }
+                LRESULT(0)
+            }
+            WM_DEVICECHANGE if wparam.0 == DBT_DEVNODES_CHANGED => {
+                // Debounce bursts of PnP notifications during USB/HID enumeration.
+                let _ = SetTimer(hwnd, TIMER_DEVICE_CHANGE, 1_000, None);
+                LRESULT(0)
+            }
+            WM_TIMER if wparam.0 == TIMER_DEVICE_CHANGE => {
+                let _ = KillTimer(hwnd, TIMER_DEVICE_CHANGE);
+                host.poller.request_refresh();
                 LRESULT(0)
             }
             WM_TRAY_CALLBACK => {
