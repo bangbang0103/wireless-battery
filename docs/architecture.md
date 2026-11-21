@@ -8,7 +8,7 @@
 
 1. Enumerate static endpoint metadata without opening a session.
 2. Return every endpoint. Unmatched, candidate, and conflicting endpoints have explicit match status and unknown support where appropriate.
-3. On an explicit read, require one exact provider from the unified `Registry` and an enabled lifecycle status. Built-in vendor HID providers, declarative YAML packages, BLE BAS (`bluetooth.bas`), and XInput (`os.xinput`) all dispatch through the same `Provider` interface.
+3. On an explicit read, require one exact provider from the unified `Registry`. Built-in vendor HID providers, BLE BAS (`bluetooth.bas`), and XInput (`os.xinput`) all dispatch through the same `Provider` interface.
 4. Acquire the endpoint lock within the caller's total deadline, apply package cooldown, then open a session.
 5. Run at most the provider's bounded protocol. Each step checks the shared deadline.
 6. Validate percentage range and derive precision from values actually present. A successful exchange infers `online` only when the protocol did not explicitly report reachability.
@@ -16,7 +16,7 @@
 
 ## Transport boundary
 
-Providers depend on `HidSession`, not HIDAPI types. Report IDs are separate from payloads throughout package YAML, fixtures, providers, and the transport trait. Only `HidApiTransport` adds or removes the leading byte required by HIDAPI.
+Providers depend on `HidSession`, not HIDAPI types. Report IDs are separate from payloads throughout fixtures, providers, and the transport trait. Only `HidApiTransport` adds or removes the leading byte required by HIDAPI.
 
 - `HidApiTransport`: real enumeration and I/O, with sanitized error classification.
 - `RecordTransport`: wraps a real session and records only registered provider calls.
@@ -29,11 +29,9 @@ Classic Bluetooth, arbitrary GATT access, event subscriptions, and arbitrary HID
 
 ## Providers
 
-`Provider::matches()` is static and I/O-free. Only `Exact` matches are readable. Candidates are diagnostic; conflicts are never resolved arbitrarily. `draft` is development-only, `experimental` is opt-in, `verified` has real evidence, and `deprecated` remains readable with its status visible.
+`Provider::matches()` is static and I/O-free. Only `Exact` matches are readable. Candidates are diagnostic; conflicts are never resolved arbitrarily. All built-in providers are enabled by default.
 
-HID providers implement `Provider::read(&DeviceContext, &mut dyn HidSession, Deadline)`, while non-HID providers (`bluetooth.bas`, `os.xinput`) override `Provider::execute(&DeviceContext, &dyn Transport, Deadline)` directly. JSON Schemas for both declarative packages and replay fixtures live under `schemas/`.
-
-`DeclarativeProvider` supports at most four fixed request-response rounds. Intermediate rounds validate their own response; normalized fields come from the final response. Dynamic indexes, fallbacks, event filtering, receiver fan-out, and stateful negotiation belong in a Rust Provider.
+HID providers implement `Provider::read(&DeviceContext, &mut dyn HidSession, Deadline)`, while non-HID providers (`bluetooth.bas`, `os.xinput`) override `Provider::execute(&DeviceContext, &dyn Transport, Deadline)` directly.
 
 Dynamic discovery of logical devices behind a receiver is intentionally deferred because it conflicts with passive discovery. A provider may use only statically known logical mappings in this version.
 

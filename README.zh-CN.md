@@ -14,9 +14,9 @@
 
 ## 当前支持情况
 
-> **支持的产品矩阵**：完整设备列表见 [**设备支持矩阵（`docs/support-matrix.zh-CN.md`）**](docs/support-matrix.zh-CN.md)，内含按**厂商、设备、支持方式**（内置 Rust HID、系统 XInput API、BLE BAS；已实机验证 / 实验性）分类的完整表格。
+> **支持的产品矩阵**：完整设备列表见 [**设备支持矩阵（`docs/support-matrix.zh-CN.md`）**](docs/support-matrix.zh-CN.md)，内含按**厂商、设备、支持方式**分类的完整表格。
 
-**当前内置 152 条厂商与操作系统协议路径**（另含默认启用的 Bluetooth LE BAS），覆盖 Logitech / Astro、Razer、SteelSeries、Corsair、HyperX、ASUS ROG、Sony、Nintendo、Valve、GameSir、Flydigi、8BitDo、Beitong、Keychron、Cherry、Akko、NuPhy、AULA、MCHOSE、ATK / VXE / VGN、DAREU、EWEADN、Rapoo、WOB、Glorious、Lamzu、WLmouse、Pulsar、VAXEE、Ninjutso、Endgame Gear、Finalmouse、ZOWIE、Audeze、JBL、Jabra、Turtle Beach、AKG、Fractal、Alienware、Moondrop、Maono、XInput 等设备，完整列表见[支持矩阵](docs/support-matrix.zh-CN.md)。除非在矩阵中针对具体设备与能力明确标注为 `verified`，否则均处于 `experimental` 状态。每条内置路径都具备严格线级合成回放用例，但合成回放不代表真实硬件验证。WOB Rainy75 与 Logitech GPW3 的实机验证记录见[实机验证清单](docs/hardware-verification.zh-CN.md)。仓库中还保留了一个虚构的声明式鼠标包用于解释器测试，但绝不参与真实发现。
+**当前内置 152 条厂商与操作系统协议路径**（另含默认启用的 Bluetooth LE BAS），覆盖 Logitech / Astro、Razer、SteelSeries、Corsair、HyperX、ASUS ROG、Sony、Nintendo、Valve、GameSir、Flydigi、8BitDo、Beitong、Keychron、Cherry、Akko、NuPhy、AULA、MCHOSE、ATK / VXE / VGN、DAREU、EWEADN、Rapoo、WOB、Glorious、Lamzu、WLmouse、Pulsar、VAXEE、Ninjutso、Endgame Gear、Finalmouse、ZOWIE、Audeze、JBL、Jabra、Turtle Beach、AKG、Fractal、Alienware、Moondrop、Maono、XInput 等设备，完整列表见[支持矩阵](docs/support-matrix.zh-CN.md)。所有已移植设备默认均已启用；如在特定型号或固件上遇到读数异常，欢迎直接提交 Issue 反馈。
 
 内置厂商协议实现参考了 [Wireless-Device-Battery-Monitor / BatteryHub](NOTICE)（GPL-3.0-or-later）及 [Voltide](NOTICE)（MIT），完整署名见 [NOTICE](NOTICE)。
 
@@ -65,12 +65,13 @@ wireless-battery list --read
 wireless-battery list --read --json --timeout-ms 5000
 wireless-battery read <device-id> --json --timeout-ms 1000
 wireless-battery diagnose <device-id> --json
-wireless-battery capture --device <device-id> --output fixture.json --timeout-ms 5000
-wireless-battery replay --fixture fixtures/synthetic/feature_normal.json
-wireless-battery validate
+wireless-battery probe <device-id> --listen 3000
+wireless-battery probe <device-id> --report-id 0 --send "5A A5 01 02 00"
 ```
 
-在 `list`、`read`、`diagnose` 或 `capture` 上使用 `--include-experimental` 可显式启用实验性 Provider。`list` 会返回所有枚举到的端点（含未匹配与冲突端点）。默认 `list` 保持完全被动，电量显示为 `not read`；`list --read` 仅显式读取当前可读的设备，其 JSON 条目在原始设备字段基础上附加 `reading` 与 `read_error`，单个设备失败不会导致整个列表失败。JSON 仅输出到 stdout，警告与进度信息输出到 stderr。
+所有已内置的厂商与系统 Provider 默认均已启用，无需额外开关。`list` 会返回所有枚举到的端点（含未匹配与冲突端点）。默认 `list` 保持完全被动，电量显示为 `not read`；`list --read` 仅显式读取当前可读的设备，其 JSON 条目在原始设备字段基础上附加 `reading` 与 `read_error`，单个设备失败不会导致整个列表失败。JSON 仅输出到 stdout，警告与进度信息输出到 stderr。
+
+对于未支持的 HID 设备，可以直接使用 `probe` 对任意端点进行被动监听（`--listen`）或发送自定义 Output / Feature 报文（`--send`、`--send-feature`、`--get-feature`、`--get-input`）以辅助逆向分析。
 
 设备 ID 是不可逆哈希值而非序列号，主要面向单次会话使用。在操作系统路径稳定的平台上，其确定性足以支持后续 `read` 命令调用，但不保证跨重启、跨机器或路径重分配后保持不变。
 
@@ -80,9 +81,9 @@ wireless-battery validate
 
 ```bash
 cargo run --quiet -- replay \
-  --fixture fixtures/synthetic/feature_normal.json \
-  --fixture fixtures/synthetic/feature_unknown.json \
-  --fixture fixtures/synthetic/bluetooth_bas.json
+  --fixture tests/fixtures/synthetic/feature_normal.json \
+  --fixture tests/fixtures/synthetic/feature_unknown.json \
+  --fixture tests/fixtures/synthetic/bluetooth_bas.json
 ```
 
 回放传输层严格校验操作顺序、Report ID、完整请求字节、响应消费、多余调用、最终稳定字段以及错误类别。详见[录制与回放](docs/capture-and-replay.zh-CN.md)。
@@ -99,47 +100,33 @@ cargo build --locked --release -p wireless-battery-tray   # Windows 原生托盘
 
 架构细节、macOS `.app` 打包及 BLE 支持说明详见 [托盘说明文档](tray/README.zh-CN.md)。
 
-## 与 AI 协作
+## 未支持的设备怎么办
 
-你可以直接将以下 Prompt 复制给 AI Agent（如 Antigravity、Claude Code、Cursor、Codex 等），让它通过 `wireless-battery` 命令行工具 **一键检测已连接设备、收集脱敏实机抓包，并逆向/适配未知设备的电量与充放电状态**：
+如果设备显示为 `unmatched` 或电量读取为 `null` / `unknown`，可按以下 3 步处理：
 
-```text
-请帮我使用 wireless-battery CLI 检测、收集并逆向当前已连接无线外设的电量百分比与充/放电状态。
+1. **先确认连接模式与端点**
+   - 运行 `wireless-battery list --json` 查看所有端点。
+   - 不少多模外设或手柄（如飞智、八爪鱼等）在纯 **XInput 模式**（`045E:028E`）下会被 Windows 保留，且多数第三方手柄不通过 XInput 上报电量；尝试切换至 **2.4G 接收器、有线、DInput / 厂商模式** 或 **BLE 模式**（支持标准 BAS `0x2A19` 可直接读取），再重新 `list` 确认是否出现厂商自定义 HID 端点（通常 `usage_page >= 0xFF00`）。
 
-0. **准备 CLI 工具**：
-   - 先检查当前环境是否已有可用的 `wireless-battery` / `wireless-battery.exe` 二进制文件；如果没有，请提示或协助我从项目 Releases 下载对应平台的可执行文件（如 Windows 下的 `wireless-battery.exe`）并放入当前目录或加入 PATH（若当前就在源码仓库中，也可使用 `cargo run --locked --` 代替）。
-   - 后续所有命令均直接调用该二进制（以下以 `wireless-battery` 代指，Windows 下可替换为 `.\wireless-battery.exe`）。
+2. **用 `probe` 探测报文（供提交 Issue 或自行适配）**
+   - 监听设备主动上报：`wireless-battery probe <device-id> --listen 5000`（插拔充电线或操作设备观察变化）。
+   - 发送探测指令（可结合 **Wireshark + USBPcap** / `usbmon` 抓到的官方查询包）：
+     `wireless-battery probe <device-id> --report-id 0 --send "5A A5 ..."` 或 `--get-feature 0x03`，对比**放电**与**充电**状态下的原始字节。
 
-1. **一键检测与枚举**：
-   - 运行 `wireless-battery list --json --include-experimental` 被动枚举所有 HID/BLE 端点，再运行 `wireless-battery list --read --json --include-experimental` 读取当前可读设备的电量与充电状态。
-   - 汇总展示所有检测到的设备信息（名称、VID/PID、`usage_page`、`usage`、`interface_number`、`match_status`、`support_status`、`provider_id`、当前电量百分比与充电状态）。如有匹配冲突或异常设备，补充运行 `wireless-battery diagnose <device-id> --json --include-experimental`。
-
-2. **收集实机样本（已匹配 / 实验性设备）**：
-   - 若目标设备已匹配但需要实机验证，请引导我分别在**放电（无线使用）**和**充电（插线/底座充电）**两种状态下采集脱敏 Fixture（注意绝不覆盖已有文件）：
-     `wireless-battery capture --device <device-id> --output fixtures/<vendor_device>/discharging.json --include-experimental --timeout-ms 5000`
-     `wireless-battery capture --device <device-id> --output fixtures/<vendor_device>/charging.json --include-experimental --timeout-ms 5000`
-   - 使用 `wireless-battery replay --fixture ...` 和 `wireless-battery validate` 验证采集结果。
-
-3. **逆向与协议适配（未匹配或充放电/电量不完整设备）**：
-   - 若目标设备处于 `unmatched`，或电量/充放电状态缺失或不准确，请结合 `list --json` 中的 HID 端点元数据（VID/PID、`usage_page`、`usage`、`interface_number`），对照项目源码中的现有协议（`src/providers/vendors/`、`docs/contributing-device.zh-CN.md`、`schemas/`）。
-   - 提出保守、安全的 HID 查询与字段解析方案（严禁将电压或离散档位伪造成百分比，未知哨兵值必须映射为 `unknown`）：若属于最多 4 轮静态 Feature/Output/Input 请求-响应协议，优先编写声明式 YAML 包（`packages/vendors/<vendor>/<device>.yaml`）；若需动态逻辑，则在 `src/providers/vendors/` 下实现聚焦的 Rust Provider。
-   - 引导我分别在**放电**与**充电**状态下实测验证原始报文与状态变化；确认无误后，补充正常/截断/非法字段 Fixture、`provenance/<device>.md` 来源记录，并更新 `docs/support-matrix.zh-CN.md` 与 `docs/support-matrix.md`。
-   - 最后通过 `replay`、`validate` 以及测试套件确认全部通过。
-```
+3. **提交 Issue 或 PR**
+   - **提 Issue**：附上设备型号、连接模式、`wireless-battery list --json` 输出，以及 `probe` 抓到的放电/充电报文片段。
+   - **提 PR**：在 `src/providers/vendors/` 中参考现有 `FixedSpec` 或 `Provider` 实现新增协议，补充测试并通过 `cargo test --locked`。
 
 ## 文档导航
 
 - [架构设计](docs/architecture.zh-CN.md)
 - [设备支持矩阵](docs/support-matrix.zh-CN.md)
 - [平台支持与限制](docs/platform-support.zh-CN.md)
-- [录制与回放规范](docs/capture-and-replay.zh-CN.md)
 - [设备贡献指南](docs/contributing-device.zh-CN.md)
-- [实机验证清单](docs/hardware-verification.zh-CN.md)
 - [原生系统托盘](tray/README.zh-CN.md)
-- [Fixture 说明](fixtures/README.zh-CN.md) · [协议来源与证据说明](provenance/README.zh-CN.md)
 
 ## 参与贡献
 
-请从[设备贡献指南](docs/contributing-device.zh-CN.md)开始。简单的固定协议应仅需 YAML 包、Fixture、来源记录与支持矩阵元数据；动态协商逻辑应使用聚焦的 Rust Provider 实现，而不应膨胀 YAML 脚本能力。
+请从[设备贡献指南](docs/contributing-device.zh-CN.md)开始。简单的固定协议优先使用声明式 YAML 包；需要动态协商的逻辑在 `src/providers/vendors/` 下实现。
 
 本项目基于 [GNU GPL-3.0 或更高版本](LICENSE)开源。

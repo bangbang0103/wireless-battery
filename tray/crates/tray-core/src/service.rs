@@ -706,7 +706,11 @@ mod tests {
         )
         .unwrap();
 
-        let service = TrayService::with_client(Arc::new(client), TrayConfig::default(), None);
+        let initial_cfg = TrayConfig {
+            allow_experimental: false,
+            ..TrayConfig::default()
+        };
+        let service = TrayService::with_client(Arc::new(client), initial_cfg, None);
 
         // Default config hides experimental device, reads verified GPW3 (12% -> low alert).
         let update = service.refresh_all();

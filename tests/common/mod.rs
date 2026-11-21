@@ -12,7 +12,7 @@ pub fn root() -> PathBuf {
 }
 
 pub fn fixture(name: &str) -> Fixture {
-    load_fixture(&root().join("fixtures/synthetic").join(name))
+    load_fixture(&root().join("tests/fixtures/synthetic").join(name))
 }
 
 pub fn load_fixture(path: &Path) -> Fixture {

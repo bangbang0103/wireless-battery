@@ -38,7 +38,7 @@ impl Default for TrayConfig {
     fn default() -> Self {
         Self {
             poll_interval_secs: DEFAULT_POLL_INTERVAL_SECS,
-            allow_experimental: false,
+            allow_experimental: true,
             allow_stale: true,
             low_battery_notify: true,
             low_battery_threshold: DEFAULT_LOW_BATTERY_THRESHOLD,

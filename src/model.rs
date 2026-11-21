@@ -354,7 +354,7 @@ impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             default_timeout: Duration::from_millis(1_000),
-            allow_experimental: false,
+            allow_experimental: true,
             enable_cache: true,
         }
     }
@@ -376,7 +376,7 @@ impl Default for ReadOptions {
         Self {
             timeout: Duration::from_millis(1_000),
             allow_stale: false,
-            allow_experimental: false,
+            allow_experimental: true,
         }
     }
 }

@@ -2,25 +2,16 @@
 
 > **Language / 语言**: [English](contributing-device.md) | **简体中文**
 
-## 选择扩展方式
+## 新增内置 Provider
 
-仅当协议满足“静态与（AND）匹配 + 最多 4 轮固定 Feature 或 Output/Input 请求-响应”时使用 YAML 设备包。YAML 支持的提取能力包括 `u8`、布尔位（`bool_bit`）、枚举映射、固定常量以及 `sum8`/`xor8` 校验和。
-
-动态索引、版本回退、条件请求、状态维护、有界无关事件过滤或其他复杂协议逻辑应使用内置 Rust Provider 实现。不要向 YAML 中引入脚本、文件访问、网络访问、动态库或通用循环。
-
-## 简单设备包贡献清单
-
-1. 新增 `packages/vendors/<vendor>/<device>.yaml`。
-2. 至少补充正常、截断/错包、非法字段三类 Fixture；适用时补充超时或回退用例。
-3. 新增 `provenance/<device>.md`，记录协议来源、复用的代码许可证、硬件型号、操作系统、连接方式、固件版本以及每项能力的验证人。
-4. 更新单能力证据以及[支持矩阵](support-matrix.zh-CN.md)（及其英文版 [support-matrix.md](support-matrix.md)）。
-5. 运行 `cargo test --all-features`、`cargo run -- validate` 以及所有相关回放 Fixture。
-
-新增一个简单 YAML 设备包不应要求修改调度器、公开数据模型、CLI 或其他 Provider。
+1. 对于未知 HID 端点，可使用 `wireless-battery probe <device-id> --listen` 或 `--send` / `--get-feature`（必要时配合 Wireshark/USBPcap）收集请求与响应报文。
+2. 在 `src/providers/vendors/` 下新增 `FixedSpec`（适合简单固定请求-响应）或聚焦的 `Provider` 实现，并在 `src/providers/vendors/mod.rs` 中注册。
+3. 在 `tests/fixtures/vendors/` 下补充回放测试 Fixture（正常、截断/错包、非法字段以及超时/回退用例），并更新 `docs/support-matrix.zh-CN.md` 与 `docs/support-matrix.md`。
+4. 运行 `cargo test --locked --all-features` 验证。
 
 ## 匹配安全性
 
-优先组合使用 VID/PID、`usage_page`、`usage`、`interface_number` 等静态区分字段。仅依赖 VID/PID 的规则必须在 provenance 中说明其充分性。`list_devices()` 与 `Provider::matches()` 绝不允许探测设备。出现多个精确匹配时应视为冲突，而不是放宽匹配规则或任选第一个 Provider。
+优先组合使用 VID/PID、`usage_page`、`usage`、`interface_number` 等静态区分字段。`list_devices()` 与 `Provider::matches()` 绝不允许探测设备。出现多个精确匹配时应视为冲突，而不是放宽匹配规则或任选第一个 Provider。
 
 当前版本的 HIDAPI 无法在所有平台上枚举 HID 报告长度，请勿假设报告长度匹配在所有系统上都可用。
 
@@ -41,4 +32,4 @@
 
 ---
 
-相关文档：[录制与回放](capture-and-replay.zh-CN.md) · [设备支持矩阵](support-matrix.zh-CN.md) · [协议来源说明](../provenance/README.zh-CN.md) · [返回 README](../README.zh-CN.md)
+相关文档：[录制与回放](capture-and-replay.zh-CN.md) · [设备支持矩阵](support-matrix.zh-CN.md) · [返回 README](../README.zh-CN.md)

@@ -19,7 +19,7 @@ fn collect_json_files(dir: &Path, out: &mut Vec<PathBuf>) {
 #[test]
 fn every_vendor_provider_has_a_strict_json_replay() {
     let mut paths = Vec::new();
-    collect_json_files(&root().join("fixtures/vendors"), &mut paths);
+    collect_json_files(&root().join("tests/fixtures/vendors"), &mut paths);
     paths.sort();
     assert!(paths.len() >= 24, "all vendor providers need fixtures");
     for path in paths {
@@ -37,7 +37,7 @@ fn logitech_1004_reads_charge_status_from_byte_6_and_fast_fails_hidpp_errors() {
     // Low battery level bitmask (response[5] = 0x02) while discharging (response[6] = 0x00)
     // must report Discharging, NOT Full.
     let mut low_discharging =
-        load_fixture(&root().join("fixtures/vendors/logitech/hidpp_1004.json"));
+        load_fixture(&root().join("tests/fixtures/vendors/logitech/hidpp_1004.json"));
     low_discharging.steps.last_mut().unwrap().outcome = StepOutcome::Response {
         report_id: 17,
         hex: "01 05 1E 0F 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00".to_owned(),
@@ -49,7 +49,7 @@ fn logitech_1004_reads_charge_status_from_byte_6_and_fast_fails_hidpp_errors() {
     replay.finish().unwrap();
 
     // Charging (response[5] = 0x04 good, response[6] = 0x01 charging) must report Charging.
-    let mut charging = load_fixture(&root().join("fixtures/vendors/logitech/hidpp_1004.json"));
+    let mut charging = load_fixture(&root().join("tests/fixtures/vendors/logitech/hidpp_1004.json"));
     charging.steps.last_mut().unwrap().outcome = StepOutcome::Response {
         report_id: 17,
         hex: "01 05 1E 32 04 01 00 00 00 00 00 00 00 00 00 00 00 00 00".to_owned(),
@@ -62,7 +62,7 @@ fn logitech_1004_reads_charge_status_from_byte_6_and_fast_fails_hidpp_errors() {
 
     // HID++ 2.0 error frame (report[2] == 0xFF, report[3] == feature, report[4] == func|swid)
     // must fast-fail with InvalidResponse instead of hanging until timeout.
-    let mut hidpp_error = load_fixture(&root().join("fixtures/vendors/logitech/hidpp_1004.json"));
+    let mut hidpp_error = load_fixture(&root().join("tests/fixtures/vendors/logitech/hidpp_1004.json"));
     hidpp_error.steps.last_mut().unwrap().outcome = StepOutcome::Response {
         report_id: 17,
         hex: "01 FF 05 1E 09 00 00 00 00 00 00 00 00 00 00 00 00 00 00".to_owned(),
@@ -74,7 +74,7 @@ fn logitech_1004_reads_charge_status_from_byte_6_and_fast_fails_hidpp_errors() {
 
 #[test]
 fn razer_scales_0_to_255_monotonically_and_reports_checksum_failed() {
-    let base = load_fixture(&root().join("fixtures/vendors/razer/mouse.json"));
+    let base = load_fixture(&root().join("tests/fixtures/vendors/razer/mouse.json"));
     let mut last_pct = 0_u8;
     for (raw, expected) in [
         (0_u8, 0_u8),
@@ -119,7 +119,7 @@ fn razer_scales_0_to_255_monotonically_and_reports_checksum_failed() {
 
 #[test]
 fn dualsense_bluetooth_uses_get_feature_and_unknown_status_stays_unknown() {
-    let mut fixture = load_fixture(&root().join("fixtures/vendors/sony/dualsense.json"));
+    let mut fixture = load_fixture(&root().join("tests/fixtures/vendors/sony/dualsense.json"));
     fixture.endpoint.bus_type = Some(HidBusType::Bluetooth);
     let mut report = vec![0_u8; 63];
     // For report_id 0x31, frame[54] == payload[53]. High nibble 0x05 is unknown/reserved.
@@ -156,8 +156,8 @@ fn dualsense_bluetooth_uses_get_feature_and_unknown_status_stays_unknown() {
 #[test]
 fn interface_number_matching_survives_capture_serialization_without_synthetic_path() {
     for path in [
-        "fixtures/vendors/mchose/k7.json",
-        "fixtures/vendors/asus/rog_omni.json",
+        "tests/fixtures/vendors/mchose/k7.json",
+        "tests/fixtures/vendors/asus/rog_omni.json",
     ] {
         let mut fixture = load_fixture(&root().join(path));
         fixture.endpoint.interface_number = Some(2);
@@ -174,7 +174,7 @@ fn interface_number_matching_survives_capture_serialization_without_synthetic_pa
 #[test]
 fn xinput_and_bas_replay_validate_errors_and_edge_cases() {
     // Disconnected XInput (battery_type = 0) -> DeviceDisconnected
-    let mut disconnected = load_fixture(&root().join("fixtures/vendors/os/xinput_slot0.json"));
+    let mut disconnected = load_fixture(&root().join("tests/fixtures/vendors/os/xinput_slot0.json"));
     disconnected.steps[0].outcome = StepOutcome::XInput {
         battery_type: 0,
         battery_level: 0,
@@ -184,7 +184,7 @@ fn xinput_and_bas_replay_validate_errors_and_edge_cases() {
     replay.finish().unwrap();
 
     // Wired XInput (battery_type = 1) -> Precision::None, level = None
-    let mut wired = load_fixture(&root().join("fixtures/vendors/os/xinput_slot0.json"));
+    let mut wired = load_fixture(&root().join("tests/fixtures/vendors/os/xinput_slot0.json"));
     wired.steps[0].outcome = StepOutcome::XInput {
         battery_type: 1,
         battery_level: 0,
@@ -196,7 +196,7 @@ fn xinput_and_bas_replay_validate_errors_and_edge_cases() {
     replay.finish().unwrap();
 
     // Invalid XInput level (9) -> InvalidResponse
-    let mut bad_level = load_fixture(&root().join("fixtures/vendors/os/xinput_slot0.json"));
+    let mut bad_level = load_fixture(&root().join("tests/fixtures/vendors/os/xinput_slot0.json"));
     bad_level.steps[0].outcome = StepOutcome::XInput {
         battery_type: 2,
         battery_level: 9,
@@ -206,7 +206,7 @@ fn xinput_and_bas_replay_validate_errors_and_edge_cases() {
     replay.finish().unwrap();
 
     // Out-of-range BAS (> 100%) -> InvalidResponse
-    let mut bad_bas = load_fixture(&root().join("fixtures/synthetic/bluetooth_bas.json"));
+    let mut bad_bas = load_fixture(&root().join("tests/fixtures/synthetic/bluetooth_bas.json"));
     bad_bas.steps[0].outcome = StepOutcome::Bas { percentage: 120 };
     let (result, replay) = run_fixture(&bad_bas);
     assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidResponse);
@@ -216,7 +216,7 @@ fn xinput_and_bas_replay_validate_errors_and_edge_cases() {
 #[test]
 fn wob_rainy75_reads_charge_state_from_byte_9_and_keeps_unknown_values_unknown() {
     // Discharging real capture (payload byte 8 / frame byte 9 == 0x00)
-    let discharging = load_fixture(&root().join("fixtures/vendors/wob/rainy75_real.json"));
+    let discharging = load_fixture(&root().join("tests/fixtures/vendors/wob/rainy75_real.json"));
     let (result, replay) = run_fixture(&discharging);
     let reading = result.unwrap();
     assert_eq!(reading.percentage, Some(50));
@@ -224,7 +224,7 @@ fn wob_rainy75_reads_charge_state_from_byte_9_and_keeps_unknown_values_unknown()
     replay.finish().unwrap();
 
     // Charging real capture (payload byte 8 / frame byte 9 == 0x01)
-    let charging = load_fixture(&root().join("fixtures/vendors/wob/rainy75_charging_real.json"));
+    let charging = load_fixture(&root().join("tests/fixtures/vendors/wob/rainy75_charging_real.json"));
     let (result, replay) = run_fixture(&charging);
     let reading = result.unwrap();
     assert_eq!(reading.percentage, Some(62));

@@ -77,8 +77,6 @@ pub enum HitTarget {
     CopyDiagnostic(String),
     OpenSettingsFromEmpty,
     SetPollInterval(u64),
-    ToggleExperimental,
-    ToggleStale,
     ToggleLowBatteryNotify,
     ToggleAutostart,
 }
@@ -1096,7 +1094,7 @@ impl PopoverRenderer {
                 );
                 let (ev_text, ev_color) = match dev.support_status {
                     SupportStatus::Verified => ("Verified", palette.accent_green),
-                    SupportStatus::Experimental => ("Experimental", palette.accent_amber),
+                    SupportStatus::Experimental => ("Supported", palette.accent_green),
                     SupportStatus::Deprecated => ("Deprecated", palette.text_secondary),
                     _ => ("Unknown", palette.text_subtle),
                 };
@@ -1309,18 +1307,6 @@ impl PopoverRenderer {
 
             let cfg = &snapshot.config;
             let toggles = [
-                (
-                    "允许实验性协议",
-                    "启用未实机验证的厂商驱动（Experimental）",
-                    cfg.allow_experimental,
-                    HitTarget::ToggleExperimental,
-                ),
-                (
-                    "失败时保留上次缓存",
-                    "标记为 Stale，绝不伪造为 0%",
-                    cfg.allow_stale,
-                    HitTarget::ToggleStale,
-                ),
                 (
                     "低电量系统提醒（≤ 15%）",
                     "同时在托盘图标右上角显示微红角标",
