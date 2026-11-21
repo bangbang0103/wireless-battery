@@ -2,7 +2,21 @@ name: CI
 
 on:
   push:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - "NOTICE"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - "NOTICE"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
 
 permissions:
   contents: read
