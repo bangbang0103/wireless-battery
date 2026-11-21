@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "target": {
+    "kind": "provider",
+    "id": "mchose.k7_v2_ultra"
+  },
+  "case": "mchose_k7",
+  "source": "synthetic",
+  "environment": {
+    "os": null,
+    "connection": "synthetic",
+    "firmware": null
+  },
+  "endpoint": {
+    "id": "ep_mchose_k7",
+    "transport": "mock",
+    "vid": 14391,
+    "pid": 4116,
+    "usage_page": 65281,
+    "usage": 1,
+    "input_report_length": null,
+    "output_report_length": null,
+    "feature_report_length": null,
+    "product_name": "mchose_k7",
+    "manufacturer": "Synthetic fixture",
+    "synthetic_path": "hid:synthetic&mi_02&col01"
+  },
+  "steps": [
+    {
+      "operation": "write_output",
+      "report_id": 77,
+      "request_hex": "01 01 00 00 09 00 00 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "length": null,
+      "outcome": {
+        "kind": "ok"
+      }
+    },
+    {
+      "operation": "read_input",
+      "report_id": null,
+      "request_hex": null,
+      "length": null,
+      "outcome": {
+        "kind": "response",
+        "report_id": 77,
+        "hex": "01 01 10 00 09 00 00 37 38 26 40 00 00 00 00 00 00 02 00 58 00 00 00 2B 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+      }
+    }
+  ],
+  "expect": {
+    "kind": "reading",
+    "percentage": 88,
+    "level": null,
+    "voltage_mv": null,
+    "charge_state": "discharging",
+    "reachability": "online",
+    "precision": "percentage"
+  }
+}

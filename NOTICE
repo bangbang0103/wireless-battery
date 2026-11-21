@@ -1,0 +1,8 @@
+Wireless Battery is licensed under the GNU General Public License v3.0 or later (see LICENSE).
+
+This project includes protocol definitions informed by:
+- Wireless-Device-Battery-Monitor / BatteryHub (GPL-3.0-or-later, https://github.com/krisgfx9/Wireless-Device-Battery-Monitor).
+- Voltide (MIT License, Copyright (c) 2026 Joko).
+- Community protocol documentation and references including GitHub user yiwluoq (ATK protocols), mitsimi/mchose-tray, and Rapou7/offline-mchose (MCHOSE K7 documentation).
+
+Protocol references and hardware verification notes are recorded in provenance/builtin-providers.md.

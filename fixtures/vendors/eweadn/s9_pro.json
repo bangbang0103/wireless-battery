@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "target": {
+    "kind": "provider",
+    "id": "eweadn.s9_pro"
+  },
+  "case": "eweadn_s9_pro",
+  "source": "synthetic",
+  "environment": {
+    "os": null,
+    "connection": "synthetic",
+    "firmware": null
+  },
+  "endpoint": {
+    "id": "ep_eweadn_s9_pro",
+    "transport": "mock",
+    "vid": 14126,
+    "pid": 4157,
+    "usage_page": 65280,
+    "usage": null,
+    "input_report_length": null,
+    "output_report_length": null,
+    "feature_report_length": null,
+    "product_name": "eweadn_s9_pro",
+    "manufacturer": "Synthetic fixture"
+  },
+  "steps": [
+    {
+      "operation": "send_feature",
+      "report_id": 3,
+      "request_hex": "20 50 00 00 4F 81 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "length": null,
+      "outcome": {
+        "kind": "ok"
+      }
+    },
+    {
+      "operation": "get_feature",
+      "report_id": 3,
+      "request_hex": null,
+      "length": 63,
+      "outcome": {
+        "kind": "response",
+        "report_id": 3,
+        "hex": "50 00 0B 00 01 35 21 04 01 90 65 04 A5 5A 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+      }
+    }
+  ],
+  "expect": {
+    "kind": "reading",
+    "percentage": 53,
+    "level": null,
+    "voltage_mv": null,
+    "charge_state": "discharging",
+    "reachability": "online",
+    "precision": "percentage"
+  }
+}

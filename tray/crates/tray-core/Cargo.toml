@@ -1,0 +1,21 @@
+[package]
+name = "wireless-battery-tray-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Platform-agnostic state machine, polling, notification deduplication, and config for the Wireless Battery tray app"
+
+[features]
+default = []
+bluetooth = ["wireless-battery/bluetooth"]
+
+[dependencies]
+chrono = { version = "0.4.38", features = ["serde"] }
+serde = { version = "1.0.216", features = ["derive"] }
+serde_json = "1.0.117"
+thiserror = "1.0.61"
+wireless-battery = { path = "../../..", default-features = false }
+
+[lints]
+workspace = true

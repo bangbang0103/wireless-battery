@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "target": {
+    "kind": "provider",
+    "id": "razer.headset"
+  },
+  "case": "razer_headset",
+  "source": "synthetic",
+  "environment": {
+    "os": null,
+    "connection": "synthetic",
+    "firmware": null
+  },
+  "endpoint": {
+    "id": "ep_razer_headset",
+    "transport": "mock",
+    "vid": 5426,
+    "pid": 1365,
+    "usage_page": 65280,
+    "usage": null,
+    "input_report_length": null,
+    "output_report_length": null,
+    "feature_report_length": null,
+    "product_name": "razer_headset",
+    "manufacturer": "Synthetic fixture"
+  },
+  "steps": [
+    {
+      "operation": "write_output",
+      "report_id": 2,
+      "request_hex": "80 09 00 00 50 41 08 00 04 21 00 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "length": null,
+      "outcome": {
+        "kind": "ok"
+      }
+    },
+    {
+      "operation": "read_input",
+      "report_id": null,
+      "request_hex": null,
+      "length": null,
+      "outcome": {
+        "kind": "response",
+        "report_id": 2,
+        "hex": "0E 50 49 00 00 00 00 00 00 00 00 21 01 01 4B 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+      }
+    },
+    {
+      "operation": "write_output",
+      "report_id": 2,
+      "request_hex": "80 09 00 00 50 41 08 00 04 2A 00 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "length": null,
+      "outcome": {
+        "kind": "ok"
+      }
+    },
+    {
+      "operation": "read_input",
+      "report_id": null,
+      "request_hex": null,
+      "length": null,
+      "outcome": {
+        "kind": "response",
+        "report_id": 2,
+        "hex": "0E 50 49 00 00 00 00 00 00 00 00 2A 01 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+      }
+    }
+  ],
+  "expect": {
+    "kind": "reading",
+    "percentage": 75,
+    "level": null,
+    "voltage_mv": null,
+    "charge_state": "charging",
+    "reachability": "online",
+    "precision": "percentage"
+  }
+}

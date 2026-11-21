@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wireless-battery.example/schema/device-package.schema.json",
+  "title": "Wireless Battery declarative device package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "version", "status", "name", "match", "capabilities", "transport", "query", "response", "fields"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "status": {"enum": ["draft", "experimental", "verified", "deprecated"]},
+    "name": {"type": "string", "minLength": 1},
+    "source": {"enum": ["real", "synthetic"], "default": "real"},
+    "match": {
+      "type": "object", "additionalProperties": false, "required": ["all"],
+      "properties": {"all": {"$ref": "#/$defs/match"}}
+    },
+    "capabilities": {
+      "type": "object", "additionalProperties": false,
+      "required": ["percentage", "discrete_level", "voltage", "charge_state", "reachability"],
+      "properties": {
+        "percentage": {"type": "boolean"}, "discrete_level": {"type": "boolean"},
+        "voltage": {"type": "boolean"}, "charge_state": {"type": "boolean"},
+        "reachability": {"type": "boolean"}
+      }
+    },
+    "transport": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "timeout_ms"],
+      "properties": {
+        "kind": {"enum": ["hid_feature", "hid_output"]},
+        "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "cooldown_ms": {"type": "integer", "minimum": 0, "maximum": 60000}
+      }
+    },
+    "query": {
+      "type": "object", "additionalProperties": false, "required": ["steps"],
+      "properties": {"steps": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"$ref": "#/$defs/step"}}}
+    },
+    "response": {"$ref": "#/$defs/response"},
+    "fields": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "percentage": {"$ref": "#/$defs/field"}, "level": {"$ref": "#/$defs/field"},
+        "voltage_mv": {"$ref": "#/$defs/field"}, "charge_state": {"$ref": "#/$defs/field"},
+        "charging": {"$ref": "#/$defs/field"}, "reachability": {"$ref": "#/$defs/field"}
+      }
+    },
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "fixtures": {"type": "array", "items": {"type": "string"}},
+        "provenance": {"type": "string"},
+        "capability_status": {"type": "object", "additionalProperties": {"enum": ["verified", "experimental", "unverified", "unsupported"]}}
+      }
+    }
+  },
+  "$defs": {
+    "match": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "vid": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "pid": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "usage_page": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "usage": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "input_report_length": {"type": "integer", "minimum": 0},
+        "output_report_length": {"type": "integer", "minimum": 0},
+        "feature_report_length": {"type": "integer", "minimum": 0}
+      }
+    },
+    "request": {
+      "type": "object", "additionalProperties": false, "required": ["report_id", "payload_hex"],
+      "properties": {"report_id": {"type": "integer", "minimum": 0, "maximum": 255}, "payload_hex": {"type": "string"}}
+    },
+    "checksum": {
+      "type": "object", "additionalProperties": false, "required": ["algorithm", "range", "offset"],
+      "properties": {
+        "algorithm": {"enum": ["sum8", "xor8"]},
+        "range": {"type": "array", "prefixItems": [{"type": "integer", "minimum": 0}, {"type": "integer", "minimum": 0}], "minItems": 2, "maxItems": 2},
+        "offset": {"type": "integer", "minimum": 0}
+      }
+    },
+    "constant": {
+      "type": "object", "additionalProperties": false, "required": ["offset", "hex"],
+      "properties": {"offset": {"type": "integer", "minimum": 0}, "hex": {"type": "string", "minLength": 1}}
+    },
+    "response": {
+      "type": "object", "additionalProperties": false, "required": ["report_id", "length"],
+      "properties": {
+        "report_id": {"type": "integer", "minimum": 0, "maximum": 255},
+        "length": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "constants": {"type": "array", "items": {"$ref": "#/$defs/constant"}},
+        "checksum": {"$ref": "#/$defs/checksum"}
+      }
+    },
+    "step": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "send_feature": {"$ref": "#/$defs/request"}, "receive_feature": {"$ref": "#/$defs/response"},
+        "write_output": {"$ref": "#/$defs/request"}, "read_input": {"$ref": "#/$defs/response"}
+      }
+    },
+    "field": {
+      "type": "object", "additionalProperties": false, "required": ["offset", "type"],
+      "properties": {
+        "offset": {"type": "integer", "minimum": 0},
+        "type": {"enum": ["u8", "bool_bit"]},
+        "bit": {"type": "integer", "minimum": 0, "maximum": 7},
+        "valid_range": {"type": "array", "prefixItems": [{"type": "integer", "minimum": 0, "maximum": 100}, {"type": "integer", "minimum": 0, "maximum": 100}], "minItems": 2, "maxItems": 2},
+        "unknown_values": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 255}, "uniqueItems": true},
+        "map": {"type": "object", "additionalProperties": {"type": "string"}},
+        "scale": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

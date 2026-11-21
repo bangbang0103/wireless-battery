@@ -1,0 +1,23 @@
+[package]
+name = "wireless-battery-tray-ffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Minimal C-ABI bridge exposing wireless-battery-tray-core to non-Rust native UI shells (e.g., macOS SwiftUI)"
+
+[lib]
+name = "wireless_battery_tray_ffi"
+crate-type = ["staticlib", "rlib"]
+
+[features]
+default = []
+bluetooth = ["wireless-battery-tray-core/bluetooth"]
+
+[dependencies]
+serde = { version = "1.0.216", features = ["derive"] }
+serde_json = "1.0.117"
+wireless-battery-tray-core = { path = "../tray-core" }
+
+[lints.clippy]
+all = "deny"

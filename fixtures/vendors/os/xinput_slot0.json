@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "target": {
+    "kind": "xinput",
+    "id": "os.xinput"
+  },
+  "case": "xinput_slot0",
+  "source": "synthetic",
+  "environment": {
+    "os": null,
+    "connection": "synthetic",
+    "firmware": null
+  },
+  "endpoint": {
+    "id": "ep_xinput_slot0",
+    "transport": "x_input",
+    "vid": null,
+    "pid": null,
+    "usage_page": null,
+    "usage": null,
+    "input_report_length": null,
+    "output_report_length": null,
+    "feature_report_length": null,
+    "product_name": "xinput_slot0",
+    "manufacturer": "Synthetic fixture"
+  },
+  "steps": [
+    {
+      "operation": "read_xinput",
+      "report_id": null,
+      "request_hex": null,
+      "length": null,
+      "outcome": {
+        "kind": "xinput",
+        "battery_type": 2,
+        "battery_level": 2
+      }
+    }
+  ],
+  "expect": {
+    "kind": "reading",
+    "percentage": null,
+    "level": "medium",
+    "voltage_mv": null,
+    "charge_state": "unknown",
+    "reachability": "online",
+    "precision": "discrete_level"
+  }
+}
