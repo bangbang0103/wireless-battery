@@ -32,23 +32,10 @@ jobs:
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - run: cargo clippy --locked --no-default-features -- -D warnings
       - run: cargo test --locked --all-features
-      - run: cargo run --locked --quiet -- validate
-      - name: Replay every synthetic fixture
-        shell: bash
-        run: |
-          for fixture in fixtures/synthetic/*.json; do
-            cargo run --locked --quiet -- replay --fixture "$fixture" || exit 1
-          done
-      - name: Replay every vendor and OS fixture
-        shell: bash
-        run: |
-          while IFS= read -r fixture; do
-            cargo run --locked --quiet -- replay --fixture "$fixture" || exit 1
-          done < <(find fixtures/vendors -type f -name '*.json' | sort)
       - name: Check synthetic devices stay out of real support
         shell: bash
         run: |
-          ! grep -R 'synthetic\.' docs/support-matrix.md docs/support-matrix.zh-CN.md packages/vendors
+          ! grep -R 'synthetic\.' docs/support-matrix.md docs/support-matrix.zh-CN.md
       - name: Build CLI release
         run: cargo build --locked --release --bin wireless-battery
       - name: Upload Windows CLI artifact

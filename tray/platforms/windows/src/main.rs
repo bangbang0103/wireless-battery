@@ -35,8 +35,7 @@ mod win_app {
     use crate::theme::SystemTheme;
     use crate::tray::{
         TrayIconHost, MENU_CMD_OPEN_PANEL, MENU_CMD_QUIT, MENU_CMD_TOGGLE_AUTOSTART,
-        MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY,
-        WM_TRAY_CALLBACK,
+        MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY, WM_TRAY_CALLBACK,
     };
     use std::sync::{mpsc, Arc, Mutex};
     use windows::core::w;
@@ -297,7 +296,10 @@ mod win_app {
                                 maybe_refresh_on_open(host);
                             }
                             Some(MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY) => {
-                                dispatch_popover_action(host, PopoverAction::ToggleLowBatteryNotify);
+                                dispatch_popover_action(
+                                    host,
+                                    PopoverAction::ToggleLowBatteryNotify,
+                                );
                             }
                             Some(MENU_CMD_TOGGLE_AUTOSTART) => {
                                 dispatch_popover_action(host, PopoverAction::ToggleAutostart);
