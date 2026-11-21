@@ -39,10 +39,10 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-To enable optional BLE BAS reading support:
+BLE BAS support (`bluetooth` feature) is enabled by default. To build without BLE support:
 
 ```bash
-cargo test --locked --features wireless-battery-tray-core/bluetooth
+cargo test --locked --no-default-features -p wireless-battery-tray-core
 ```
 
 ## Platform shells

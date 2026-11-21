@@ -39,10 +39,10 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-若需要启用可选的 BLE BAS 读取能力：
+BLE BAS 读取能力（`bluetooth` feature）默认已启用。若需要禁用 BLE 支持进行测试：
 
 ```bash
-cargo test --locked --features wireless-battery-tray-core/bluetooth
+cargo test --locked --no-default-features -p wireless-battery-tray-core
 ```
 
 ## 平台原生壳

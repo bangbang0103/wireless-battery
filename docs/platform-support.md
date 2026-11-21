@@ -22,7 +22,7 @@ HID and Bluetooth access can trigger operating-system permission requirements. G
 
 ## BLE BAS limitations
 
-The optional `bluetooth` feature lists only peripherals already known by OS adapters; it never starts a scan in `list_devices()`. Consequently, a BAS-capable device may be absent until the OS knows it. An explicit read may connect and perform GATT service discovery. A device connected through another transport or occupied by another central can be unavailable.
+The `bluetooth` feature (enabled by default; disable with `--no-default-features`) lists only peripherals already known by OS adapters; it never starts a scan in `list_devices()`. Consequently, a BAS-capable device may be absent until the OS knows it. An explicit read may connect and perform GATT service discovery. A device connected through another transport or occupied by another central can be unavailable.
 
 Only BAS Battery Level percentage is returned. Charging remains unknown unless a future separately evidenced source supports it. Classic Bluetooth/HFP and OS-specific cached Bluetooth properties are not implemented.
 

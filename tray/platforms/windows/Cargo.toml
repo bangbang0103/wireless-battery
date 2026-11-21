@@ -11,7 +11,7 @@ name = "wireless-battery-tray"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["bluetooth"]
 bluetooth = ["wireless-battery-tray-core/bluetooth"]
 
 [dependencies]

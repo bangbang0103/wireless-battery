@@ -21,7 +21,7 @@ HID Provider 仅依赖 `HidSession`，不直接耦合 HIDAPI 类型。Report ID 
 - `HidApiTransport`：真实 HID 枚举与 I/O，内置脱敏错误分类与无编号 Report ID 0 检测。
 - `RecordTransport`：包装真实传输层，仅录制已注册 Provider 发起的调用。
 - `ReplayTransport`：持有共享有序游标，严格拒绝请求篡改、遗漏调用或多余调用。
-- `BluetoothTransport`（可选）：单个有界工作线程与异步运行时，仅用于只读 BAS；`list_devices()` 绝不触发扫描。
+- `BluetoothTransport`（通过 `bluetooth` feature 默认启用）：单个有界工作线程与异步运行时，仅用于只读 BAS；`list_devices()` 绝不触发扫描。
 - `XInputTransport`：Windows 操作系统手柄槽位，仅返回 4 级离散电量，不生成 HID 帧，也不伪造百分比。
 - Windows `SetOutputReport`：作为独立操作被录制与回放，兼容拒绝 WriteFile 与 SetFeature 的设备。
 

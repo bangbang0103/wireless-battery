@@ -16,10 +16,10 @@ chmod +x tray/platforms/macos/scripts/bundle-app.sh
 open "tray/platforms/macos/dist/Wireless Battery.app"
 ```
 
-To enable optional BLE BAS support:
+BLE BAS support (`bluetooth` feature) is enabled by default. To build without BLE support:
 
 ```bash
-./tray/platforms/macos/scripts/bundle-app.sh --features bluetooth
+./tray/platforms/macos/scripts/bundle-app.sh --no-default-features
 ```
 
 ---

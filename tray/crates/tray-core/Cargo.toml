@@ -7,7 +7,7 @@ license.workspace = true
 description = "Platform-agnostic state machine, polling, notification deduplication, and config for the Wireless Battery tray app"
 
 [features]
-default = []
+default = ["bluetooth"]
 bluetooth = ["wireless-battery/bluetooth"]
 
 [dependencies]

@@ -2,7 +2,7 @@
 
 > **Language / 语言**: [English](README.md) | **简体中文**
 
-一个同步 Rust 库与命令行工具，用于通过 HID 保守地读取外设电量，并可选支持只读 Bluetooth LE Battery Service（BAS）。
+一个同步 Rust 库与命令行工具，用于通过 HID 保守地读取外设电量，并默认支持只读 Bluetooth LE Battery Service（BAS）。
 
 本项目将**协议安全性**和**可复现性**置于设备数量之上：
 
@@ -14,15 +14,17 @@
 
 ## 当前支持情况
 
-**当前内置 152 条厂商与操作系统协议路径**（另含可选 Bluetooth LE BAS），覆盖 Logitech / Astro、Razer、SteelSeries、Corsair、HyperX、ASUS ROG、Sony、Nintendo、Valve、GameSir、Flydigi、8BitDo、Beitong、Keychron、Cherry、Akko、NuPhy、AULA、MCHOSE、ATK / VXE / VGN、DAREU、EWEADN、Rapoo、WOB、Glorious、Lamzu、WLmouse、Pulsar、VAXEE、Ninjutso、Endgame Gear、Finalmouse、ZOWIE、Audeze、JBL、Jabra、Turtle Beach、AKG、Fractal、Alienware、Moondrop、Maono、XInput 等设备，完整列表见[支持矩阵](docs/support-matrix.zh-CN.md)。除非在矩阵中针对具体设备与能力明确标注为 `verified`，否则均处于 `experimental` 状态。每条内置路径都具备严格线级合成回放用例，但合成回放不代表真实硬件验证。WOB Rainy75 与 Logitech GPW3 的实机验证记录见[实机验证清单](docs/hardware-verification.zh-CN.md)。仓库中还保留了一个虚构的声明式鼠标包用于解释器测试，但绝不参与真实发现。
+> **支持的产品矩阵**：完整设备列表见 [**设备支持矩阵（`docs/support-matrix.zh-CN.md`）**](docs/support-matrix.zh-CN.md)，内含按**厂商、设备、支持方式**（内置 Rust HID、系统 XInput API、BLE BAS；已实机验证 / 实验性）分类的完整表格。
+
+**当前内置 152 条厂商与操作系统协议路径**（另含默认启用的 Bluetooth LE BAS），覆盖 Logitech / Astro、Razer、SteelSeries、Corsair、HyperX、ASUS ROG、Sony、Nintendo、Valve、GameSir、Flydigi、8BitDo、Beitong、Keychron、Cherry、Akko、NuPhy、AULA、MCHOSE、ATK / VXE / VGN、DAREU、EWEADN、Rapoo、WOB、Glorious、Lamzu、WLmouse、Pulsar、VAXEE、Ninjutso、Endgame Gear、Finalmouse、ZOWIE、Audeze、JBL、Jabra、Turtle Beach、AKG、Fractal、Alienware、Moondrop、Maono、XInput 等设备，完整列表见[支持矩阵](docs/support-matrix.zh-CN.md)。除非在矩阵中针对具体设备与能力明确标注为 `verified`，否则均处于 `experimental` 状态。每条内置路径都具备严格线级合成回放用例，但合成回放不代表真实硬件验证。WOB Rainy75 与 Logitech GPW3 的实机验证记录见[实机验证清单](docs/hardware-verification.zh-CN.md)。仓库中还保留了一个虚构的声明式鼠标包用于解释器测试，但绝不参与真实发现。
 
 内置厂商协议实现参考了 [Wireless-Device-Battery-Monitor / BatteryHub](NOTICE)（GPL-3.0-or-later）及 [Voltide](NOTICE)（MIT），完整署名见 [NOTICE](NOTICE)。
 
-标准 HID 电池 Usage 与经典蓝牙/HFP 电量报告预留给后续版本。可选的 BLE 支持仅实现 BAS Battery Level（`0x2A19`）只读查询，不包含配对、通知订阅、充电状态推断或跨传输设备去重。
+标准 HID 电池 Usage 与经典蓝牙/HFP 电量报告预留给后续版本。BLE 支持仅实现 BAS Battery Level（`0x2A19`）只读查询，不包含配对、通知订阅、充电状态推断或跨传输设备去重。
 
 ## 构建
 
-支持 Rust 1.76 及以上版本。`Cargo.lock` 锁定依赖版本以维持 MSRV（`--locked`）。默认启用 `cli` feature；纯库消费者可通过 `--no-default-features` 禁用它，避免编译仅 CLI 使用的依赖（`clap`、`walkdir`）。
+支持 Rust 1.76 及以上版本。`Cargo.lock` 锁定依赖版本以维持 MSRV（`--locked`）。`cli` 与 `bluetooth` feature 默认均已开启；纯库消费者可通过 `--no-default-features` 关闭默认特性，避免编译 CLI（`clap`、`walkdir`）与 BLE（`btleplug`、`tokio`、`uuid`）依赖，也可按需单独开启 `--features cli` 或 `--features bluetooth`。
 
 ```bash
 cargo build --locked
@@ -31,13 +33,7 @@ cargo test --locked --all-features
 cargo run --locked -- validate
 ```
 
-启用可选的 BLE BAS 支持：
-
-```bash
-cargo build --locked --features bluetooth
-```
-
-`bluetooth` feature 默认关闭。系统依赖与权限限制详见[平台支持](docs/platform-support.zh-CN.md)。
+系统依赖与权限限制详见[平台支持](docs/platform-support.zh-CN.md)。
 
 ## Rust API
 
@@ -101,7 +97,35 @@ cargo test --locked
 cargo build --locked --release -p wireless-battery-tray   # Windows 原生托盘
 ```
 
-架构细节、macOS `.app` 打包及可选 BLE 支持详见 [托盘说明文档](tray/README.zh-CN.md)。
+架构细节、macOS `.app` 打包及 BLE 支持说明详见 [托盘说明文档](tray/README.zh-CN.md)。
+
+## 与 AI 协作
+
+你可以直接将以下 Prompt 复制给 AI Agent（如 Antigravity、Claude Code、Cursor、Codex 等），让它通过 `wireless-battery` 命令行工具 **一键检测已连接设备、收集脱敏实机抓包，并逆向/适配未知设备的电量与充放电状态**：
+
+```text
+请帮我使用 wireless-battery CLI 检测、收集并逆向当前已连接无线外设的电量百分比与充/放电状态。
+
+0. **准备 CLI 工具**：
+   - 先检查当前环境是否已有可用的 `wireless-battery` / `wireless-battery.exe` 二进制文件；如果没有，请提示或协助我从项目 Releases 下载对应平台的可执行文件（如 Windows 下的 `wireless-battery.exe`）并放入当前目录或加入 PATH（若当前就在源码仓库中，也可使用 `cargo run --locked --` 代替）。
+   - 后续所有命令均直接调用该二进制（以下以 `wireless-battery` 代指，Windows 下可替换为 `.\wireless-battery.exe`）。
+
+1. **一键检测与枚举**：
+   - 运行 `wireless-battery list --json --include-experimental` 被动枚举所有 HID/BLE 端点，再运行 `wireless-battery list --read --json --include-experimental` 读取当前可读设备的电量与充电状态。
+   - 汇总展示所有检测到的设备信息（名称、VID/PID、`usage_page`、`usage`、`interface_number`、`match_status`、`support_status`、`provider_id`、当前电量百分比与充电状态）。如有匹配冲突或异常设备，补充运行 `wireless-battery diagnose <device-id> --json --include-experimental`。
+
+2. **收集实机样本（已匹配 / 实验性设备）**：
+   - 若目标设备已匹配但需要实机验证，请引导我分别在**放电（无线使用）**和**充电（插线/底座充电）**两种状态下采集脱敏 Fixture（注意绝不覆盖已有文件）：
+     `wireless-battery capture --device <device-id> --output fixtures/<vendor_device>/discharging.json --include-experimental --timeout-ms 5000`
+     `wireless-battery capture --device <device-id> --output fixtures/<vendor_device>/charging.json --include-experimental --timeout-ms 5000`
+   - 使用 `wireless-battery replay --fixture ...` 和 `wireless-battery validate` 验证采集结果。
+
+3. **逆向与协议适配（未匹配或充放电/电量不完整设备）**：
+   - 若目标设备处于 `unmatched`，或电量/充放电状态缺失或不准确，请结合 `list --json` 中的 HID 端点元数据（VID/PID、`usage_page`、`usage`、`interface_number`），对照项目源码中的现有协议（`src/providers/vendors/`、`docs/contributing-device.zh-CN.md`、`schemas/`）。
+   - 提出保守、安全的 HID 查询与字段解析方案（严禁将电压或离散档位伪造成百分比，未知哨兵值必须映射为 `unknown`）：若属于最多 4 轮静态 Feature/Output/Input 请求-响应协议，优先编写声明式 YAML 包（`packages/vendors/<vendor>/<device>.yaml`）；若需动态逻辑，则在 `src/providers/vendors/` 下实现聚焦的 Rust Provider。
+   - 引导我分别在**放电**与**充电**状态下实测验证原始报文与状态变化；确认无误后，补充正常/截断/非法字段 Fixture、`provenance/<device>.md` 来源记录，并更新 `docs/support-matrix.zh-CN.md` 与 `docs/support-matrix.md`。
+   - 最后通过 `replay`、`validate` 以及测试套件确认全部通过。
+```
 
 ## 文档导航
 
