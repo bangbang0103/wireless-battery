@@ -29,8 +29,10 @@ Review captured JSON manually before submitting to ensure no private values are 
 
 ## Replay
 
+Replay fixtures are executed automatically via the test suite:
+
 ```bash
-wireless-battery replay --fixture tests/fixtures/synthetic/feature_normal.json
+cargo test --locked --all-features
 ```
 
 Replay checks operation type, order, request Report ID, complete request bytes, requested length, recorded responses/errors, final stable reading fields or error kind, omitted calls, and extra calls. Timestamps, process IDs, and cache freshness are not protocol evidence.
