@@ -78,6 +78,14 @@ impl TrayConfig {
 pub fn default_config_path() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
+        if let Some(portable_path) = std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(PathBuf::from))
+            .filter(|dir| dir.join("portable.txt").is_file() || dir.join("tray.json").is_file())
+            .map(|dir| dir.join("tray.json"))
+        {
+            return Some(portable_path);
+        }
         std::env::var_os("APPDATA")
             .map(PathBuf::from)
             .map(|dir| dir.join("wireless-battery").join("tray.json"))

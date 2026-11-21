@@ -43,17 +43,36 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: tray
         run: cargo build --locked --release -p wireless-battery-tray
-      - name: Package Windows release archives
+      - name: Package Windows portable archives and installer
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          New-Item -ItemType Directory -Force -Path dist, dist\portable-stage | Out-Null
           Compress-Archive -Path target/release/wireless-battery.exe, LICENSE, NOTICE -DestinationPath dist/wireless-battery-cli-windows.zip -Force
-          Compress-Archive -Path tray/target/release/wireless-battery-tray.exe, LICENSE, NOTICE -DestinationPath dist/wireless-battery-tray-windows.zip -Force
-      - name: Build macOS tray bundle
+          Copy-Item tray/target/release/wireless-battery-tray.exe, target/release/wireless-battery.exe, LICENSE, NOTICE -Destination dist/portable-stage
+          Set-Content -Path dist/portable-stage/portable.txt -Value "Remove this file to store tray.json in %APPDATA% instead of the application folder."
+          Compress-Archive -Path dist/portable-stage/* -DestinationPath dist/wireless-battery-portable-windows-x64.zip -Force
+          Remove-Item -Recurse -Force dist/portable-stage
+
+          $iscc = Get-Command iscc -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          if (-not $iscc) {
+            $defaultIscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            if (Test-Path $defaultIscc) {
+              $iscc = $defaultIscc
+            } else {
+              choco install innosetup -y --no-progress
+              $iscc = $defaultIscc
+            }
+          }
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          if ([string]::IsNullOrWhiteSpace($version)) { $version = "0.1.0" }
+          & $iscc "/DAppVersion=$version" tray/platforms/windows/installer/wireless-battery.iss
+      - name: Build macOS tray bundle and DMG
         if: runner.os == 'macOS'
         shell: bash
-        run: bash tray/platforms/macos/scripts/bundle-app.sh
+        run: |
+          bash tray/platforms/macos/scripts/bundle-app.sh
+          bash tray/platforms/macos/scripts/package-dmg.sh dist/wireless-battery-macos.dmg
       - name: Package macOS release archives
         if: runner.os == 'macOS'
         shell: bash
