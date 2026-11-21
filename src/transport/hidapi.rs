@@ -259,21 +259,10 @@ impl HidSession for HidApiSession {
         }
         #[cfg(not(windows))]
         {
-            let count = self
-                .device
-                .get_input_report(&mut buffer)
-                .map_err(|error| classify_hid_error(error.to_string()))?;
-            if count == 0 {
-                return Err(TransportError::InvalidResponse(
-                    "empty input report response".to_owned(),
-                ));
-            }
-            if buffer[0] != report_id {
-                return Err(TransportError::InvalidResponse(
-                    "input report ID mismatch".to_owned(),
-                ));
-            }
-            Ok(buffer[1..count].to_vec())
+            let _ = buffer;
+            Err(TransportError::Unsupported(
+                "GET_INPUT_REPORT is currently implemented only on Windows".to_owned(),
+            ))
         }
     }
 }
