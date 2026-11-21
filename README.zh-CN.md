@@ -75,18 +75,7 @@ wireless-battery probe <device-id> --report-id 0 --send "5A A5 01 02 00"
 
 设备 ID 是不可逆哈希值而非序列号，主要面向单次会话使用。在操作系统路径稳定的平台上，其确定性足以支持后续 `read` 命令调用，但不保证跨重启、跨机器或路径重分配后保持不变。
 
-退出码约定：`0` 成功；`2` 参数错误；`3` 设备不存在或不支持；`4` 权限不足；`5` 超时或传输错误；`6` 响应/设备包/Fixture 校验失败；`70` 内部错误。
-
-## 回放示例
-
-```bash
-cargo run --quiet -- replay \
-  --fixture tests/fixtures/synthetic/feature_normal.json \
-  --fixture tests/fixtures/synthetic/feature_unknown.json \
-  --fixture tests/fixtures/synthetic/bluetooth_bas.json
-```
-
-回放传输层严格校验操作顺序、Report ID、完整请求字节、响应消费、多余调用、最终稳定字段以及错误类别。详见[录制与回放](docs/capture-and-replay.zh-CN.md)。
+退出码约定：`0` 成功；`2` 参数错误；`3` 设备不存在或不支持；`4` 权限不足；`5` 超时或传输错误；`6` 响应校验失败；`70` 内部错误。
 
 ## 原生系统托盘（`tray/`）
 

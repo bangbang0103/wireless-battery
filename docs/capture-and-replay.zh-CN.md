@@ -29,8 +29,10 @@ v0.1 的 `capture` 命令封装了真实 HID 传输。BLE BAS Fixture 可以根�
 
 ## 回放（Replay）
 
+回放 Fixture 通过测试套件自动执行：
+
 ```bash
-wireless-battery replay --fixture tests/fixtures/synthetic/feature_normal.json
+cargo test --locked --all-features
 ```
 
 回放会严格校验操作类型、执行顺序、目标 Provider 匹配、请求 Report ID、完整请求字节、请求长度、录制的响应或错误、最终稳定读数字段或错误类别，以及遗漏或多余的调用。时间戳、进程 ID 和缓存新鲜度不属于协议证据。

@@ -75,18 +75,7 @@ For unsupported HID endpoints, use `probe` to passively listen (`--listen`) or s
 
 Device IDs are opaque hashes, not serial numbers. They are intended for session-local use. On platforms where the OS path is stable, they are also deterministic enough for a later CLI `read` invocation, but persistence across reboots, machines, or path reassignment is not guaranteed.
 
-Exit codes: 0 success; 2 arguments; 3 absent/unsupported; 4 permission; 5 timeout/transport; 6 response/package/fixture validation; 70 internal error.
-
-## Replay examples
-
-```bash
-cargo run --quiet -- replay \
-  --fixture tests/fixtures/synthetic/feature_normal.json \
-  --fixture tests/fixtures/synthetic/feature_unknown.json \
-  --fixture tests/fixtures/synthetic/bluetooth_bas.json
-```
-
-The replay transport checks operation order, report IDs, complete request payloads, response consumption, extra calls, final stable fields, and error categories. See [capture and replay](docs/capture-and-replay.md).
+Exit codes: 0 success; 2 arguments; 3 absent/unsupported; 4 permission; 5 timeout/transport; 6 response validation; 70 internal error.
 
 ## Native System Tray (`tray/`)
 
