@@ -299,7 +299,7 @@ impl PopoverRenderer {
     /// Compute the ideal logical height (DIPs) for the current snapshot and view.
     pub fn desired_height_dip(&self, snapshot: &TraySnapshot, ui: &UiState) -> f32 {
         match ui.view {
-            PopoverView::Settings => 352.0,
+            PopoverView::Settings => 256.0,
             PopoverView::Main => {
                 if snapshot.devices.is_empty() {
                     return HEADER_HEIGHT + 178.0 + FOOTER_HEIGHT;
@@ -1259,9 +1259,9 @@ impl PopoverRenderer {
             );
 
             let options: [(u64, &str); 4] = [
-                (60, "1 分钟"),
                 (300, "5 分钟"),
                 (900, "15 分钟"),
+                (1800, "30 分钟"),
                 (0, "手动"),
             ];
             let seg_w = (inner_w - 6.0) / 4.0;
