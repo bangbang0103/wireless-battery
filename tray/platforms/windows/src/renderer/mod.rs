@@ -94,8 +94,8 @@ impl PopoverRenderer {
                 };
                 HEADER_HEIGHT
                     + OUTER_PADDING * 2.0
-                    + SETTINGS_CARD_H * 7.0
-                    + SETTINGS_CARD_GAP * 6.0
+                    + SETTINGS_CARD_H * 6.0
+                    + SETTINGS_CARD_GAP * 5.0
                     + subrow_extra
             }
             PopoverView::Main => {
