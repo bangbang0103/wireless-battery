@@ -233,10 +233,21 @@ private final class CallbackBox {
     }
 }
 
+private final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+}
+
 final class TrayStore: ObservableObject {
     @Published var snapshot: TraySnapshotModel = .empty
     @Published var updateStatus: UpdateCheckStatus = .idle
     var handle: OpaquePointer?
+    private let notificationDelegate = NotificationDelegate()
     private var callbackBox: CallbackBox?
     private var terminationObserver: NSObjectProtocol?
 
@@ -272,7 +283,9 @@ final class TrayStore: ObservableObject {
 
     init() {
         if isBundledApp {
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+            let center = UNUserNotificationCenter.current()
+            center.delegate = notificationDelegate
+            center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
 
         let box = CallbackBox(store: self)

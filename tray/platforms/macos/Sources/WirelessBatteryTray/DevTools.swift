@@ -19,15 +19,6 @@ extension TrayStore {
 
     func devSendLowBatteryAlert(percentage: UInt8) {
         wb_tray_dev_send_low_battery_alert(handle, percentage)
-        // When launched via `swift run` (unbundled), UNUserNotificationCenter is unavailable;
-        // fall back to an AppleScript notification so alerts are still testable in dev mode.
-        if !isBundledApp {
-            let deviceName = snapshot.devices.first?.name ?? "Dev Mock Mouse"
-            let lang = AppLanguage.resolve(mode: snapshot.config.language)
-            let title = lang.notifyTitle(percentage: percentage)
-            let body = lang.notifyBody(deviceName: deviceName, percentage: percentage)
-            Self.postUnbundledNotification(title: title, body: body)
-        }
     }
 
     func devAddDevice(name: String, kind: String, percentage: UInt8?, state: String) {
@@ -54,15 +45,6 @@ extension TrayStore {
         wb_tray_dev_reset(handle)
     }
 
-    private static func postUnbundledNotification(title: String, body: String) {
-        let escapedTitle = title.replacingOccurrences(of: "\"", with: "\\\"")
-        let escapedBody = body.replacingOccurrences(of: "\"", with: "\\\"")
-        let script = "display notification \"\(escapedBody)\" with title \"\(escapedTitle)\""
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        proc.arguments = ["-e", script]
-        try? proc.run()
-    }
 }
 
 final class DevPanelController {
