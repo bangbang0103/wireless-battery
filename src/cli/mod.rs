@@ -26,9 +26,6 @@ enum Command {
         /// Emit a stable JSON array on stdout.
         #[arg(long)]
         json: bool,
-        /// Deprecated compatibility flag (all built-in providers are now enabled by default).
-        #[arg(long, hide = true)]
-        include_experimental: bool,
         /// Explicitly read every currently readable device after passive enumeration.
         #[arg(long)]
         read: bool,
@@ -49,9 +46,6 @@ enum Command {
         /// Return the last successful value after a refresh error (library cache only; one-shot CLI starts with an empty cache).
         #[arg(long)]
         allow_stale: bool,
-        /// Deprecated compatibility flag (all built-in providers are now enabled by default).
-        #[arg(long, hide = true)]
-        include_experimental: bool,
     },
     /// Show passive provider, cache and permission diagnostics.
     Diagnose {
@@ -60,9 +54,6 @@ enum Command {
         /// Emit diagnostics as JSON.
         #[arg(long)]
         json: bool,
-        /// Deprecated compatibility flag (all built-in providers are now enabled by default).
-        #[arg(long, hide = true)]
-        include_experimental: bool,
     },
     /// Probe or listen to raw HID reports on any HID endpoint for reverse engineering.
     Probe {
@@ -143,14 +134,13 @@ fn execute(command: Command) -> Result<(), BatteryError> {
     match command {
         Command::List {
             json,
-            include_experimental: _,
             read,
             timeout_ms,
         } => {
             let client = client(true, true)?;
             let devices = client.list_devices()?;
             if read {
-                let entries = output::read_device_list(&client, devices, timeout_ms, true);
+                let entries = output::read_device_list(&client, devices, timeout_ms);
                 if json {
                     output::print_json(&entries)?;
                 } else {
@@ -178,7 +168,6 @@ fn execute(command: Command) -> Result<(), BatteryError> {
             json,
             timeout_ms,
             allow_stale,
-            include_experimental: _,
         } => {
             if allow_stale {
                 eprintln!(
@@ -200,11 +189,7 @@ fn execute(command: Command) -> Result<(), BatteryError> {
                 output::print_reading(&reading);
             }
         }
-        Command::Diagnose {
-            device_id,
-            json,
-            include_experimental: _,
-        } => {
+        Command::Diagnose { device_id, json } => {
             let diagnostic = client(true, true)?.diagnose(&device_id)?;
             if json {
                 output::print_json(&diagnostic)?;
