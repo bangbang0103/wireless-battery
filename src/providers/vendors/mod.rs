@@ -1,6 +1,6 @@
 //! Built-in vendor HID protocol providers, organized by shared chipset protocol or brand.
 //!
-//! See `provenance/builtin-providers.md` and `NOTICE` for protocol references and attribution.
+//! See `NOTICE` for protocol references and attribution.
 
 mod brands;
 mod protocols;

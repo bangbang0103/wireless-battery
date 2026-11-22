@@ -70,40 +70,22 @@ impl Lang {
         }
     }
 
-    pub fn empty_hint(self, hidden_experimental_count: usize) -> String {
-        if hidden_experimental_count > 0 {
-            match self {
-                Self::ZhCn => format!(
-                    "已检测到 {hidden_experimental_count} 台实验性协议设备，当前已隐藏。可在设置中开启。"
-                ),
-                Self::En => format!(
-                    "{hidden_experimental_count} experimental device(s) detected while disabled. Enable in Settings."
-                ),
+    pub fn empty_hint(self) -> String {
+        match self {
+            Self::ZhCn => {
+                "被动枚举未匹配到已知接收器或外设，请确认接收器已接入并处于唤醒状态。".to_owned()
             }
-        } else {
-            match self {
-                Self::ZhCn => {
-                    "被动枚举未匹配到已知接收器或外设，请确认接收器已接入并处于唤醒状态。".to_owned()
-                }
-                Self::En => {
-                    "No known receiver or peripheral matched. Make sure the receiver is plugged in and awake."
-                        .to_owned()
-                }
+            Self::En => {
+                "No known receiver or peripheral matched. Make sure the receiver is plugged in and awake."
+                    .to_owned()
             }
         }
     }
 
-    pub const fn empty_action(self, has_hidden_exp: bool) -> &'static str {
-        if has_hidden_exp {
-            match self {
-                Self::ZhCn => "前往设置",
-                Self::En => "Open settings",
-            }
-        } else {
-            match self {
-                Self::ZhCn => "重新扫描",
-                Self::En => "Rescan",
-            }
+    pub const fn empty_action(self) -> &'static str {
+        match self {
+            Self::ZhCn => "重新扫描",
+            Self::En => "Rescan",
         }
     }
 
@@ -272,20 +254,6 @@ impl Lang {
         match self {
             Self::ZhCn => "开启后不发送系统通知",
             Self::En => "Suppress OS toast notifications",
-        }
-    }
-
-    pub const fn setting_experimental_title(self) -> &'static str {
-        match self {
-            Self::ZhCn => "实验性协议设备",
-            Self::En => "Experimental devices",
-        }
-    }
-
-    pub const fn setting_experimental_desc(self) -> &'static str {
-        match self {
-            Self::ZhCn => "包含社区推导但未实机验证的设备",
-            Self::En => "Include inferred protocols pending verification",
         }
     }
 

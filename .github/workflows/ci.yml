@@ -26,15 +26,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install Linux HID/BlueZ build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libudev-dev libusb-1.0-0-dev libdbus-1-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.76.0
@@ -58,12 +53,6 @@ jobs:
           ! grep -R 'synthetic\.' docs/support-matrix.md docs/support-matrix.zh-CN.md
       - name: Build CLI release
         run: cargo build --locked --release --bin wireless-battery
-      - name: Upload Linux CLI artifact
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: wireless-battery-cli-linux
-          path: target/release/wireless-battery
       - name: Upload Windows CLI artifact
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
@@ -81,15 +70,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install Linux HID/BlueZ build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libudev-dev libusb-1.0-0-dev libdbus-1-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.76.0

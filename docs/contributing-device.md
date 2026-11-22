@@ -7,7 +7,7 @@
 1. Reverse-engineer unknown HID endpoints using `wireless-battery probe <device-id> --listen` or `--send` / `--get-feature` (and Wireshark/USBPcap if needed).
 2. Add a `FixedSpec` (for simple fixed request-response protocols) or a focused `Provider` implementation under `src/providers/vendors/protocols/` (shared chipset families such as CompX, DriverCore, EVision, or Bolutek) or `src/providers/vendors/brands/` (brand-specific modules), and register it in the subdirectory's `mod.rs` (wired through `src/providers/vendors/mod.rs`).
 3. Populate `ProviderMetadata::device_kind` with the appropriate `DeviceKind` (`Mouse`, `Keyboard`, `Headset`, `Gamepad`, or `Peripheral`). If a single provider covers receivers or multiple hardware categories (such as Logitech HID++ or Razer), also override `Provider::device_kind(&self, endpoint: &Endpoint)` — desktop trays read `device.device_kind` directly from the core crate instead of maintaining separate ID tables.
-4. Add replay fixtures under `tests/fixtures/vendors/` or `tests/extended_vendor/` (covering normal, truncated/wrong-report, invalid-field, and timeout/fallback cases where applicable) and update `docs/support-matrix.md`, `docs/support-matrix.zh-CN.md`, and `provenance/builtin-providers.md`.
+4. Add replay fixtures under `tests/fixtures/vendors/` or `tests/extended_vendor/` (covering normal, truncated/wrong-report, invalid-field, and timeout/fallback cases where applicable) and update `docs/support-matrix.md` and `docs/support-matrix.zh-CN.md`.
 5. Run `cargo test --locked --all-features` and `cargo clippy --locked --all-targets --all-features -- -D warnings` (`extended_vendor_replay_tests` enforces replay coverage for every provider in `Registry::builtin()`).
 
 ## Matching safety
@@ -29,9 +29,9 @@ The current HIDAPI version does not expose report lengths during enumeration on 
 
 ## Verification labels
 
-Provider status (`unknown`, `experimental`, `verified`) is separate from per-capability notes recorded in `provenance/builtin-providers.md`. Synthetic material (`source: "synthetic"`) can never be `verified` or claim physical hardware support.
+Provider status (`unknown`, `experimental`, `verified`) records verification evidence, not whether a provider is enabled. Synthetic material (`source: "synthetic"`) can never be `verified` or claim physical hardware support.
 
-Preserve applicable licenses and attribution in `NOTICE` and `provenance/builtin-providers.md` when referring to another implementation. Protocol references, copied code, and real-hardware verification are different kinds of evidence and must be recorded separately.
+Preserve applicable licenses and attribution in `NOTICE` when referring to another implementation. Protocol references, copied code, and real-hardware verification are different kinds of evidence and must be recorded separately.
 
 ---
 

@@ -56,8 +56,6 @@ impl TrayService {
             .unwrap_or_default();
         let client_config = ClientConfig {
             default_timeout: config.read_timeout(),
-            // Keep per-read experimental gating controlled dynamically by TrayConfig.
-            allow_experimental: false,
             enable_cache: true,
         };
         let client = BatteryClient::new(client_config)?;
@@ -192,7 +190,7 @@ impl TrayService {
         };
         let eligible_ids: Vec<String> = listed
             .iter()
-            .filter(|device| is_device_eligible(device, config.allow_experimental))
+            .filter(|device| is_device_eligible(device))
             .map(|device| device.id.0.clone())
             .collect();
 
@@ -211,7 +209,6 @@ impl TrayService {
         let read_options = ReadOptions {
             timeout: config.read_timeout(),
             allow_stale: config.allow_stale,
-            allow_experimental: config.allow_experimental,
         };
 
         // Read independent endpoints concurrently and publish each device as soon as it responds.
@@ -283,7 +280,6 @@ impl TrayService {
         let read_options = ReadOptions {
             timeout: config.read_timeout(),
             allow_stale: config.allow_stale,
-            allow_experimental: config.allow_experimental,
         };
         let result = self
             .client
@@ -506,23 +502,16 @@ impl PollerHandle {
     }
 
     fn notify_config_diff(&self, prev: &TrayConfig, next: &TrayConfig) {
-        let enable_experimental = !prev.allow_experimental && next.allow_experimental;
-        let poll_changed = prev.poll_interval_secs != next.poll_interval_secs;
-        if !enable_experimental && !poll_changed {
+        if prev.poll_interval_secs == next.poll_interval_secs {
             return;
         }
         let (lock, cvar) = &*self.signal;
         let mut sig = lock.lock().unwrap_or_else(|e| e.into_inner());
-        if enable_experimental {
-            sig.refresh_requested = true;
-        }
-        if poll_changed {
-            sig.wake_interval = true;
-        }
+        sig.wake_interval = true;
         cvar.notify_one();
     }
 
-    /// Update configuration and wake the poller when intervals or discovery policy changed.
+    /// Update configuration and wake the poller when the interval changed.
     pub fn update_config(&self, config: TrayConfig) -> TraySnapshot {
         let prev = self.service.config();
         let next = config.normalized();
@@ -532,7 +521,7 @@ impl PollerHandle {
     }
 
     /// Non-blocking variant of `update_config` that persists on a background thread while
-    /// waking the poller only when intervals or discovery policy changed.
+    /// waking the poller only when the interval changed.
     pub fn update_config_async(&self, config: TrayConfig) -> TraySnapshot {
         let prev = self.service.config();
         let next = config.normalized();
@@ -569,15 +558,8 @@ enum PollerAction {
     RecalcInterval,
 }
 
-fn is_device_eligible(device: &Device, allow_experimental: bool) -> bool {
-    if device.match_status != MatchStatus::Exact {
-        return false;
-    }
-    match device.support_status {
-        SupportStatus::Verified => true,
-        SupportStatus::Experimental => allow_experimental,
-        SupportStatus::Unknown => false,
-    }
+fn is_device_eligible(device: &Device) -> bool {
+    device.match_status == MatchStatus::Exact && device.support_status != SupportStatus::Unknown
 }
 
 fn transport_label(device: &Device) -> String {
@@ -595,19 +577,13 @@ fn transport_label(device: &Device) -> String {
 }
 
 pub(crate) fn build_snapshot(state: &ServiceState) -> TraySnapshot {
-    let mut hidden_experimental_count = 0usize;
     let mut views = Vec::new();
 
     for device in &state.devices {
         if device.match_status != MatchStatus::Exact {
             continue;
         }
-        if device.support_status == SupportStatus::Experimental && !state.config.allow_experimental
-        {
-            hidden_experimental_count += 1;
-            continue;
-        }
-        if !is_device_eligible(device, state.config.allow_experimental) {
+        if !is_device_eligible(device) {
             continue;
         }
 
@@ -699,7 +675,6 @@ pub(crate) fn build_snapshot(state: &ServiceState) -> TraySnapshot {
     let mut snapshot = TraySnapshot {
         app_version: crate::version::APP_DISPLAY_VERSION.to_owned(),
         devices: views,
-        hidden_experimental_count,
         icon_state,
         tooltip,
         last_sync_at: state.last_sync_at,
@@ -833,7 +808,7 @@ mod tests {
     }
 
     #[test]
-    fn respects_experimental_gating_stale_cache_and_low_battery_badge() {
+    fn reads_experimental_stale_cache_and_low_battery_badge() {
         let fail_verified = Arc::new(AtomicBool::new(false));
         let fail_exp = Arc::new(AtomicBool::new(false));
 
@@ -865,7 +840,6 @@ mod tests {
         let client = BatteryClient::with_transport(
             ClientConfig {
                 default_timeout: Duration::from_secs(1),
-                allow_experimental: false,
                 enable_cache: true,
             },
             Arc::new(MockTransport {
@@ -875,16 +849,11 @@ mod tests {
         )
         .unwrap();
 
-        let initial_cfg = TrayConfig {
-            allow_experimental: false,
-            ..TrayConfig::default()
-        };
-        let service = TrayService::with_client(Arc::new(client), initial_cfg, None);
+        let service = TrayService::with_client(Arc::new(client), TrayConfig::default(), None);
 
-        // Default config hides experimental device, reads verified GPW3 (12% -> low alert).
+        // Both verified and experimental devices are read; GPW3 at 12% triggers a low alert.
         let update = service.refresh_all();
-        assert_eq!(update.snapshot.devices.len(), 1);
-        assert_eq!(update.snapshot.hidden_experimental_count, 1);
+        assert_eq!(update.snapshot.devices.len(), 2);
         assert_eq!(update.snapshot.icon_state, TrayIconState::LowBattery);
         assert_eq!(update.alerts.len(), 1);
         assert_eq!(update.alerts[0].percentage, 12);
@@ -892,20 +861,18 @@ mod tests {
         // When verified device goes to sleep (timeout), stale cache keeps 12% marked Stale.
         fail_verified.store(true, Ordering::SeqCst);
         let stale_update = service.refresh_all();
-        assert_eq!(stale_update.snapshot.devices[0].percentage, Some(12));
-        assert_eq!(
-            stale_update.snapshot.devices[0].freshness,
-            Some(Freshness::Stale)
-        );
+        let stale_mouse = stale_update
+            .snapshot
+            .devices
+            .iter()
+            .find(|device| device.provider_id.as_deref() == Some("logitech.hidpp"))
+            .unwrap();
+        assert_eq!(stale_mouse.percentage, Some(12));
+        assert_eq!(stale_mouse.freshness, Some(Freshness::Stale));
         assert!(stale_update.alerts.is_empty());
 
-        // Enabling experimental reveals the second device without rebuilding BatteryClient.
-        let mut next_cfg = service.config();
-        next_cfg.allow_experimental = true;
-        service.update_config(next_cfg);
         let exp_update = service.refresh_all();
         assert_eq!(exp_update.snapshot.devices.len(), 2);
-        assert_eq!(exp_update.snapshot.hidden_experimental_count, 0);
 
         // Diagnostics & error report JSON are sanitized and valid JSON.
         let diag = service
@@ -940,7 +907,6 @@ mod tests {
         let client = BatteryClient::with_transport(
             ClientConfig {
                 default_timeout: Duration::from_secs(1),
-                allow_experimental: false,
                 enable_cache: true,
             },
             Arc::new(MockTransport {
@@ -1005,7 +971,6 @@ mod tests {
         let client = BatteryClient::with_transport(
             ClientConfig {
                 default_timeout: Duration::from_secs(1),
-                allow_experimental: false,
                 enable_cache: true,
             },
             Arc::new(FlakyTransport {

@@ -5,7 +5,7 @@
 //!   minimalist `52px` header & `48px` footer; compact pinned mode becomes 100% background-free.
 //! - Settings view: flat WinUI 3 `SettingsCard` rows (`4px` gap) using native-style
 //!   `ComboBox` dropdown flyouts, Low Battery Alert with indented Silent Notifications sub-option,
-//!   Experimental Protocol toggle, and Launch at Startup.
+//!   and Launch at Startup.
 //! - Bilingual Simplified Chinese & English UI (`i18n::Lang`).
 //! - Silky DWM-VSync-paced micro-animations (60/120/144/240Hz lock-step, 0% idle CPU).
 

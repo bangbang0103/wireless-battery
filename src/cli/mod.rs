@@ -137,7 +137,7 @@ fn execute(command: Command) -> Result<(), BatteryError> {
             read,
             timeout_ms,
         } => {
-            let client = client(true, true)?;
+            let client = client(true)?;
             let devices = client.list_devices()?;
             if read {
                 let entries = output::read_device_list(&client, devices, timeout_ms);
@@ -174,13 +174,12 @@ fn execute(command: Command) -> Result<(), BatteryError> {
                     "warning: --allow-stale has no effect in one-shot CLI invocations because cache is process-local"
                 );
             }
-            let client = client(true, true)?;
+            let client = client(true)?;
             let reading = client.read_battery_with_options(
                 &device_id,
                 ReadOptions {
                     timeout: Duration::from_millis(timeout_ms),
                     allow_stale,
-                    allow_experimental: true,
                 },
             )?;
             if json {
@@ -190,7 +189,7 @@ fn execute(command: Command) -> Result<(), BatteryError> {
             }
         }
         Command::Diagnose { device_id, json } => {
-            let diagnostic = client(true, true)?.diagnose(&device_id)?;
+            let diagnostic = client(true)?.diagnose(&device_id)?;
             if json {
                 output::print_json(&diagnostic)?;
             } else {
@@ -228,9 +227,8 @@ fn execute(command: Command) -> Result<(), BatteryError> {
     Ok(())
 }
 
-fn client(allow_experimental: bool, cache: bool) -> Result<BatteryClient, BatteryError> {
+fn client(cache: bool) -> Result<BatteryClient, BatteryError> {
     BatteryClient::new(ClientConfig {
-        allow_experimental,
         enable_cache: cache,
         ..ClientConfig::default()
     })

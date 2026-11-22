@@ -6,7 +6,6 @@ import UserNotifications
 
 struct TrayConfigModel: Codable, Equatable {
     var pollIntervalSecs: UInt64
-    var allowExperimental: Bool
     var allowStale: Bool
     var lowBatteryNotify: Bool
     var lowBatterySilent: Bool
@@ -18,7 +17,6 @@ struct TrayConfigModel: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case pollIntervalSecs = "poll_interval_secs"
-        case allowExperimental = "allow_experimental"
         case allowStale = "allow_stale"
         case lowBatteryNotify = "low_battery_notify"
         case lowBatterySilent = "low_battery_silent"
@@ -31,7 +29,6 @@ struct TrayConfigModel: Codable, Equatable {
 
     init(
         pollIntervalSecs: UInt64,
-        allowExperimental: Bool,
         allowStale: Bool,
         lowBatteryNotify: Bool,
         lowBatterySilent: Bool,
@@ -42,7 +39,6 @@ struct TrayConfigModel: Codable, Equatable {
         language: String
     ) {
         self.pollIntervalSecs = pollIntervalSecs
-        self.allowExperimental = allowExperimental
         self.allowStale = allowStale
         self.lowBatteryNotify = lowBatteryNotify
         self.lowBatterySilent = lowBatterySilent
@@ -56,7 +52,6 @@ struct TrayConfigModel: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.pollIntervalSecs = try c.decodeIfPresent(UInt64.self, forKey: .pollIntervalSecs) ?? 300
-        self.allowExperimental = try c.decodeIfPresent(Bool.self, forKey: .allowExperimental) ?? true
         self.allowStale = try c.decodeIfPresent(Bool.self, forKey: .allowStale) ?? true
         self.lowBatteryNotify = try c.decodeIfPresent(Bool.self, forKey: .lowBatteryNotify) ?? true
         self.lowBatterySilent = try c.decodeIfPresent(Bool.self, forKey: .lowBatterySilent) ?? false
@@ -69,7 +64,6 @@ struct TrayConfigModel: Codable, Equatable {
 
     static let `default` = TrayConfigModel(
         pollIntervalSecs: 300,
-        allowExperimental: true,
         allowStale: true,
         lowBatteryNotify: true,
         lowBatterySilent: false,
@@ -115,7 +109,6 @@ struct DeviceViewModel: Codable, Identifiable, Equatable {
 struct TraySnapshotModel: Codable, Equatable {
     let appVersion: String
     let devices: [DeviceViewModel]
-    let hiddenExperimentalCount: Int
     let iconState: String
     let tooltip: String
     let lastSyncAt: String?
@@ -125,7 +118,6 @@ struct TraySnapshotModel: Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case devices, tooltip, refreshing, config
         case appVersion = "app_version"
-        case hiddenExperimentalCount = "hidden_experimental_count"
         case iconState = "icon_state"
         case lastSyncAt = "last_sync_at"
     }
@@ -133,7 +125,6 @@ struct TraySnapshotModel: Codable, Equatable {
     init(
         appVersion: String,
         devices: [DeviceViewModel],
-        hiddenExperimentalCount: Int,
         iconState: String,
         tooltip: String,
         lastSyncAt: String?,
@@ -142,7 +133,6 @@ struct TraySnapshotModel: Codable, Equatable {
     ) {
         self.appVersion = appVersion
         self.devices = devices
-        self.hiddenExperimentalCount = hiddenExperimentalCount
         self.iconState = iconState
         self.tooltip = tooltip
         self.lastSyncAt = lastSyncAt
@@ -154,7 +144,6 @@ struct TraySnapshotModel: Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.appVersion = try c.decodeIfPresent(String.self, forKey: .appVersion) ?? "v0.1.0"
         self.devices = try c.decode([DeviceViewModel].self, forKey: .devices)
-        self.hiddenExperimentalCount = try c.decode(Int.self, forKey: .hiddenExperimentalCount)
         self.iconState = try c.decode(String.self, forKey: .iconState)
         self.tooltip = try c.decode(String.self, forKey: .tooltip)
         self.lastSyncAt = try c.decodeIfPresent(String.self, forKey: .lastSyncAt)
@@ -165,7 +154,6 @@ struct TraySnapshotModel: Codable, Equatable {
     static let empty = TraySnapshotModel(
         appVersion: "v0.1.0",
         devices: [],
-        hiddenExperimentalCount: 0,
         iconState: "idle",
         tooltip: "Wireless Battery",
         lastSyncAt: nil,

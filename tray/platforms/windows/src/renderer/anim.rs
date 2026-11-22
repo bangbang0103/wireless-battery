@@ -51,11 +51,9 @@ pub enum HitTarget {
     ToggleDevice(String),
     RefreshDevice(String),
     CopyError(String),
-    OpenSettingsFromEmpty,
     SetPollInterval(u64),
     ToggleLowBatteryNotify,
     ToggleLowBatterySilent,
-    ToggleAllowExperimental,
     ToggleAutostart,
     CheckUpdates,
 }
@@ -163,7 +161,6 @@ pub struct UiState {
     pub update_status: UpdateUiStatus,
     pub(super) toggle_notify_anim: ScalarAnim,
     pub(super) toggle_silent_anim: ScalarAnim,
-    pub(super) toggle_experimental_anim: ScalarAnim,
     pub(super) toggle_autostart_anim: ScalarAnim,
     pub(super) dropdown_anim: ScalarAnim,
     pub(super) drawer_reveal_anim: ScalarAnim,
@@ -185,7 +182,6 @@ impl Default for UiState {
             update_status: UpdateUiStatus::Idle,
             toggle_notify_anim: ScalarAnim::settled(1.0),
             toggle_silent_anim: ScalarAnim::settled(0.0),
-            toggle_experimental_anim: ScalarAnim::settled(1.0),
             toggle_autostart_anim: ScalarAnim::settled(0.0),
             dropdown_anim: ScalarAnim::settled(0.0),
             drawer_reveal_anim: ScalarAnim::settled(1.0),
@@ -218,23 +214,16 @@ impl UiState {
         } else {
             0.0
         };
-        let exp_t = if snapshot.config.allow_experimental {
-            1.0
-        } else {
-            0.0
-        };
         let auto_t = if snapshot.config.autostart { 1.0 } else { 0.0 };
 
         if instant {
             self.toggle_notify_anim.snap(notify_t);
             self.toggle_silent_anim.snap(silent_t);
-            self.toggle_experimental_anim.snap(exp_t);
             self.toggle_autostart_anim.snap(auto_t);
             self.drawer_reveal_anim.snap(1.0);
         } else {
             self.toggle_notify_anim.animate_to(notify_t, 160, now);
             self.toggle_silent_anim.animate_to(silent_t, 160, now);
-            self.toggle_experimental_anim.animate_to(exp_t, 160, now);
             self.toggle_autostart_anim.animate_to(auto_t, 160, now);
         }
 
@@ -273,7 +262,6 @@ impl UiState {
         let now = Instant::now();
         self.toggle_notify_anim.is_active(now)
             || self.toggle_silent_anim.is_active(now)
-            || self.toggle_experimental_anim.is_active(now)
             || self.toggle_autostart_anim.is_active(now)
             || self.dropdown_anim.is_active(now)
             || self.drawer_reveal_anim.is_active(now)

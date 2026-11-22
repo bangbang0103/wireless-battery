@@ -243,7 +243,6 @@ pub fn run_fixture(
     let replay = Arc::new(ReplayTransport::new(fixture));
     let client = BatteryClient::with_transport(
         ClientConfig {
-            allow_experimental: true,
             enable_cache: false,
             ..ClientConfig::default()
         },
@@ -273,7 +272,6 @@ pub fn run_fixture(
         ReadOptions {
             timeout: Duration::from_secs(1),
             allow_stale: false,
-            allow_experimental: true,
         },
     );
     Ok((result, (*replay).clone()))

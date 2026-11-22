@@ -236,23 +236,18 @@ struct PopoverRootView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        let hasHidden = store.snapshot.hiddenExperimentalCount > 0
-        return VStack(spacing: 8) {
+        VStack(spacing: 8) {
             Image(systemName: "battery.75")
                 .font(.system(size: 24))
                 .foregroundStyle(.secondary)
             Text(lang.emptyTitle)
                 .font(.system(size: 12.5, weight: .medium))
-            Text(lang.emptyHint(hiddenExperimentalCount: store.snapshot.hiddenExperimentalCount))
+            Text(lang.emptyHint)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button(lang.emptyAction(hasHiddenExperimental: hasHidden)) {
-                if hasHidden {
-                    showSettings = true
-                } else {
-                    store.refreshAll()
-                }
+            Button(lang.emptyAction) {
+                store.refreshAll()
             }
             .buttonStyle(.bordered)
             .controlSize(.small)

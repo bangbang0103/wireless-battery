@@ -223,7 +223,6 @@ mod tests {
         let client = BatteryClient::with_transport(
             ClientConfig {
                 default_timeout: Duration::from_secs(1),
-                allow_experimental: false,
                 enable_cache: true,
             },
             Arc::new(EmptyTransport),

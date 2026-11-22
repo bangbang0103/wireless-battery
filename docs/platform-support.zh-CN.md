@@ -4,7 +4,7 @@
 
 ## 构建矩阵
 
-CI 已配置在 Windows、macOS 与 Ubuntu Linux 上使用 Rust 1.76 运行格式化检查、全特性及 `--no-default-features` Clippy、全特性及纯库测试（含合成与厂商 Fixture 回放）、`tray` 工作区检查（含 `--no-default-features` 与 C 头文件校验）以及发布产物构建。通过 CI 配置仅代表编译与回放健康，不代表所有平台都已完成实机硬件验证。
+CI 已配置在 Windows 与 macOS 上使用 Rust 1.76 运行格式化检查、全特性及 `--no-default-features` Clippy、全特性及纯库测试（含合成与厂商 Fixture 回放）、`tray` 工作区检查（含 `--no-default-features` 与 C 头文件校验）以及发布产物构建。通过 CI 配置仅代表编译与回放健康，不代表所有平台都已完成实机硬件验证。
 
 Linux 下编译 HIDAPI 可能需要 C 编译器、`pkg-config`、`libudev-dev` 与 `libusb-1.0-0-dev`（取决于所选 HIDAPI 后端）。BLE 通过 `btleplug` 使用 BlueZ，不暴露任意蓝牙命令接口。
 

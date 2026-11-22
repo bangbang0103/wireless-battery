@@ -68,8 +68,6 @@ pub struct TraySnapshot {
     pub app_version: String,
     /// Visible supported devices sorted by priority (low -> active -> stale/sleeping -> offline).
     pub devices: Vec<DeviceView>,
-    /// Number of matched experimental devices hidden because `allow_experimental` is off.
-    pub hidden_experimental_count: usize,
     /// Visual state for the pure-logo tray icon.
     pub icon_state: TrayIconState,
     /// Multi-line plain-text summary for native OS tray hover tooltips.
