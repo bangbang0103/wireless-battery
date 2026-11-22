@@ -245,7 +245,9 @@ unsafe fn create_rounded_bolt_geometry(
     d2d: &ID2D1Factory,
     s: f32,
 ) -> windows::core::Result<ID2D1PathGeometry> {
-    const CORNERS: [((f32, f32), (f32, f32), (f32, f32)); 6] = [
+    type Pt = (f32, f32);
+    type Corner = (Pt, Pt, Pt);
+    const CORNERS: [Corner; 6] = [
         ((11.27, 3.89), (11.60, 2.40), (10.71, 3.64)),
         ((3.37, 13.92), (2.60, 15.00), (3.93, 15.00)),
         ((6.77, 15.00), (8.10, 15.00), (7.73, 16.28)),

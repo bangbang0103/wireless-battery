@@ -1,6 +1,8 @@
 //! Platform-agnostic core for the Wireless Battery system tray application.
 
 pub mod config;
+#[cfg(feature = "dev-tools")]
+pub mod dev_tools;
 pub mod device_kind;
 pub mod notify;
 pub mod service;

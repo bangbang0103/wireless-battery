@@ -4,6 +4,8 @@
 
 #[cfg(windows)]
 mod autostart;
+#[cfg(all(windows, feature = "dev-tools"))]
+mod dev_tools;
 #[cfg(windows)]
 mod i18n;
 #[cfg(windows)]
@@ -76,10 +78,12 @@ mod win_app {
 
     impl SingleInstanceGuard {
         fn acquire() -> Option<Self> {
+            #[cfg(feature = "dev-tools")]
+            let mutex_name = w!("Local\\WirelessBatteryTrayDevSingleInstance");
+            #[cfg(not(feature = "dev-tools"))]
+            let mutex_name = w!("Local\\WirelessBatteryTraySingleInstance");
             unsafe {
-                let handle =
-                    CreateMutexW(None, false, w!("Local\\WirelessBatteryTraySingleInstance"))
-                        .ok()?;
+                let handle = CreateMutexW(None, false, mutex_name).ok()?;
                 if GetLastError() == ERROR_ALREADY_EXISTS {
                     let _ = CloseHandle(handle);
                     return None;
@@ -105,6 +109,10 @@ mod win_app {
         poller: PollerHandle,
         updates_rx: mpsc::Receiver<TrayUpdate>,
         actions_rx: mpsc::Receiver<PopoverAction>,
+        #[cfg(feature = "dev-tools")]
+        dev_panel: crate::dev_tools::DevPanelWindow,
+        #[cfg(feature = "dev-tools")]
+        dev_actions_rx: mpsc::Receiver<crate::dev_tools::DevAction>,
     }
 
     pub fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -199,6 +207,16 @@ mod win_app {
             }
         });
 
+        #[cfg(feature = "dev-tools")]
+        let (dev_panel, dev_actions_rx) = {
+            let (dev_tx, dev_rx) = mpsc::channel::<crate::dev_tools::DevAction>();
+            let panel = crate::dev_tools::DevPanelWindow::create(
+                host_hwnd,
+                Arc::new(Mutex::new(dev_tx)),
+            )?;
+            (panel, dev_rx)
+        };
+
         let mut host = Box::new(HostState {
             taskbar_created_msg,
             theme,
@@ -207,6 +225,10 @@ mod win_app {
             poller,
             updates_rx,
             actions_rx,
+            #[cfg(feature = "dev-tools")]
+            dev_panel,
+            #[cfg(feature = "dev-tools")]
+            dev_actions_rx,
         });
 
         unsafe {
@@ -271,6 +293,20 @@ mod win_app {
             WM_POPOVER_ACTION => {
                 while let Ok(action) = host.actions_rx.try_recv() {
                     dispatch_popover_action(host, action);
+                }
+                LRESULT(0)
+            }
+            #[cfg(feature = "dev-tools")]
+            crate::dev_tools::WM_DEV_ACTION => {
+                while let Ok(action) = host.dev_actions_rx.try_recv() {
+                    crate::dev_tools::dispatch_dev_action(
+                        action,
+                        &host.dev_panel,
+                        &host.poller,
+                        &mut host.tray,
+                        &mut host.popover,
+                        host.theme,
+                    );
                 }
                 LRESULT(0)
             }
@@ -378,6 +414,17 @@ mod win_app {
                             }
                             Some(MENU_CMD_QUIT) => {
                                 PostQuitMessage(0);
+                            }
+                            #[cfg(feature = "dev-tools")]
+                            Some(cmd) => {
+                                crate::dev_tools::handle_context_menu_cmd(
+                                    cmd,
+                                    &host.dev_panel,
+                                    &host.poller,
+                                    &mut host.tray,
+                                    &mut host.popover,
+                                    host.theme,
+                                );
                             }
                             _ => {}
                         }
