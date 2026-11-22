@@ -3,28 +3,10 @@ import SwiftUI
 
 @main
 struct WirelessBatteryTrayApp: App {
-    @StateObject private var store = TrayStore()
-    @StateObject private var pinController = FloatingPinController()
-
-    init() {
-        // Keep the process out of the Dock even when launched directly without a `.app` bundle.
-        NSApplication.shared.setActivationPolicy(.accessory)
-    }
+    @NSApplicationDelegateAdaptor(TrayApplicationDelegate.self) private var delegate
 
     var body: some Scene {
-        MenuBarExtra {
-            PopoverRootView(store: store, pinController: pinController, inFloatingPanel: false)
-                .frame(width: 344)
-        } label: {
-            // Pure minimalist Logo in macOS menu bar (zero numbers; subtle low-battery dot).
-            MenuBarLogoIcon(state: store.snapshot.iconState, tooltip: store.snapshot.tooltip)
-            #if DEV_TOOLS
-                .onAppear {
-                    DevPanelController.shared.showIfNeeded(store: store)
-                }
-            #endif
-        }
-        .menuBarExtraStyle(.window)
+        Settings { EmptyView() }
     }
 }
 

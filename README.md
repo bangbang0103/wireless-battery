@@ -31,7 +31,7 @@ See [platform support](docs/platform-support.md) for system dependencies and per
 
 ### Tray
 
-An independent Cargo workspace under [`tray/`](tray/README.md) provides a native desktop system tray application built on a shared Rust core (`tray-core`) with thin OS-native shells (Win32 + DWM Acrylic + Direct2D on Windows; SwiftUI `MenuBarExtra` via `tray-ffi` on macOS). Keeping it in a separate workspace prevents GUI dependencies from polluting the core library or CLI.
+An independent Cargo workspace under [`tray/`](tray/README.md) provides a native desktop system tray application built on a shared Rust core (`tray-core`) with thin OS-native shells (Win32 + DWM Acrylic + Direct2D on Windows; AppKit `NSStatusItem` with a SwiftUI popover via `tray-ffi` on macOS). Keeping it in a separate workspace prevents GUI dependencies from polluting the core library or CLI.
 
 <p align="center"><strong>Windows</strong></p>
 <p align="center">

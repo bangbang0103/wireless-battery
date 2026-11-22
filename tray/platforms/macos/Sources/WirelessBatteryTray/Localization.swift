@@ -25,6 +25,12 @@ enum AppLanguage: Equatable {
     var settingsTitle: String { isZh ? "设置" : "Settings" }
     var backLabel: String { isZh ? "返回" : "Back" }
     var quitLabel: String { isZh ? "退出" : "Quit" }
+    var openPanelLabel: String { isZh ? "打开面板" : "Open Panel" }
+    var menuThemeLightLabel: String { isZh ? "明亮模式" : "Light" }
+    var menuThemeDarkLabel: String { isZh ? "暗黑模式" : "Dark" }
+    var menuLanguageLabel: String { isZh ? "语言" : "Language" }
+    var menuAutostartLabel: String { isZh ? "开机自启" : "Launch at startup" }
+    var menuCheckUpdatesLabel: String { isZh ? "检查更新" : "Check for updates" }
     var readingPeripherals: String { isZh ? "正在读取外设电量…" : "Reading peripherals…" }
 
     var pinHelpPinned: String { isZh ? "取消置顶" : "Unpin" }
@@ -78,6 +84,18 @@ enum AppLanguage: Equatable {
     var btnCheckUpdates: String { isZh ? "检查更新" : "Check" }
     var btnCheckingUpdates: String { isZh ? "检查中…" : "Checking…" }
     var btnDownloadUpdate: String { isZh ? "前往下载" : "Download" }
+    var notifyUpdateTitle: String { isZh ? "检查更新" : "Update Check" }
+    var notifyUpdateFailed: String {
+        isZh ? "检查更新失败，请检查网络后重试。" : "Failed to check for updates. Please try again later."
+    }
+
+    func notifyUpdateAvailable(latestVersion: String) -> String {
+        isZh ? "发现新版本 \(latestVersion)，正在打开下载页面。" : "New version \(latestVersion) is available. Opening download page."
+    }
+
+    func notifyUpdateUpToDate(version: String) -> String {
+        isZh ? "当前已是最新版本（\(version)）。" : "You are up to date (\(version))."
+    }
 
     func settingVersionDesc(_ version: String) -> String {
         isZh ? "当前版本 \(version)" : "Current version \(version)"

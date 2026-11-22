@@ -25,7 +25,7 @@ tray/
 │   └── tray-ffi/              # Thin C-ABI static library for non-Rust native shells (e.g., macOS SwiftUI)
 └── platforms/
     ├── windows/               # Windows native shell (pure Rust: Win32 + DWM Acrylic + Direct2D/DirectWrite)
-    ├── macos/                 # macOS native shell (SwiftUI MenuBarExtra + tray-ffi staticlib)
+    ├── macos/                 # macOS native shell (AppKit NSStatusItem + SwiftUI popover + tray-ffi staticlib)
     └── linux/                 # Linux native shell (planned: GTK4 + Libadwaita / SNI)
 ```
 

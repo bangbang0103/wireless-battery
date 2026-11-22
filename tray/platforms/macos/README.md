@@ -2,7 +2,7 @@
 
 > **Language / 语言**: **English** | [简体中文](README.zh-CN.md)
 
-A native macOS 13+ menu bar application built with **SwiftUI `MenuBarExtra(.window)`** and the `tray/crates/tray-ffi` static library (zero third-party Swift dependencies):
+A native macOS 13+ menu bar application built with **AppKit `NSStatusItem` / `NSPopover` and SwiftUI content** plus the `tray/crates/tray-ffi` static library (zero third-party Swift dependencies):
 
 - **Native macOS look and feel**: modular SwiftUI views (`App.swift`, `MenuBarIcon.swift`, `FloatingPinController.swift`, `DeviceRowView.swift`, `SettingsView.swift`, `Bridge.swift`, `Localization.swift`), `.ultraThinMaterial` translucency, menu bar lightning + wireless wave icon (monochrome normally, red wireless waves on low battery, and no numeric overlay), SF Symbols hardware icons driven by core `DeviceKind`, SF Pro typography, automatic/manual light & dark appearance, and bilingual UI (`system` / `zh_cn` / `en`).
 - **Full feature parity**: smart refresh on popover open, concurrent progressive readings, honest error states (timeout / busy / Input Monitoring permission guidance), expandable protocol/bus/status drawers, sanitized diagnostic JSON copy, Settings controls (appearance, language, poll interval, low-battery & silent `UNUserNotificationCenter` alerts, `SMAppService` login autostart, and update check; `allow_stale` remains configurable via `tray.json`).

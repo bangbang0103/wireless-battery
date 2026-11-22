@@ -31,7 +31,7 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 
 ### Tray（原生系统托盘）
 
-[`tray/`](tray/README.zh-CN.md) 是一个独立于根库与 CLI 的 Cargo 工作区，采用 **共享 Rust 核心（`tray-core`） + 各平台极薄原生 UI 壳** 架构（Windows 为 Win32 + DWM Acrylic + Direct2D；macOS 为 SwiftUI `MenuBarExtra` + `tray-ffi` 静态库），避免 GUI 依赖污染核心库与 CLI。
+[`tray/`](tray/README.zh-CN.md) 是一个独立于根库与 CLI 的 Cargo 工作区，采用 **共享 Rust 核心（`tray-core`） + 各平台极薄原生 UI 壳** 架构（Windows 为 Win32 + DWM Acrylic + Direct2D；macOS 为 AppKit `NSStatusItem` + SwiftUI 弹层 + `tray-ffi` 静态库），避免 GUI 依赖污染核心库与 CLI。
 
 <p align="center"><strong>Windows</strong></p>
 <p align="center">

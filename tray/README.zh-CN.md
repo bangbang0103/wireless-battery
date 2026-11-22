@@ -25,7 +25,7 @@ tray/
 │   └── tray-ffi/              # 极薄 C-ABI 静态库，供 macOS SwiftUI 等非 Rust 原生壳调用
 └── platforms/
     ├── windows/               # Windows 原生壳（纯 Rust：Win32 + DWM Acrylic + Direct2D/DirectWrite）
-    ├── macos/                 # macOS 原生壳（SwiftUI MenuBarExtra + tray-ffi staticlib）
+    ├── macos/                 # macOS 原生壳（AppKit NSStatusItem + SwiftUI 弹层 + tray-ffi staticlib）
     └── linux/                 # Linux 原生壳（预留：GTK4 + Libadwaita / SNI）
 ```
 
