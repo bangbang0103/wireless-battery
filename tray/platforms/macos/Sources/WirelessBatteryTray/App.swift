@@ -125,7 +125,7 @@ private struct MenuBarLogoIcon: View {
             let ox = (rect.width - 24.0 * s) * 0.5
             let oy = (rect.height - 24.0 * s) * 0.5
             let frameOpacity: CGFloat = isIdle ? 0.48 : 1.0
-            let baseColor: NSColor = isIdle ? .black : (isDark ? .white : .black)
+            let baseColor: NSColor = isDark ? .white : .black
             let frameColor = baseColor.withAlphaComponent(frameOpacity)
             let signalColor: NSColor = {
                 switch state {
@@ -191,7 +191,7 @@ private struct MenuBarLogoIcon: View {
 
             return true
         }
-        image.isTemplate = isIdle
+        image.isTemplate = false
         return image
     }
 }
