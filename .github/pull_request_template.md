@@ -5,7 +5,7 @@
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --locked --all-targets --all-features -- -D warnings`
 - [ ] `cargo test --locked --all-features`
-- [ ] Automatic checks and real-hardware checks are reported separately
+- [ ] Automatic checks and real-hardware checks are reported separately (real-hardware checks verified independently with vendor software closed)
 
 ## Device and safety checklist
 

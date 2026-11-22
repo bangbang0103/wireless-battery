@@ -97,13 +97,13 @@ If your device shows up as `unmatched` or reports `null` / `unknown` battery rea
    - Run `wireless-battery list --json` to inspect all enumerated endpoints.
    - Many multi-mode peripherals and gamepads (e.g., Flydigi, 8BitDo) expose only a Windows-reserved XInput endpoint (`045E:028E`) in XInput mode, and most third-party controllers do not report battery over XInput. Switch to **2.4G dongle, wired, DInput / vendor mode**, or **BLE mode** (standard BAS `0x2A19` works directly), then re-run `list` to check for a vendor HID endpoint (`usage_page >= 0xFF00`).
 
-2. **Probe Raw Packets with `probe`**
-   - Passively listen for unsolicited reports: `wireless-battery probe <device-id> --listen 5000` (plug/unplug the cable or interact with the device).
-   - Send candidate queries (e.g., captured via **Wireshark + USBPcap** / `usbmon`):
-     `wireless-battery probe <device-id> --report-id 0 --send "5A A5 ..."` or `--get-feature 0x03`, comparing raw bytes between **discharging** and **charging** states.
+2. **Probe Raw Packets with `probe` (and Bidirectional Capture if Needed)**
+   - Passively listen for unsolicited reports (or shared HID replies while the vendor app is open): `wireless-battery probe <device-id> --listen 5000` (plug/unplug the cable or interact with the device).
+   - If the device requires host-initiated queries and has no known protocol match, capture **both Host → Device requests and Device → Host responses** via **Wireshark + USBPcap** / `usbmon` (or WebHID) along with the ground-truth percentage/charge state, then **close the vendor app** and verify independently with `probe`:
+     `wireless-battery probe <device-id> --report-id 0 --send "5A A5 ..."` (or `--set-output`, `--send-feature`, `--get-feature 0x03`), comparing raw bytes between **discharging** and **charging** states.
 
 3. **Open an Issue or PR**
-   - **Issue**: Share your device model, connection mode, `wireless-battery list --json` output, and raw `probe` packets for discharging/charging states.
+   - **Issue**: Share your device model, connection mode, `wireless-battery list --json` output, and paired request/response `probe` packets for discharging/charging states (verified with the vendor app closed).
    - **PR**: Add a `FixedSpec` or `Provider` in `src/providers/vendors/`, add tests, and verify with `cargo test --locked`.
 
 ### Copy-Paste Prompt for an AI Agent
@@ -117,17 +117,21 @@ Follow these steps in order:
 0. **Prepare the CLI Binary**:
    - Check if `wireless-battery` / `wireless-battery.exe` is available in the current directory or PATH (or use `cargo run --locked --` if we are inside the source repository). If not, guide me to download the prebuilt binary for my OS from Releases.
 
-1. **Enumerate & Read**:
+1. **Enumerate, Check Modes & Select Safe Candidate Endpoints**:
    - Run `wireless-battery list --json` and `wireless-battery list --read --json`, and summarize every detected device (name, VID/PID, `usage_page`, `usage`, `interface_number`, `match_status`, `provider_id`, battery percentage, and charge state).
-   - If the target device only exposes a Windows-reserved standard endpoint (e.g., XInput `045E:028E`, `usage_page=1, usage=5`) and no vendor HID endpoint (`usage_page >= 0xFF00`), guide me to switch connection modes (2.4G dongle / wired / DInput vendor mode / BLE) and re-run `list --json`.
+   - If the target device only exposes a Windows-reserved standard endpoint (e.g., XInput `045E:028E`, `usage_page=1, usage=5`), guide me to switch connection modes (2.4G dongle / wired / DInput vendor mode / BLE) and re-run `list --json`.
+   - If multiple vendor HID endpoints (`usage_page >= 0xFF00`) are present, list all of them and filter carefully: avoid obvious configuration/firmware channels (such as VIA `FF60:0061`) and never send blind write commands to unknown channels.
 
-2. **Probe Raw Packets (`probe` on Vendor HID Endpoints)**:
-   - Run `wireless-battery probe <device-id> --listen 5000` while I plug/unplug the charging cable or interact with the device to check for unsolicited Input reports.
-   - If we have candidate query bytes (or captures from Wireshark + USBPcap / usbmon), test them with `wireless-battery probe <device-id> --report-id <id> --send "<hex>"` or `--get-feature <id>` in both **discharging** and **charging** states and compare the raw bytes (never guess percentages from voltage or discrete levels; unknown sentinels must map to `unknown`).
+2. **Tiered Reverse-Engineering & Bidirectional Verification**:
+   - **2a. Check Existing Clues & Passive/Shared Listening**: Search `src/providers/vendors/` (if in the repo) and open-source references for known query protocols sharing the same VID/PID, brand, or chipset. Meanwhile, run `wireless-battery probe <device-id> --listen 5000` (while plugging/unplugging the cable, waking the device, or refreshing battery in the vendor app/WebHID configurator to listen on the shared HID handle).
+   - **2b. Bidirectional Capture (when no clue works and `--listen` yields no battery reply)**: Guide me to use **Wireshark + USBPcap (Windows) / `usbmon` (Linux)** (or browser WebHID DevTools) to capture **both Host → Device (sent) and Device → Host (received)** packets while reading battery, and record the **ground-truth percentage and charging state** shown by the vendor software/device indicator (ideally covering discharging, charging, and two different percentage levels). If I provide a `.pcapng` or capture log, extract paired request/response frames, handshakes, and changing bytes.
+   - **2c. `probe` Testing & Independent Verification (avoid false positives)**:
+     - Map candidate or captured commands to `probe` (distinguish `--send` vs `--send --set-output`, and `--send-feature` / `--get-feature` / `--get-input`; keep `--report-id` separate from the hex payload; use `--read-replies` to read multiple packets and skip heartbeats or command echoes). Note that a successful OS write does not mean the device accepted the command.
+     - Once a working query is found, **fully quit the vendor app / WebHID tab**, wake the device, and independently reproduce consistent replies in both **discharging** and **charging** states with `probe` (never guess percentages from voltage or discrete levels; unverified charge states and unknown sentinels must stay `unknown`).
 
 3. **Next Steps**:
-   - If only the prebuilt binary is available (no source repo): format a clean summary with device model, connection mode, `list --json` endpoint metadata, and the discharging/charging `probe` request/response hex so I can open a GitHub Issue.
-   - If we are inside the cloned source repository: implement a `FixedSpec` or `Provider` under `src/providers/vendors/`, add replay fixtures under `tests/fixtures/vendors/`, update `docs/support-matrix.md` & `docs/support-matrix.zh-CN.md`, and verify everything passes with `cargo test --locked`.
+   - If only the prebuilt binary is available (no source repo): format a clean summary with device model, connection mode, `list --json` endpoint metadata, and paired discharging/charging `probe` request/response hex (verified with the vendor app closed) plus ground-truth percentage/state so I can open a GitHub Issue.
+   - If we are inside the cloned source repository: read `docs/contributing-device.md` and `docs/capture-and-replay.md` first, implement a `FixedSpec` or `Provider` under `src/providers/vendors/`, add replay fixtures under `tests/fixtures/vendors/`, update `docs/support-matrix.md` & `docs/support-matrix.zh-CN.md`, and verify everything passes with `cargo test --locked`.
 ```
 
 ## Documentation
