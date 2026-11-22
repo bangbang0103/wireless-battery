@@ -6,7 +6,9 @@ pub mod notify;
 pub mod service;
 pub mod state;
 
-pub use config::{default_config_path, load_config, save_config, TrayConfig};
+pub use config::{
+    default_config_path, load_config, save_config, LanguageMode, ThemeMode, TrayConfig,
+};
 pub use device_kind::{classify_device, DeviceKind};
 pub use notify::LowBatteryTracker;
 pub use service::{PollerHandle, TrayService, TrayUpdate};

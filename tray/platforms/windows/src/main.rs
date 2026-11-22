@@ -5,6 +5,8 @@
 #[cfg(windows)]
 mod autostart;
 #[cfg(windows)]
+mod i18n;
+#[cfg(windows)]
 mod icon;
 #[cfg(windows)]
 mod popover;
@@ -30,12 +32,15 @@ fn main() {
 #[cfg(windows)]
 mod win_app {
     use crate::autostart::{copy_text_to_clipboard, set_autostart};
+    use crate::i18n::Lang;
     use crate::icon::load_app_icon;
     use crate::popover::{PopoverAction, PopoverWindow};
     use crate::theme::SystemTheme;
     use crate::tray::{
-        TrayIconHost, MENU_CMD_OPEN_PANEL, MENU_CMD_QUIT, MENU_CMD_TOGGLE_AUTOSTART,
-        MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY, WM_TRAY_CALLBACK,
+        TrayIconHost, MENU_CMD_LANG_EN, MENU_CMD_LANG_SYSTEM, MENU_CMD_LANG_ZH_CN,
+        MENU_CMD_OPEN_PANEL, MENU_CMD_QUIT, MENU_CMD_THEME_DARK, MENU_CMD_THEME_LIGHT,
+        MENU_CMD_THEME_SYSTEM, MENU_CMD_TOGGLE_AUTOSTART, MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY,
+        MENU_CMD_TOGGLE_LOW_BATTERY_SILENT, WM_TRAY_CALLBACK,
     };
     use std::sync::{mpsc, Arc, Mutex};
     use windows::core::w;
@@ -57,7 +62,10 @@ mod win_app {
     };
 
     const NIN_KEYSELECT: u32 = NIN_SELECT + 1;
-    use wireless_battery_tray_core::{PollerHandle, TrayService, TrayUpdate};
+    const WM_DWMCOLORIZATIONCOLORCHANGED: u32 = 0x0320;
+    use wireless_battery_tray_core::{
+        LanguageMode, PollerHandle, ThemeMode, TrayService, TrayUpdate,
+    };
 
     const WM_CORE_UPDATE: u32 = WM_APP + 20;
     const WM_POPOVER_ACTION: u32 = WM_APP + 21;
@@ -243,13 +251,18 @@ mod win_app {
         match msg {
             WM_CORE_UPDATE => {
                 while let Ok(update) = host.updates_rx.try_recv() {
+                    let lang = Lang::resolve(update.snapshot.config.language);
                     host.tray.update(
                         update.snapshot.icon_state,
                         host.theme.taskbar_dark,
                         &update.snapshot.tooltip,
                     );
-                    for alert in &update.alerts {
-                        host.tray.notify_low_battery(alert);
+                    if update.snapshot.config.low_battery_notify
+                        && !update.snapshot.config.low_battery_silent
+                    {
+                        for alert in &update.alerts {
+                            host.tray.notify_low_battery(alert, lang);
+                        }
                     }
                     host.popover.set_snapshot(update.snapshot);
                 }
@@ -261,7 +274,7 @@ mod win_app {
                 }
                 LRESULT(0)
             }
-            WM_SETTINGCHANGE => {
+            WM_SETTINGCHANGE | WM_DWMCOLORIZATIONCOLORCHANGED => {
                 let next_theme = SystemTheme::detect();
                 if next_theme != host.theme {
                     host.theme = next_theme;
@@ -298,19 +311,66 @@ mod win_app {
                     WM_CONTEXTMENU => {
                         host.popover.hide();
                         let cfg = host.poller.service().config();
-                        match host
-                            .tray
-                            .show_context_menu(cfg.autostart, cfg.low_battery_notify)
-                        {
+                        let lang = Lang::resolve(cfg.language);
+                        match host.tray.show_context_menu(
+                            cfg.autostart,
+                            cfg.low_battery_notify,
+                            cfg.low_battery_silent,
+                            cfg.theme_mode,
+                            cfg.language,
+                            lang,
+                        ) {
                             Some(MENU_CMD_OPEN_PANEL) => {
                                 let anchor = host.tray.anchor_rect();
                                 host.popover.show(anchor);
                                 maybe_refresh_on_open(host);
                             }
+                            Some(MENU_CMD_THEME_SYSTEM) => {
+                                dispatch_popover_action(
+                                    host,
+                                    PopoverAction::SetThemeMode(ThemeMode::System),
+                                );
+                            }
+                            Some(MENU_CMD_THEME_LIGHT) => {
+                                dispatch_popover_action(
+                                    host,
+                                    PopoverAction::SetThemeMode(ThemeMode::Light),
+                                );
+                            }
+                            Some(MENU_CMD_THEME_DARK) => {
+                                dispatch_popover_action(
+                                    host,
+                                    PopoverAction::SetThemeMode(ThemeMode::Dark),
+                                );
+                            }
+                            Some(MENU_CMD_LANG_SYSTEM) => {
+                                dispatch_popover_action(
+                                    host,
+                                    PopoverAction::SetLanguageMode(LanguageMode::System),
+                                );
+                            }
+                            Some(MENU_CMD_LANG_ZH_CN) => {
+                                dispatch_popover_action(
+                                    host,
+                                    PopoverAction::SetLanguageMode(LanguageMode::ZhCn),
+                                );
+                            }
+                            Some(MENU_CMD_LANG_EN) => {
+                                dispatch_popover_action(
+                                    host,
+                                    PopoverAction::SetLanguageMode(LanguageMode::En),
+                                );
+                            }
                             Some(MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY) => {
                                 dispatch_popover_action(
                                     host,
                                     PopoverAction::ToggleLowBatteryNotify,
+                                );
+                            }
+                            Some(MENU_CMD_TOGGLE_LOW_BATTERY_SILENT) => {
+                                dispatch_popover_action(
+                                    host,
+                                    PopoverAction::ToggleLowBatterySilent,
                                 );
                             }
                             Some(MENU_CMD_TOGGLE_AUTOSTART) => {
@@ -354,38 +414,70 @@ mod win_app {
             PopoverAction::RefreshDevice(id) => {
                 host.poller.request_device_refresh(id);
             }
-            PopoverAction::CopyDiagnostic(id) => match host.poller.service().diagnose_json(&id) {
-                Ok(json) => {
-                    if copy_text_to_clipboard(host.popover.hwnd(), &json) {
-                        host.popover.show_feedback("已复制脱敏诊断 JSON");
-                    } else {
-                        host.popover.show_feedback("复制剪贴板失败");
+            PopoverAction::CopyError(id) => {
+                let lang = Lang::resolve(host.poller.service().config().language);
+                match host.poller.service().error_report_json(&id) {
+                    Ok(json) => {
+                        if copy_text_to_clipboard(host.popover.hwnd(), &json) {
+                            host.popover.show_feedback(lang.toast_error_copied());
+                        } else {
+                            host.popover.show_feedback(lang.toast_copy_failed());
+                        }
+                    }
+                    Err(_) => {
+                        host.popover.show_feedback(lang.toast_diag_failed());
                     }
                 }
-                Err(_) => {
-                    host.popover.show_feedback("无法生成设备诊断");
+            }
+            PopoverAction::SetThemeMode(mode) => {
+                let mut cfg = host.poller.service().config();
+                if cfg.theme_mode != mode {
+                    cfg.theme_mode = mode;
+                    let snap = host.poller.service().update_config_async(cfg);
+                    host.popover.set_snapshot(snap);
                 }
-            },
+            }
+            PopoverAction::SetLanguageMode(mode) => {
+                let mut cfg = host.poller.service().config();
+                if cfg.language != mode {
+                    cfg.language = mode;
+                    let snap = host.poller.service().update_config_async(cfg);
+                    host.popover.set_snapshot(snap);
+                }
+            }
             PopoverAction::SetPollInterval(secs) => {
                 let mut cfg = host.poller.service().config();
-                cfg.poll_interval_secs = secs;
-                let snap = host.poller.update_config(cfg);
-                host.popover.set_snapshot(snap);
+                if cfg.poll_interval_secs != secs {
+                    cfg.poll_interval_secs = secs;
+                    let snap = host.poller.update_config_async(cfg);
+                    host.popover.set_snapshot(snap);
+                }
             }
             PopoverAction::ToggleLowBatteryNotify => {
                 let mut cfg = host.poller.service().config();
                 cfg.low_battery_notify = !cfg.low_battery_notify;
-                let snap = host.poller.update_config(cfg);
+                let snap = host.poller.service().update_config_async(cfg);
                 host.tray
                     .update(snap.icon_state, host.theme.taskbar_dark, &snap.tooltip);
+                host.popover.set_snapshot(snap);
+            }
+            PopoverAction::ToggleLowBatterySilent => {
+                let mut cfg = host.poller.service().config();
+                cfg.low_battery_silent = !cfg.low_battery_silent;
+                let snap = host.poller.service().update_config_async(cfg);
                 host.popover.set_snapshot(snap);
             }
             PopoverAction::ToggleAutostart => {
                 let mut cfg = host.poller.service().config();
                 cfg.autostart = !cfg.autostart;
-                let _ = set_autostart(cfg.autostart);
-                let snap = host.poller.update_config(cfg);
+                let enabled = cfg.autostart;
+                let snap = host.poller.service().update_config_async(cfg);
                 host.popover.set_snapshot(snap);
+                let _ = std::thread::Builder::new()
+                    .name("wb-tray-autostart".to_owned())
+                    .spawn(move || {
+                        let _ = set_autostart(enabled);
+                    });
             }
             PopoverAction::Quit => unsafe {
                 PostQuitMessage(0);

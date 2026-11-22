@@ -54,6 +54,13 @@ bool wb_tray_update_config_json(const WbTrayHandle *handle, const char *config_j
  */
 char *wb_tray_diagnose_json(const WbTrayHandle *handle, const char *device_id_utf8);
 
+/**
+ * Return sanitized error report JSON (combining the latest read error kind and
+ * passive diagnostic metadata) for `device_id_utf8`, or NULL on error.
+ * Caller must release non-NULL pointers with `wb_tray_string_free`.
+ */
+char *wb_tray_error_report_json(const WbTrayHandle *handle, const char *device_id_utf8);
+
 /** Release any UTF-8 string allocated by this library. Safe to call with NULL. */
 void wb_tray_string_free(char *ptr);
 
