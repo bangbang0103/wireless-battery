@@ -15,16 +15,16 @@ tray/
 ├── Cargo.toml                 # 独立托盘工作区，避免污染根包依赖与 MSRV
 ├── Cargo.lock                 # 独立锁文件
 ├── assets/                    # 应用主图标与托盘纯 Logo 矢量源图
-│   ├── app-icon.png           # 1024×1024 透明背景主应用图标（拉丝钛金仪表风格）
+│   ├── app-icon.png           # 1024×1024 透明背景主应用图标（圆角闪电与无线波纹设计）
 │   ├── app-icon.ico           # Windows 多分辨率应用图标（16–256 px，构建时自动嵌入 EXE）
 │   ├── logo.svg
 │   ├── tray-normal.svg        # 静默单色模板源图（无数值）
-│   └── tray-low.svg           # 低电微红提示角标源图
+│   └── tray-low.svg           # 低电红色波纹托盘图标源图
 ├── crates/
 │   ├── tray-core/             # 平台无关状态机、轮询、低电防抖、配置与脱敏诊断（#![deny(unsafe_code)]）
 │   └── tray-ffi/              # 极薄 C-ABI 静态库，供 macOS SwiftUI 等非 Rust 原生壳调用
 └── platforms/
-    ├── windows/               # Windows 原生壳（纯 Rust：Win32 + DWM Acrylic/Mica + Direct2D/DirectWrite）
+    ├── windows/               # Windows 原生壳（纯 Rust：Win32 + DWM Acrylic + Direct2D/DirectWrite）
     ├── macos/                 # macOS 原生壳（SwiftUI MenuBarExtra + tray-ffi staticlib）
     └── linux/                 # Linux 原生壳（预留：GTK4 + Libadwaita / SNI）
 ```

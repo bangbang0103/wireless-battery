@@ -4,7 +4,7 @@
 
 A native system tray workspace isolated from the root library and CLI, built on a **shared Rust core (`tray-core`) + thin OS-native UI shells** architecture:
 
-- native OS look and feel (acrylic/mica, typography, dark/light mode, and system tray ergonomics);
+- native OS look and feel (acrylic/translucency, typography, dark/light mode, and system tray ergonomics);
 - minimal dependencies (no WebView, no GPU rendering framework) and low resident memory usage;
 - keeps the root `wireless-battery` crate (lib / cli) free of GUI or windowing dependencies.
 
@@ -19,7 +19,7 @@ tray/
 │   ├── app-icon.ico           # Windows multi-resolution icon (16–256 px, embedded in EXE)
 │   ├── logo.svg
 │   ├── tray-normal.svg        # Monochrome tray template source (no numeric overlay)
-│   └── tray-low.svg           # Low-battery badge tray template source
+│   └── tray-low.svg           # Low-battery red-wave tray icon source
 ├── crates/
 │   ├── tray-core/             # Platform-agnostic state machine, polling, hysteresis, config, and sanitized diagnostics (#![deny(unsafe_code)])
 │   └── tray-ffi/              # Thin C-ABI static library for non-Rust native shells (e.g., macOS SwiftUI)

@@ -4,9 +4,9 @@
 
 ## Canonical reports
 
-Fixture `hex` and field offsets exclude the HID Report ID. The ID is stored separately in `report_id`. `get_feature.length` and response lengths count payload bytes only. HIDAPI's leading report byte is a transport implementation detail.
+Fixture `hex` and field offsets exclude the HID Report ID. The ID is stored separately in `report_id`. `get_feature.length`, `get_input.length`, and response lengths count payload bytes only. HIDAPI's leading report byte is a transport implementation detail.
 
-Each fixture step maps one-to-one to a transport operation: HID `send_feature`, `get_feature`, `write_output`, `set_output`, or `read_input`, as well as standard `read_bas` and `read_xinput`. This avoids ambiguity about whether an error belongs to a request or its response.
+Each fixture step maps one-to-one to a transport operation: HID `send_feature`, `get_feature`, `get_input`, `write_output`, `set_output`, or `read_input`, as well as standard `read_bas` and `read_xinput`. This avoids ambiguity about whether an error belongs to a request or its response.
 
 ## Capture
 
