@@ -1,17 +1,7 @@
 import AppKit
-import SwiftUI
 
-struct MenuBarLogoIcon: View {
-    let state: String
-    let tooltip: String
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        Image(nsImage: Self.renderNSImage(state: state, isDark: colorScheme == .dark))
-            .help(tooltip)
-    }
-
-    private static func renderNSImage(state: String, isDark: Bool) -> NSImage {
+enum MenuBarIconRenderer {
+    static func renderNSImage(state: String, isDark: Bool) -> NSImage {
         let size = NSSize(width: 20, height: 20)
         let isIdle = state == "idle"
         let image = NSImage(size: size, flipped: true) { rect in

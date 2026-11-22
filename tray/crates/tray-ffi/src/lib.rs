@@ -1,6 +1,6 @@
 //! Minimal C-ABI bridge over `wireless-battery-tray-core`.
 //!
-//! Non-Rust native UI shells (such as macOS SwiftUI `MenuBarExtra`) link this
+//! Non-Rust native UI shells (such as the macOS AppKit/SwiftUI shell) link this
 //! static library and exchange UTF-8 JSON snapshots without complex FFI structs.
 
 use std::ffi::{c_char, c_void, CStr, CString};
