@@ -7,7 +7,7 @@ body:
     id: identity
     attributes:
       label: Device identity
-      description: Model, VID/PID if known, usage page, receiver and firmware. Do not include serial numbers.
+      description: Brand, model, connection mode (2.4G / wired / BLE), `wireless-battery list --json` endpoint metadata (VID/PID, usage_page, usage, interface_number), receiver and firmware if known. Do not include serial numbers or raw system paths.
     validations:
       required: true
   - type: textarea
@@ -21,7 +21,7 @@ body:
     id: evidence
     attributes:
       label: Available evidence
-      description: Protocol documentation, sanitized fixtures, source licenses, and hardware you can test. No PCAP or raw system paths.
+      description: Paired request/response `probe` hex for discharging & charging states (verified with the vendor software closed) plus ground-truth percentage/state, or protocol documentation, sanitized fixtures, and source licenses. No PCAP files or raw system paths.
   - type: checkboxes
     id: permission
     attributes:

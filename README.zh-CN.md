@@ -97,13 +97,13 @@ cargo build --locked --release -p wireless-battery-tray   # Windows 原生托盘
    - 运行 `wireless-battery list --json` 查看所有端点。
    - 不少多模外设或手柄（如飞智、八爪鱼等）在纯 **XInput 模式**（`045E:028E`）下会被 Windows 保留，且多数第三方手柄不通过 XInput 上报电量；尝试切换至 **2.4G 接收器、有线、DInput / 厂商模式** 或 **BLE 模式**（支持标准 BAS `0x2A19` 可直接读取），再重新 `list` 确认是否出现厂商自定义 HID 端点（通常 `usage_page >= 0xFF00`）。
 
-2. **用 `probe` 探测报文（供提交 Issue 或自行适配）**
-   - 监听设备主动上报：`wireless-battery probe <device-id> --listen 5000`（插拔充电线或操作设备观察变化）。
-   - 发送探测指令（可结合 **Wireshark + USBPcap** / `usbmon` 抓到的官方查询包）：
-     `wireless-battery probe <device-id> --report-id 0 --send "5A A5 ..."` 或 `--get-feature 0x03`，对比**放电**与**充电**状态下的原始字节。
+2. **用 `probe` 探测报文（必要时结合双向抓包）**
+   - 监听设备主动上报（或在官方软件运行时通过共享 HID 句柄监听回复）：`wireless-battery probe <device-id> --listen 5000`（插拔充电线或操作设备观察变化）。
+   - 若设备需要主机先发查询且暂无已知协议，使用 **Wireshark + USBPcap** / `usbmon`（或 WebHID）**同时捕获 Host → Device（发出）与 Device → Host（返回）的双向报文**并记录实际电量，然后**关闭官方软件**用 `probe` 独立验证：
+     `wireless-battery probe <device-id> --report-id 0 --send "5A A5 ..."`（或 `--set-output`、`--send-feature`、`--get-feature 0x03`），对比**放电**与**充电**状态下的原始字节。
 
 3. **提交 Issue 或 PR**
-   - **提 Issue**：附上设备型号、连接模式、`wireless-battery list --json` 输出，以及 `probe` 抓到的放电/充电报文片段。
+   - **提 Issue**：附上设备型号、连接模式、`wireless-battery list --json` 输出，以及关闭官方软件后 `probe` 验证到的放电/充电配对请求与响应报文。
    - **提 PR**：在 `src/providers/vendors/` 中参考现有 `FixedSpec` 或 `Provider` 实现新增协议，补充测试并通过 `cargo test --locked`。
 
 ### 直接复制给 AI Agent 的排查 / 逆向 Prompt
@@ -117,17 +117,21 @@ cargo build --locked --release -p wireless-battery-tray   # Windows 原生托盘
 0. **准备 CLI 工具**：
    - 先检查当前目录或 PATH 是否已有 `wireless-battery` / `wireless-battery.exe`；若当前在项目源码仓库中，也可用 `cargo run --locked --` 代替。若都没有，请引导我从项目 Releases 下载对应系统的预编译可执行文件。
 
-1. **枚举与读取**：
+1. **枚举、模式检查与安全选点**：
    - 运行 `wireless-battery list --json` 与 `wireless-battery list --read --json`，汇总所有检测到的设备（名称、VID/PID、`usage_page`、`usage`、`interface_number`、`match_status`、`provider_id`、电量百分比与充电状态）。
-   - 如果目标设备只出现了 Windows 保留的标准端点（例如 XInput `045E:028E`、`usage_page=1, usage=5`）而没有厂商自定义 HID 端点（通常 `usage_page >= 0xFF00`），请先引导我切换设备的连接模式（2.4G 接收器 / 有线 / DInput 厂商模式 / BLE 模式）后重新执行 `list --json`。
+   - 如果目标设备只出现了系统保留的标准端点（例如 XInput `045E:028E`、`usage_page=1, usage=5`），请先引导我切换设备的连接模式（2.4G 接收器 / 有线 / DInput 厂商模式 / BLE 模式）后重新执行 `list --json`。
+   - 若同一设备存在多个厂商 HID 端点（`usage_page >= 0xFF00`），请全部列出并谨慎筛选：避开明显的配置/固件通道（如 VIA `FF60:0061`），切勿向未知通道盲目发送写指令。
 
-2. **使用 `probe` 探测原始报文（仅针对未匹配或读数异常的厂商 HID 端点）**：
-   - 先运行 `wireless-battery probe <device-id> --listen 5000`，引导我在期间插拔充电线或操作设备，观察是否有主动上报的 Input 报文。
-   - 如有候选查询指令（或结合 Wireshark + USBPcap / usbmon 抓到的官方查询包），使用 `wireless-battery probe <device-id> --report-id <id> --send "<hex>"` 或 `--get-feature <id>` 分别在**放电**和**充电**两种状态下收集原始响应字节，并对比字段含义（严禁将电压或离散档位强行猜成百分比，未知哨兵值必须保持 `unknown`）。
+2. **分层逆向与双向验证（由轻到重）**：
+   - **2a. 查线索与被动/共享监听**：先检索仓库 `src/providers/vendors/`（若在源码仓）及公开开源资料中同 VID/PID、同品牌或同方案的已知查询协议；同时运行 `wireless-battery probe <device-id> --listen 5000`（可在插拔充电线、唤醒设备，或保持官方软件/网页驱动开启刷新电量时监听共享 HID 回复）。
+   - **2b. 双向抓包（无现成线索且监听无有效回复时）**：引导我使用 **Wireshark + USBPcap（Windows）/ `usbmon`（Linux）**（或浏览器 WebHID 调试），在读取电量时**同时捕获 Host → Device（发出）与 Device → Host（返回）的双向报文**，并记录当时官方软件或设备指示显示的**真实电量 % 与充放电状态**（尽量覆盖放电、充电及两个不同电量值）。若我提供了 `.pcapng` 或抓包片段，优先提取配对的请求/响应、前置握手与变化字节。
+   - **2c. `probe` 测试与独立复现（防假阳性）**：
+     - 将候选或抓包指令映射到 `probe`（区分 `--send` 与 `--send --set-output`，以及 `--send-feature` / `--get-feature` / `--get-input`；注意 `--report-id` 与 hex payload 分离；可用 `--read-replies` 多读几包以跳过心跳或请求回显）。注意“写入成功”不代表“设备应答”。
+     - 确认有效指令后，**必须完全退出官方软件/网页驱动**、唤醒设备，单独用 `probe` 分别在**放电**和**充电**态复现一致响应（严禁将电压或离散档位强行猜成百分比，未验证的充电字段与未知哨兵值必须保持 `unknown`）。
 
 3. **输出与下一步**：
-   - 若当前只有可执行文件（无源码仓库）：请整理好「设备型号 + 连接模式 + `list --json` 端点信息 + 放电/充电态 `probe` 请求与响应报文」，方便我直接提交到 GitHub Issue。
-   - 若当前就在源码仓库中：请在 `src/providers/vendors/` 下参考现有 `FixedSpec` 或 `Provider` 实现新增协议并注册，在 `tests/fixtures/vendors/` 补充回放测试，更新 `docs/support-matrix.zh-CN.md` 与 `docs/support-matrix.md`，最后运行 `cargo test --locked` 验证全部通过。
+   - 若当前只有可执行文件（无源码仓库）：请整理好「设备型号 + 连接模式 + `list --json` 端点信息 + 关闭官方软件后的配对请求/响应双向 hex + 对应的真实电量与充放电状态」，方便我直接提交到 GitHub Issue。
+   - 若当前就在源码仓库中：请先阅读 `docs/contributing-device.md` 与 `docs/capture-and-replay.md`，再在 `src/providers/vendors/` 下参考现有 `FixedSpec` 或 `Provider` 实现新增协议并注册，在 `tests/fixtures/vendors/` 补充回放测试，更新 `docs/support-matrix.zh-CN.md` 与 `docs/support-matrix.md`，最后运行 `cargo test --locked` 验证全部通过。
 ```
 
 ## 文档导航

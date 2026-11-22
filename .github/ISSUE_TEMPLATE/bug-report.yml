@@ -1,0 +1,43 @@
+name: Bug report
+description: Report a bug in the CLI, library, tray app, or a supported device
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Supported device protocol
+        - CLI / Core library
+        - System tray (tray)
+        - Bluetooth LE (BAS)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, `wireless-battery` version or commit, and (if device-related) device model, connection mode, and firmware. Do not include serial numbers or raw system paths.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Steps to reproduce, expected vs actual behavior. If this is a regression after a library or firmware update, note the last working version.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics & logs
+      description: Sanitized `wireless-battery diagnose <device-id> --json` or `wireless-battery list --read --json` output, or error logs. Remove serial numbers, usernames, raw paths, and PCAP files.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Privacy & safety
+      options:
+        - label: I have removed serial numbers, usernames, raw system paths, keystrokes, and unrelated traffic.
+          required: true
