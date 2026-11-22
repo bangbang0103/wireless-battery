@@ -625,6 +625,7 @@ pub(crate) fn build_snapshot(state: &ServiceState) -> TraySnapshot {
 
     #[cfg_attr(not(feature = "dev-tools"), allow(unused_mut))]
     let mut snapshot = TraySnapshot {
+        app_version: crate::version::APP_DISPLAY_VERSION.to_owned(),
         devices: views,
         hidden_experimental_count,
         icon_state,

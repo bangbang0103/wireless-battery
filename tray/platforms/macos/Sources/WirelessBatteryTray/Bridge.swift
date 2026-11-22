@@ -112,6 +112,7 @@ struct DeviceViewModel: Codable, Identifiable, Equatable {
 }
 
 struct TraySnapshotModel: Codable, Equatable {
+    let appVersion: String
     let devices: [DeviceViewModel]
     let hiddenExperimentalCount: Int
     let iconState: String
@@ -122,12 +123,46 @@ struct TraySnapshotModel: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case devices, tooltip, refreshing, config
+        case appVersion = "app_version"
         case hiddenExperimentalCount = "hidden_experimental_count"
         case iconState = "icon_state"
         case lastSyncAt = "last_sync_at"
     }
 
+    init(
+        appVersion: String,
+        devices: [DeviceViewModel],
+        hiddenExperimentalCount: Int,
+        iconState: String,
+        tooltip: String,
+        lastSyncAt: String?,
+        refreshing: Bool,
+        config: TrayConfigModel
+    ) {
+        self.appVersion = appVersion
+        self.devices = devices
+        self.hiddenExperimentalCount = hiddenExperimentalCount
+        self.iconState = iconState
+        self.tooltip = tooltip
+        self.lastSyncAt = lastSyncAt
+        self.refreshing = refreshing
+        self.config = config
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.appVersion = try c.decodeIfPresent(String.self, forKey: .appVersion) ?? "v0.1.0"
+        self.devices = try c.decode([DeviceViewModel].self, forKey: .devices)
+        self.hiddenExperimentalCount = try c.decode(Int.self, forKey: .hiddenExperimentalCount)
+        self.iconState = try c.decode(String.self, forKey: .iconState)
+        self.tooltip = try c.decode(String.self, forKey: .tooltip)
+        self.lastSyncAt = try c.decodeIfPresent(String.self, forKey: .lastSyncAt)
+        self.refreshing = try c.decode(Bool.self, forKey: .refreshing)
+        self.config = try c.decode(TrayConfigModel.self, forKey: .config)
+    }
+
     static let empty = TraySnapshotModel(
+        appVersion: "v0.1.0",
         devices: [],
         hiddenExperimentalCount: 0,
         iconState: "idle",
@@ -136,6 +171,14 @@ struct TraySnapshotModel: Codable, Equatable {
         refreshing: false,
         config: .default
     )
+}
+
+enum UpdateCheckStatus: Equatable {
+    case idle
+    case checking
+    case upToDate
+    case available(latestVersion: String, url: URL)
+    case failed
 }
 
 struct LowBatteryAlertModel: Codable {
@@ -157,6 +200,7 @@ private struct UpdateEnvelope: Codable {
 
 final class TrayStore: ObservableObject {
     @Published var snapshot: TraySnapshotModel = .empty
+    @Published var updateStatus: UpdateCheckStatus = .idle
     var handle: OpaquePointer?
 
     private static let isoWithFrac: ISO8601DateFormatter = {
@@ -261,6 +305,68 @@ final class TrayStore: ObservableObject {
             defer { wb_tray_string_free(ptr) }
             return String(cString: ptr)
         }
+    }
+
+    func checkForUpdates() {
+        guard updateStatus != .checking else { return }
+        updateStatus = .checking
+
+        let currentVersion = snapshot.appVersion
+        guard let apiURL = URL(string: "https://api.github.com/repos/bangbang0103/wireless-battery/releases/latest") else {
+            updateStatus = .failed
+            return
+        }
+        var request = URLRequest(url: apiURL, timeoutInterval: 6)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("wireless-battery-tray/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self else { return }
+            let nextStatus: UpdateCheckStatus = {
+                guard error == nil,
+                      let http = response as? HTTPURLResponse,
+                      (200..<300).contains(http.statusCode),
+                      let data,
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let rawTag = json["tag_name"] as? String
+                else {
+                    return .failed
+                }
+                let tag = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !tag.isEmpty else { return .failed }
+                if Self.isNewerVersion(current: currentVersion, candidate: tag) {
+                    let normalized = tag.lowercased().hasPrefix("v") ? "v\(tag.dropFirst())" : "v\(tag)"
+                    let rawUrl = (json["html_url"] as? String) ?? "https://github.com/bangbang0103/wireless-battery/releases"
+                    let url = URL(string: rawUrl) ?? URL(string: "https://github.com/bangbang0103/wireless-battery/releases")!
+                    return .available(latestVersion: normalized, url: url)
+                }
+                return .upToDate
+            }()
+
+            DispatchQueue.main.async {
+                self.updateStatus = nextStatus
+            }
+        }.resume()
+    }
+
+    private static func isNewerVersion(current: String, candidate: String) -> Bool {
+        guard let cur = parseSemver(current), let cand = parseSemver(candidate) else {
+            return false
+        }
+        return cand > cur
+    }
+
+    private static func parseSemver(_ raw: String) -> (Int, Int, Int)? {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("v") || s.hasPrefix("V") {
+            s.removeFirst()
+        }
+        let core = s.split(whereSeparator: { $0 == "-" || $0 == "+" }).first.map(String.init) ?? s
+        let parts = core.split(separator: ".")
+        guard let major = parts.first.flatMap({ Int($0) }) else { return nil }
+        let minor = parts.count > 1 ? (Int(parts[1]) ?? 0) : 0
+        let patch = parts.count > 2 ? (Int(parts[2]) ?? 0) : 0
+        return (major, minor, patch)
     }
 
     static func parseISO8601(_ raw: String) -> Date? {

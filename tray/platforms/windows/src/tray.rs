@@ -7,8 +7,8 @@ use windows::core::HSTRING;
 use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconGetRect, Shell_NotifyIconW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP,
-    NIIF_ERROR, NIIF_WARNING, NIM_ADD, NIM_DELETE, NIM_MODIFY, NIM_SETVERSION, NOTIFYICONDATAW,
-    NOTIFYICONIDENTIFIER, NOTIFYICON_VERSION_4,
+    NIIF_ERROR, NIIF_INFO, NIIF_WARNING, NIM_ADD, NIM_DELETE, NIM_MODIFY, NIM_SETVERSION,
+    NOTIFYICONDATAW, NOTIFYICONIDENTIFIER, NOTIFYICON_VERSION_4,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CheckMenuRadioItem, CreatePopupMenu, DestroyMenu, GetCursorPos,
@@ -26,6 +26,7 @@ pub const MENU_CMD_TOGGLE_AUTOSTART: u32 = 1002;
 pub const MENU_CMD_QUIT: u32 = 1003;
 pub const MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY: u32 = 1004;
 pub const MENU_CMD_TOGGLE_LOW_BATTERY_SILENT: u32 = 1005;
+pub const MENU_CMD_CHECK_UPDATES: u32 = 1006;
 pub const MENU_CMD_THEME_SYSTEM: u32 = 1010;
 pub const MENU_CMD_THEME_LIGHT: u32 = 1011;
 pub const MENU_CMD_THEME_DARK: u32 = 1012;
@@ -133,6 +134,21 @@ impl TrayIconHost {
         write_wide_slice(&mut nid.szInfoTitle, lang.notify_title(alert.percentage));
         let body = lang.notify_body(&alert.device_name, alert.percentage);
         write_wide_slice(&mut nid.szInfo, &body);
+        unsafe {
+            let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
+        }
+    }
+
+    /// Emit a general informational Windows notification (e.g. update check result).
+    pub fn notify_info(&self, title: &str, body: &str) {
+        if !self.added {
+            return;
+        }
+        let mut nid = self.base_nid();
+        nid.uFlags = NIF_INFO;
+        nid.dwInfoFlags = NIIF_INFO;
+        write_wide_slice(&mut nid.szInfoTitle, title);
+        write_wide_slice(&mut nid.szInfo, body);
         unsafe {
             let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
         }
@@ -288,6 +304,12 @@ impl TrayIconHost {
                 autostart_flags,
                 MENU_CMD_TOGGLE_AUTOSTART as usize,
                 &HSTRING::from(lang.menu_autostart()),
+            );
+            let _ = AppendMenuW(
+                menu,
+                MF_STRING,
+                MENU_CMD_CHECK_UPDATES as usize,
+                &HSTRING::from(lang.menu_check_updates()),
             );
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
             #[cfg(feature = "dev-tools")]

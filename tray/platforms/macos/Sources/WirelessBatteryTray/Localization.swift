@@ -81,6 +81,25 @@ enum AppLanguage: Equatable {
     var settingAutostartHelpBundled: String { isZh ? "登录 macOS 时仅驻留菜单栏" : "Stay in the menu bar when logging in" }
     var settingAutostartHelpUnbundled: String { isZh ? "打包为 .app 后可用" : "Available when packaged as a .app bundle" }
 
+    var settingVersionTitle: String { isZh ? "版本与更新" : "Version & Updates" }
+    var settingVersionChecking: String { isZh ? "正在检查更新…" : "Checking for updates…" }
+    var settingVersionFailed: String { isZh ? "检查更新失败，请重试" : "Update check failed" }
+    var btnCheckUpdates: String { isZh ? "检查更新" : "Check" }
+    var btnCheckingUpdates: String { isZh ? "检查中…" : "Checking…" }
+    var btnDownloadUpdate: String { isZh ? "前往下载" : "Download" }
+
+    func settingVersionDesc(_ version: String) -> String {
+        isZh ? "当前版本 \(version)" : "Current version \(version)"
+    }
+
+    func settingVersionUpToDate(_ version: String) -> String {
+        isZh ? "\(version) · 已是最新版本" : "\(version) · Up to date"
+    }
+
+    func settingVersionAvailable(_ latest: String) -> String {
+        isZh ? "发现新版本 \(latest)" : "Update available: \(latest)"
+    }
+
     func themeLabel(_ mode: String) -> String {
         switch mode {
         case "light": return isZh ? "明亮" : "Light"
@@ -145,7 +164,7 @@ enum AppLanguage: Equatable {
 
     // MARK: - Dynamic Formatters
 
-    func footerSummary(lastSyncAt: String?, pollSecs: UInt64) -> String {
+    func footerSummary(appVersion: String, lastSyncAt: String?, pollSecs: UInt64) -> String {
         let sync = relativeTime(from: lastSyncAt)
         let poll: String
         if pollSecs == 0 {
@@ -157,7 +176,7 @@ enum AppLanguage: Equatable {
         } else {
             poll = isZh ? "每 \(pollSecs) 秒" : "Every \(pollSecs)s"
         }
-        return "\(sync) · \(poll)"
+        return "\(appVersion) · \(sync) · \(poll)"
     }
 
     func relativeTime(from raw: String?) -> String {

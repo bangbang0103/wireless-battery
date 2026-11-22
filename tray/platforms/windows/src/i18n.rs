@@ -299,6 +299,69 @@ impl Lang {
         }
     }
 
+    pub const fn setting_version_title(self) -> &'static str {
+        match self {
+            Self::ZhCn => "版本与更新",
+            Self::En => "Version & updates",
+        }
+    }
+
+    pub fn setting_version_desc(self, version: &str) -> String {
+        match self {
+            Self::ZhCn => format!("当前版本 {version}"),
+            Self::En => format!("Current version {version}"),
+        }
+    }
+
+    pub const fn setting_version_checking(self) -> &'static str {
+        match self {
+            Self::ZhCn => "正在检查更新…",
+            Self::En => "Checking for updates…",
+        }
+    }
+
+    pub fn setting_version_up_to_date(self, version: &str) -> String {
+        match self {
+            Self::ZhCn => format!("{version} · 已是最新版本"),
+            Self::En => format!("{version} · Up to date"),
+        }
+    }
+
+    pub fn setting_version_available(self, latest: &str) -> String {
+        match self {
+            Self::ZhCn => format!("发现新版本 {latest}"),
+            Self::En => format!("Update available: {latest}"),
+        }
+    }
+
+    pub const fn setting_version_failed(self) -> &'static str {
+        match self {
+            Self::ZhCn => "检查更新失败，请稍后重试",
+            Self::En => "Update check failed, try again",
+        }
+    }
+
+    pub const fn btn_check_updates(self) -> &'static str {
+        match self {
+            Self::ZhCn => "检查更新",
+            Self::En => "Check",
+        }
+    }
+
+    pub const fn btn_checking_updates(self) -> &'static str {
+        match self {
+            Self::ZhCn => "检查中…",
+            Self::En => "Checking…",
+        }
+    }
+
+    pub const fn btn_download_update(self) -> &'static str {
+        match self {
+            Self::ZhCn => "前往下载",
+            Self::En => "Download",
+        }
+    }
+
     // --- Feedback toasts ---
 
     pub const fn toast_pinned(self) -> &'static str {
@@ -394,6 +457,41 @@ impl Lang {
         }
     }
 
+    pub const fn menu_check_updates(self) -> &'static str {
+        match self {
+            Self::ZhCn => "检查更新",
+            Self::En => "Check for updates",
+        }
+    }
+
+    pub const fn notify_update_title(self) -> &'static str {
+        match self {
+            Self::ZhCn => "检查更新",
+            Self::En => "Update Check",
+        }
+    }
+
+    pub fn notify_update_available(self, latest: &str) -> String {
+        match self {
+            Self::ZhCn => format!("发现新版本 {latest}，正在打开下载页面。"),
+            Self::En => format!("New version {latest} is available. Opening download page."),
+        }
+    }
+
+    pub fn notify_update_up_to_date(self, version: &str) -> String {
+        match self {
+            Self::ZhCn => format!("当前已是最新版本（{version}）。"),
+            Self::En => format!("You are up to date ({version})."),
+        }
+    }
+
+    pub const fn notify_update_failed(self) -> &'static str {
+        match self {
+            Self::ZhCn => "检查更新失败，请检查网络后重试。",
+            Self::En => "Failed to check for updates. Please try again later.",
+        }
+    }
+
     // --- OS System Notification ---
 
     pub const fn notify_title(self, percentage: u8) -> &'static str {
@@ -439,7 +537,12 @@ impl Lang {
 
     // --- Dynamic formatters ---
 
-    pub fn footer_summary(self, last_sync_at: Option<DateTime<Utc>>, poll_secs: u64) -> String {
+    pub fn footer_summary(
+        self,
+        app_version: &str,
+        last_sync_at: Option<DateTime<Utc>>,
+        poll_secs: u64,
+    ) -> String {
         let sync_time = self.format_relative_time(last_sync_at);
         let poll_str = match (self, poll_secs) {
             (Self::ZhCn, 0) => "仅手动".to_owned(),
@@ -451,7 +554,7 @@ impl Lang {
             (Self::En, secs) if secs % 60 == 0 => format!("Every {} min", secs / 60),
             (Self::En, secs) => format!("Every {secs}s"),
         };
-        format!("{sync_time} · {poll_str}")
+        format!("{app_version} · {sync_time} · {poll_str}")
     }
 
     pub fn format_relative_time(self, at: Option<DateTime<Utc>>) -> String {
