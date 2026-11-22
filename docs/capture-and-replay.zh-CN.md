@@ -8,18 +8,17 @@ Fixture 中的 `hex` 以及字段偏移量均**不包含** HID Report ID；Repor
 
 每个 Fixture 步骤与一次传输操作一一对应：HID 的 `send_feature`、`get_feature`、`write_output`、`set_output`、`read_input`，以及标准传输的 `read_bas` 与 `read_xinput`。这避免了无法区分错误发生在请求阶段还是响应阶段的歧义。
 
-## 录制（Capture）
+## 录制与抓包（Capture）
 
-先列出设备，再针对已匹配设备显式发起录制：
+先列出设备，再使用 `probe` 探测未知/未匹配 HID 设备的原始报文，或在 Rust 测试/集成中使用 `RecordTransport` 录制已注册 Provider 的真实会话：
 
 ```bash
 wireless-battery list --json
-wireless-battery capture --device <device-id> --output tests/fixtures/vendors/<vendor>/<device>.json
+wireless-battery probe <device-id> --listen 5000
+wireless-battery probe <device-id> --report-id 0 --send "5A A5 01 02 00"
 ```
 
-`capture` 只会执行已注册 Provider 的正常电量查询，不是任意 HID 写入工具；未知设备请使用 `wireless-battery probe`。已存在的输出文件会被拒绝写入而不会被覆盖。终端会输出目标设备、步骤数和输出路径。
-
-v0.1 的 `capture` 命令封装了真实 HID 传输。BLE BAS Fixture 可以根据标准单字节读数构造，暂不提供任意 GATT 抓包工具。
+`RecordTransport` 包装真实 `Transport` 实现并仅录制已注册 Provider 发起的调用。BLE BAS Fixture 可以根据标准单字节读数构造，暂不提供任意 GATT 抓包工具。
 
 ## 脱敏规范
 

@@ -4,7 +4,7 @@
 
 ## Build matrix
 
-CI is configured for Windows, Linux, and macOS using Rust 1.76. It runs formatting, Clippy, all-feature tests, validation, and synthetic replay. Configuration is not a claim that every platform has completed real-hardware verification.
+CI is configured for Windows and macOS using Rust 1.76. It runs formatting, Clippy (all-features and `--no-default-features`), all-feature tests (including synthetic and vendor replay), and release binary/tray builds. Configuration is not a claim that every platform has completed real-hardware verification.
 
 Linux HIDAPI builds may need a C compiler, `pkg-config`, `libudev-dev`, and `libusb-1.0-0-dev`, depending on the selected HIDAPI backend. BLE uses BlueZ through `btleplug`; no arbitrary Bluetooth command interface is exposed.
 
@@ -28,9 +28,9 @@ Only BAS Battery Level percentage is returned. Charging remains unknown unless a
 
 ## Timeout and report-length limitations
 
-The total deadline covers lock wait, cooldown, protocol steps, and processing. Input reads use the smaller of package I/O timeout and remaining total budget. Some HID Feature operations can block in the OS and cannot be safely cancelled; the library documents rather than hides this limitation.
+The total deadline covers lock wait, cooldown, protocol steps, and processing. Input reads use the smaller of the provider's I/O timeout and remaining total budget. Some HID Feature operations can block in the OS and cannot be safely cancelled; the library documents rather than hides this limitation.
 
-HIDAPI 2.6 does not expose input/output/feature report lengths in `DeviceInfo`. Those endpoint fields can therefore be `null`, and packages requiring them may not match on real enumeration even though synthetic replay can supply them. `interface_number` and `bus_type` are populated cross-platform when supplied by HIDAPI, and unnumbered HID reports (Report ID 0) are detected from the device's report descriptor when available.
+HIDAPI 2.6 does not expose input/output/feature report lengths in `DeviceInfo`. Those endpoint fields can therefore be `null`, and providers requiring them may not match on real enumeration even though synthetic replay can supply them. `interface_number` and `bus_type` are populated cross-platform when supplied by HIDAPI, and unnumbered HID reports (Report ID 0) are detected from the device's report descriptor when available.
 
 ## Real-hardware checklist
 
@@ -40,8 +40,8 @@ For each claimed platform, verify normal read, charging/not-charging where suppo
 
 Built-in vendor providers preserve WriteFile, SetFeature, and SetOutputReport as distinct operations. SetOutputReport currently has a small Windows-native implementation (opened lazily on first use) because HIDAPI 2.6 does not expose it; record and replay use the same explicit operation. These device queries are experimental on other desktop platforms unless separately verified.
 
-XInput uses runtime loading of `XInput1_4.dll` (with `XInput1_3.dll` fallback) restricted to System32 via `LoadLibraryExW`, so no XInput import library is required. It is Windows-only and returns four discrete levels without percentage conversion. WOB Rainy75 and Logitech verification status is recorded in [hardware-verification.md](hardware-verification.md).
+XInput uses runtime loading of `XInput1_4.dll` (with `XInput1_3.dll` fallback) restricted to System32 via `LoadLibraryExW`, so no XInput import library is required. It is Windows-only and returns four discrete levels without percentage conversion. Real-hardware replay fixtures (such as WOB Rainy75 and Logitech HID++) are stored under [`tests/fixtures/vendors/`](../tests/fixtures/vendors/).
 
 ---
 
-Related docs: [Architecture](architecture.md) · [Support matrix](support-matrix.md) · [Verification checklist](hardware-verification.md) · [Back to README](../README.md)
+Related docs: [Architecture](architecture.md) · [Support matrix](support-matrix.md) · [Capture and replay](capture-and-replay.md) · [Back to README](../README.md)

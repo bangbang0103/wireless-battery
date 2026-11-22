@@ -9,7 +9,7 @@
 1. Enumerate static endpoint metadata without opening a session.
 2. Return every endpoint. Unmatched, candidate, and conflicting endpoints have explicit match status and unknown support where appropriate.
 3. On an explicit read, require one exact provider from the unified `Registry`. Built-in vendor HID providers, BLE BAS (`bluetooth.bas`), and XInput (`os.xinput`) all dispatch through the same `Provider` interface.
-4. Acquire the endpoint lock within the caller's total deadline, apply package cooldown, then open a session.
+4. Acquire the endpoint lock within the caller's total deadline, apply provider cooldown, then open a session.
 5. Run at most the provider's bounded protocol. Each step checks the shared deadline.
 6. Validate percentage range and derive precision from values actually present. A successful exchange infers `online` only when the protocol did not explicitly report reachability.
 7. Cache only successful readings. A failed refresh returns an error unless stale was explicitly allowed.
@@ -43,8 +43,8 @@ Public IDs are irreversible hashes of OS enumeration identity, not serial number
 
 ## Capability evidence
 
-Runtime `Capabilities` is deliberately coarse. Package lifecycle and per-capability/per-state evidence are separate metadata. For example, charge-state support does not prove that `full`, sleeping, or offline states have been verified.
+Runtime `Capabilities` is deliberately coarse. Provider lifecycle and per-capability/per-state evidence are separate metadata. For example, charge-state support does not prove that `full`, sleeping, or offline states have been verified.
 
 ---
 
-Related docs: [Support matrix](support-matrix.md) · [Capture and replay](capture-and-replay.md) · [Platform support](platform-support.md) · [Native system tray](../tray/README.md) · [Back to README](../README.md)
+Related docs: [Support matrix](support-matrix.md) · [Capture and replay](capture-and-replay.md) · [Platform support](platform-support.md) · [Contributing a device](contributing-device.md) · [Native system tray](../tray/README.md) · [Back to README](../README.md)
