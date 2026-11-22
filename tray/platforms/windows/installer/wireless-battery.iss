@@ -26,6 +26,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#AppExeName}
 ChangesEnvironment=yes
+AppMutex=Local\WirelessBatteryTraySingleInstance,Local\WirelessBatteryTrayDevSingleInstance
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -73,4 +74,51 @@ begin
   end;
 
   Result := Pos(';' + UpperCase(Param) + ';', ';' + UpperCase(OrigPath) + ';') = 0;
+end;
+
+procedure RemoveDirFromPath(const RootKey: Integer; const SubKey: string; const TargetDir: string);
+var
+  OrigPath, NewPath, CleanTarget, Entry: string;
+  SepPos: Integer;
+  Changed: Boolean;
+begin
+  if not RegQueryStringValue(RootKey, SubKey, 'Path', OrigPath) then
+    exit;
+
+  CleanTarget := RemoveBackslashUnlessRoot(TargetDir);
+  NewPath := '';
+  Changed := False;
+  while OrigPath <> '' do begin
+    SepPos := Pos(';', OrigPath);
+    if SepPos > 0 then begin
+      Entry := Copy(OrigPath, 1, SepPos - 1);
+      OrigPath := Copy(OrigPath, SepPos + 1, Length(OrigPath) - SepPos);
+    end else begin
+      Entry := OrigPath;
+      OrigPath := '';
+    end;
+    if Entry = '' then
+      continue;
+    if CompareText(RemoveBackslashUnlessRoot(Entry), CleanTarget) = 0 then begin
+      Changed := True;
+    end else begin
+      if NewPath <> '' then
+        NewPath := NewPath + ';';
+      NewPath := NewPath + Entry;
+    end;
+  end;
+
+  if Changed then
+    RegWriteExpandStringValue(RootKey, SubKey, 'Path', NewPath);
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then begin
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', 'WirelessBatteryTray');
+    if IsAdminInstallMode then
+      RemoveDirFromPath(HKEY_LOCAL_MACHINE, 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', ExpandConstant('{app}'))
+    else
+      RemoveDirFromPath(HKEY_CURRENT_USER, 'Environment', ExpandConstant('{app}'));
+  end;
 end;

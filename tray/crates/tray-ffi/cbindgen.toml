@@ -1,0 +1,8 @@
+language = "C"
+include_guard = "WIRELESS_BATTERY_TRAY_H"
+autogen_warning = "/* Warning: this file matches wireless-battery-tray-ffi exports; keep synchronized with src/lib.rs and src/dev_tools.rs. */"
+cpp_compat = true
+tab_width = 4
+
+[export]
+include = ["WbTrayHandle", "WbTrayUpdateCallback"]

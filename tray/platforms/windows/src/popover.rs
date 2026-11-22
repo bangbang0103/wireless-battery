@@ -13,6 +13,7 @@ use crate::renderer::{
     POPOVER_WIDTH_DIP,
 };
 use crate::theme::SystemTheme;
+use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
@@ -35,7 +36,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     ReleaseCapture, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT, VK_ESCAPE,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, GetClientRect, GetCursorPos, GetWindowLongPtrW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetCursorPos, GetWindowLongPtrW,
     IsWindowVisible, KillTimer, LoadCursorW, PostMessageW, RegisterClassExW, SendMessageW,
     SetCursor, SetForegroundWindow, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow,
     GWLP_USERDATA, HTCAPTION, HWND_TOPMOST, IDC_ARROW, IDC_HAND, SWP_NOACTIVATE, SWP_NOMOVE,
@@ -70,6 +71,7 @@ pub enum PopoverAction {
     SetPollInterval(u64),
     ToggleLowBatteryNotify,
     ToggleLowBatterySilent,
+    ToggleAllowExperimental,
     ToggleAutostart,
     CheckUpdates,
     OpenUpdateUrl(String),
@@ -171,7 +173,7 @@ impl Drop for VsyncPacer {
     }
 }
 
-type ActionCallback = Box<dyn FnMut(PopoverAction)>;
+type ActionCallback = Box<dyn Fn(PopoverAction)>;
 
 struct PopoverInner {
     hwnd: HWND,
@@ -187,19 +189,35 @@ struct PopoverInner {
     tracking_mouse: bool,
     vsync: VsyncPacer,
     last_auto_hide: Option<Instant>,
+}
+
+struct PopoverCell {
+    hwnd: HWND,
+    core: RefCell<PopoverInner>,
     on_action: ActionCallback,
 }
 
 /// Owning handle for the native Direct2D + DWM Acrylic popover window.
 pub struct PopoverWindow {
-    inner: Box<PopoverInner>,
+    cell: Box<PopoverCell>,
+}
+
+impl Drop for PopoverWindow {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = KillTimer(self.cell.hwnd, COLLAPSE_TIMER_ID);
+            let _ = KillTimer(self.cell.hwnd, FEEDBACK_TIMER_ID);
+            let _ = SetWindowLongPtrW(self.cell.hwnd, GWLP_USERDATA, 0);
+            let _ = DestroyWindow(self.cell.hwnd);
+        }
+    }
 }
 
 impl PopoverWindow {
     pub fn create(
         initial_snapshot: TraySnapshot,
         theme: SystemTheme,
-        on_action: impl FnMut(PopoverAction) + 'static,
+        on_action: impl Fn(PopoverAction) + 'static,
     ) -> windows::core::Result<Self> {
         let renderer = PopoverRenderer::new()?;
         let class_name = w!("WirelessBatteryTrayPopover");
@@ -245,159 +263,225 @@ impl PopoverWindow {
             ui.sync_from_snapshot(&initial_snapshot, true);
             let vsync = VsyncPacer::start(hwnd);
 
-            let mut inner = Box::new(PopoverInner {
+            let cell = Box::new(PopoverCell {
                 hwnd,
-                renderer,
-                ui,
-                snapshot: initial_snapshot,
-                theme,
-                effective_dark,
-                acrylic_active,
-                compact_active: false,
-                dwm_compact_applied: false,
-                last_size_px: (POPOVER_WIDTH_DIP as i32, 280),
-                tracking_mouse: false,
-                vsync,
-                last_auto_hide: None,
+                core: RefCell::new(PopoverInner {
+                    hwnd,
+                    renderer,
+                    ui,
+                    snapshot: initial_snapshot,
+                    theme,
+                    effective_dark,
+                    acrylic_active,
+                    compact_active: false,
+                    dwm_compact_applied: false,
+                    last_size_px: (POPOVER_WIDTH_DIP as i32, 280),
+                    tracking_mouse: false,
+                    vsync,
+                    last_auto_hide: None,
+                }),
                 on_action: Box::new(on_action),
             });
 
-            SetWindowLongPtrW(
-                hwnd,
-                GWLP_USERDATA,
-                (&mut *inner as *mut PopoverInner) as isize,
-            );
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, (&*cell as *const PopoverCell) as isize);
 
             // Pre-warm Direct2D render target and DirectWrite font caches while hidden so the
             // very first click renders immediately with zero white flash.
-            paint_inner(&mut inner);
+            if let Ok(mut inner) = cell.core.try_borrow_mut() {
+                paint_inner(&mut inner);
+            }
 
-            Ok(Self { inner })
+            Ok(Self { cell })
         }
     }
 
     pub fn is_visible(&self) -> bool {
-        unsafe { IsWindowVisible(self.inner.hwnd).as_bool() }
+        unsafe { IsWindowVisible(self.cell.hwnd).as_bool() }
     }
 
     /// Toggle visibility cleanly, debouncing click-on-tray-icon right after focus-loss hide.
-    pub fn toggle(&mut self, anchor: Option<RECT>) {
+    pub fn toggle(&self, anchor: Option<RECT>) {
         if self.is_visible() {
             self.hide();
             return;
         }
-        if let Some(last) = self.inner.last_auto_hide {
-            if last.elapsed().as_millis() < 220 {
-                self.inner.last_auto_hide = None;
+        let skip = {
+            let Ok(mut inner) = self.cell.core.try_borrow_mut() else {
                 return;
+            };
+            if inner
+                .last_auto_hide
+                .is_some_and(|last| last.elapsed().as_millis() < 220)
+            {
+                inner.last_auto_hide = None;
+                true
+            } else {
+                false
+            }
+        };
+        if !skip {
+            self.show(anchor);
+        }
+    }
+
+    pub fn show(&self, anchor: Option<RECT>) {
+        let pos = {
+            let Ok(mut inner) = self.cell.core.try_borrow_mut() else {
+                return;
+            };
+            inner.ui.view = PopoverView::Main;
+            inner.ui.close_dropdown_menu();
+            inner.ui.hovered = None;
+            inner.ui.pressed = None;
+            inner.ui.mouse_inside = false;
+            inner.compact_active = false;
+            ensure_dwm_surface_mode(&mut inner, false);
+            let snap = inner.snapshot.clone();
+            inner.ui.sync_from_snapshot(&snap, true);
+            // Position and render synchronously while still hidden to eliminate any white flash.
+            compute_position_and_resize(&mut inner, anchor, true)
+        };
+        apply_window_pos(self.cell.hwnd, pos);
+        if let Ok(mut inner) = self.cell.core.try_borrow_mut() {
+            paint_inner(&mut inner);
+        }
+        unsafe {
+            let _ = ShowWindow(self.cell.hwnd, SW_SHOW);
+            let _ = SetForegroundWindow(self.cell.hwnd);
+            let _ = UpdateWindow(self.cell.hwnd);
+        }
+        if let Ok(mut inner) = self.cell.core.try_borrow_mut() {
+            sync_vsync_pacer(&mut inner);
+        }
+    }
+
+    pub fn hide(&self) {
+        if let Ok(inner) = self.cell.core.try_borrow() {
+            inner.vsync.set_active(false);
+        }
+        unsafe {
+            let _ = KillTimer(self.cell.hwnd, COLLAPSE_TIMER_ID);
+            let _ = ShowWindow(self.cell.hwnd, SW_HIDE);
+        }
+        if let Ok(mut inner) = self.cell.core.try_borrow_mut() {
+            inner.ui.pinned = false;
+            inner.ui.mouse_inside = false;
+            inner.ui.close_dropdown_menu();
+            inner.compact_active = false;
+            ensure_dwm_surface_mode(&mut inner, false);
+            inner.ui.hovered = None;
+            inner.ui.pressed = None;
+            inner.ui.feedback_banner = None;
+        }
+    }
+
+    pub fn set_snapshot(&self, snapshot: TraySnapshot) {
+        let visible = self.is_visible();
+        let (pos, needs_paint) = {
+            let Ok(mut inner) = self.cell.core.try_borrow_mut() else {
+                return;
+            };
+            let next_dark = inner.theme.resolve_dark(snapshot.config.theme_mode);
+            let dark_changed = next_dark != inner.effective_dark;
+            inner.snapshot = snapshot;
+            let snap = inner.snapshot.clone();
+            inner.ui.sync_from_snapshot(&snap, !visible);
+            if dark_changed {
+                inner.effective_dark = next_dark;
+                inner.acrylic_active = apply_dwm_surface(
+                    inner.hwnd,
+                    next_dark,
+                    inner.theme.transparency_enabled,
+                    inner.dwm_compact_applied,
+                );
+            }
+            let pos = if visible {
+                compute_position_and_resize(&mut inner, None, false)
+            } else {
+                None
+            };
+            (pos, visible || dark_changed)
+        };
+        apply_window_pos(self.cell.hwnd, pos);
+        if needs_paint {
+            if let Ok(mut inner) = self.cell.core.try_borrow_mut() {
+                if visible {
+                    sync_vsync_pacer(&mut inner);
+                }
+                paint_inner(&mut inner);
             }
         }
-        self.show(anchor);
     }
 
-    pub fn show(&mut self, anchor: Option<RECT>) {
-        self.inner.ui.view = PopoverView::Main;
-        self.inner.ui.close_dropdown_menu();
-        self.inner.ui.hovered = None;
-        self.inner.ui.pressed = None;
-        self.inner.ui.mouse_inside = false;
-        self.inner.compact_active = false;
-        ensure_dwm_surface_mode(&mut self.inner, false);
-        self.inner.ui.sync_from_snapshot(&self.inner.snapshot, true);
-        // Position and render synchronously while still hidden to eliminate any white flash.
-        self.position_and_resize(anchor, true);
-        paint_inner(&mut self.inner);
-        unsafe {
-            let _ = ShowWindow(self.inner.hwnd, SW_SHOW);
-            let _ = SetForegroundWindow(self.inner.hwnd);
-            let _ = UpdateWindow(self.inner.hwnd);
-        }
-        sync_vsync_pacer(&mut self.inner);
-    }
-
-    pub fn hide(&mut self) {
-        self.inner.vsync.set_active(false);
-        unsafe {
-            let _ = KillTimer(self.inner.hwnd, COLLAPSE_TIMER_ID);
-            let _ = ShowWindow(self.inner.hwnd, SW_HIDE);
-        }
-        self.inner.ui.pinned = false;
-        self.inner.ui.mouse_inside = false;
-        self.inner.ui.close_dropdown_menu();
-        self.inner.compact_active = false;
-        ensure_dwm_surface_mode(&mut self.inner, false);
-        self.inner.ui.hovered = None;
-        self.inner.ui.pressed = None;
-        self.inner.ui.feedback_banner = None;
-    }
-
-    pub fn set_snapshot(&mut self, snapshot: TraySnapshot) {
-        let visible = self.is_visible();
-        let next_dark = self.inner.theme.resolve_dark(snapshot.config.theme_mode);
-        let dark_changed = next_dark != self.inner.effective_dark;
-        self.inner.snapshot = snapshot;
-        self.inner
-            .ui
-            .sync_from_snapshot(&self.inner.snapshot, !visible);
-        if dark_changed {
-            self.inner.effective_dark = next_dark;
-            self.inner.acrylic_active = apply_dwm_surface(
-                self.inner.hwnd,
-                next_dark,
-                self.inner.theme.transparency_enabled,
-                self.inner.dwm_compact_applied,
-            );
-        }
-        if visible {
-            self.position_and_resize(None, false);
-            sync_vsync_pacer(&mut self.inner);
-            paint_inner(&mut self.inner);
-        } else if dark_changed {
-            paint_inner(&mut self.inner);
-        }
-    }
-
-    pub fn set_theme(&mut self, theme: SystemTheme) {
-        if self.inner.theme == theme {
+    pub fn set_theme(&self, theme: SystemTheme) {
+        let Ok(mut inner) = self.cell.core.try_borrow_mut() else {
+            return;
+        };
+        if inner.theme == theme {
             return;
         }
-        let prev_transparency = self.inner.theme.transparency_enabled;
-        self.inner.theme = theme;
-        let next_dark = theme.resolve_dark(self.inner.snapshot.config.theme_mode);
-        if next_dark != self.inner.effective_dark || prev_transparency != theme.transparency_enabled
-        {
-            self.inner.effective_dark = next_dark;
-            self.inner.acrylic_active = apply_dwm_surface(
-                self.inner.hwnd,
+        let prev_transparency = inner.theme.transparency_enabled;
+        inner.theme = theme;
+        let next_dark = theme.resolve_dark(inner.snapshot.config.theme_mode);
+        if next_dark != inner.effective_dark || prev_transparency != theme.transparency_enabled {
+            inner.effective_dark = next_dark;
+            inner.acrylic_active = apply_dwm_surface(
+                inner.hwnd,
                 next_dark,
                 theme.transparency_enabled,
-                self.inner.dwm_compact_applied,
+                inner.dwm_compact_applied,
             );
         }
-        paint_inner(&mut self.inner);
+        paint_inner(&mut inner);
     }
 
-    pub fn show_feedback(&mut self, text: impl Into<String>) {
-        self.inner.ui.feedback_banner = Some(text.into());
+    pub fn show_feedback(&self, text: impl Into<String>) {
+        if let Ok(mut inner) = self.cell.core.try_borrow_mut() {
+            inner.ui.feedback_banner = Some(text.into());
+        }
         unsafe {
-            let _ = SetTimer(self.inner.hwnd, FEEDBACK_TIMER_ID, 2000, None);
-            let _ = InvalidateRect(self.inner.hwnd, None, false);
+            let _ = SetTimer(self.cell.hwnd, FEEDBACK_TIMER_ID, 2000, None);
+            let _ = InvalidateRect(self.cell.hwnd, None, false);
         }
     }
 
     pub fn hwnd(&self) -> HWND {
-        self.inner.hwnd
+        self.cell.hwnd
     }
 
-    pub fn set_update_status(&mut self, status: UpdateUiStatus) {
-        self.inner.ui.update_status = status;
-        if self.is_visible() {
-            paint_inner(&mut self.inner);
+    pub fn set_update_status(&self, status: UpdateUiStatus) {
+        let visible = self.is_visible();
+        if let Ok(mut inner) = self.cell.core.try_borrow_mut() {
+            inner.ui.update_status = status;
+            if visible {
+                paint_inner(&mut inner);
+            }
         }
     }
+}
 
-    fn position_and_resize(&mut self, anchor: Option<RECT>, reposition_from_anchor: bool) {
-        position_and_resize_inner(&mut self.inner, anchor, reposition_from_anchor);
+struct WindowPosUpdate {
+    x: i32,
+    y: i32,
+    width_px: i32,
+    height_px: i32,
+    flags: u32,
+}
+
+fn apply_window_pos(hwnd: HWND, update: Option<WindowPosUpdate>) {
+    let Some(upd) = update else {
+        return;
+    };
+    unsafe {
+        let _ = SetWindowPos(
+            hwnd,
+            HWND_TOPMOST,
+            upd.x,
+            upd.y,
+            upd.width_px,
+            upd.height_px,
+            windows::Win32::UI::WindowsAndMessaging::SET_WINDOW_POS_FLAGS(upd.flags),
+        );
     }
 }
 
@@ -419,11 +503,11 @@ fn ensure_dwm_surface_mode(inner: &mut PopoverInner, compact_no_bg: bool) {
     }
 }
 
-fn position_and_resize_inner(
+fn compute_position_and_resize(
     inner: &mut PopoverInner,
     anchor: Option<RECT>,
     reposition_from_anchor: bool,
-) {
+) -> Option<WindowPosUpdate> {
     let dpi = window_dpi(inner.hwnd);
     let scale = (dpi as f32) / 96.0;
     let width_px = (POPOVER_WIDTH_DIP * scale).round() as i32;
@@ -481,24 +565,20 @@ fn position_and_resize_inner(
         };
 
         inner.last_size_px = (width_px, height_px);
-        unsafe {
-            let _ = SetWindowPos(
-                inner.hwnd,
-                HWND_TOPMOST,
-                x,
-                y,
-                width_px,
-                height_px,
-                SWP_NOACTIVATE,
-            );
-        }
+        Some(WindowPosUpdate {
+            x,
+            y,
+            width_px,
+            height_px,
+            flags: SWP_NOACTIVATE.0,
+        })
     } else {
         let next_compact = inner.ui.is_compact_pinned(&inner.snapshot);
         ensure_dwm_surface_mode(inner, next_compact);
 
         // Skip redundant SetWindowPos when size & compact state haven't changed (prevents DWM jitter).
         if (width_px, height_px) == inner.last_size_px && next_compact == inner.compact_active {
-            return;
+            return None;
         }
 
         let mut cur = RECT::default();
@@ -540,17 +620,13 @@ fn position_and_resize_inner(
             work.top + margin,
             (work.bottom - height_px - margin).max(work.top + margin),
         );
-        unsafe {
-            let _ = SetWindowPos(
-                inner.hwnd,
-                HWND_TOPMOST,
-                cur.left,
-                new_top,
-                width_px,
-                height_px,
-                SWP_NOACTIVATE,
-            );
-        }
+        Some(WindowPosUpdate {
+            x: cur.left,
+            y: new_top,
+            width_px,
+            height_px,
+            flags: SWP_NOACTIVATE.0,
+        })
     }
 }
 
@@ -655,56 +731,82 @@ unsafe extern "system" fn popover_wnd_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut PopoverInner;
+    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const PopoverCell;
     if ptr.is_null() {
         return DefWindowProcW(hwnd, msg, wparam, lparam);
     }
-    let inner = &mut *ptr;
+    let cell = &*ptr;
 
     match msg {
         WM_ERASEBKGND => LRESULT(1),
         WM_PAINT => {
             let mut ps = PAINTSTRUCT::default();
             let _ = BeginPaint(hwnd, &mut ps);
-            paint_inner(inner);
+            if let Ok(mut inner) = cell.core.try_borrow_mut() {
+                paint_inner(&mut inner);
+            }
             let _ = EndPaint(hwnd, &ps);
             LRESULT(0)
         }
         WM_ANIM_FRAME => {
-            inner.vsync.mark_frame_consumed();
-            if IsWindowVisible(hwnd).as_bool() {
-                paint_inner(inner);
+            let visible = IsWindowVisible(hwnd).as_bool();
+            if let Ok(mut inner) = cell.core.try_borrow_mut() {
+                inner.vsync.mark_frame_consumed();
+                if visible {
+                    paint_inner(&mut inner);
+                }
+                sync_vsync_pacer(&mut inner);
             }
-            sync_vsync_pacer(inner);
             LRESULT(0)
         }
         WM_ACTIVATE => {
             let state = (wparam.0 & 0xFFFF) as u32;
-            if state == WA_INACTIVE && !inner.ui.pinned && IsWindowVisible(hwnd).as_bool() {
-                inner.vsync.set_active(false);
-                inner.last_auto_hide = Some(Instant::now());
+            let should_hide = if state == WA_INACTIVE && IsWindowVisible(hwnd).as_bool() {
+                let Ok(mut inner) = cell.core.try_borrow_mut() else {
+                    return LRESULT(0);
+                };
+                if inner.ui.pinned {
+                    false
+                } else {
+                    inner.vsync.set_active(false);
+                    inner.last_auto_hide = Some(Instant::now());
+                    inner.ui.close_dropdown_menu();
+                    inner.ui.hovered = None;
+                    inner.ui.pressed = None;
+                    inner.ui.feedback_banner = None;
+                    true
+                }
+            } else {
+                false
+            };
+            if should_hide {
                 let _ = ShowWindow(hwnd, SW_HIDE);
-                inner.ui.close_dropdown_menu();
-                inner.ui.hovered = None;
-                inner.ui.pressed = None;
-                inner.ui.feedback_banner = None;
             }
             LRESULT(0)
         }
         WM_KEYDOWN => {
             if wparam.0 as u16 == VK_ESCAPE.0 {
-                if inner.ui.open_dropdown.is_some() {
-                    inner.ui.close_dropdown_menu();
-                    sync_vsync_pacer(inner);
-                    paint_inner(inner);
-                } else {
-                    inner.vsync.set_active(false);
-                    let _ = KillTimer(hwnd, COLLAPSE_TIMER_ID);
-                    inner.ui.pinned = false;
-                    inner.ui.mouse_inside = false;
-                    inner.ui.pressed = None;
-                    inner.compact_active = false;
-                    ensure_dwm_surface_mode(inner, false);
+                let should_hide = {
+                    let Ok(mut inner) = cell.core.try_borrow_mut() else {
+                        return LRESULT(0);
+                    };
+                    if inner.ui.open_dropdown.is_some() {
+                        inner.ui.close_dropdown_menu();
+                        sync_vsync_pacer(&mut inner);
+                        paint_inner(&mut inner);
+                        false
+                    } else {
+                        inner.vsync.set_active(false);
+                        let _ = KillTimer(hwnd, COLLAPSE_TIMER_ID);
+                        inner.ui.pinned = false;
+                        inner.ui.mouse_inside = false;
+                        inner.ui.pressed = None;
+                        inner.compact_active = false;
+                        ensure_dwm_surface_mode(&mut inner, false);
+                        true
+                    }
+                };
+                if should_hide {
                     let _ = ShowWindow(hwnd, SW_HIDE);
                 }
             }
@@ -712,11 +814,20 @@ unsafe extern "system" fn popover_wnd_proc(
         }
         WM_LBUTTONDOWN => {
             let (x_dip, y_dip) = lparam_to_dip(hwnd, lparam);
-            let hit = inner.renderer.hit_test(x_dip, y_dip);
-            if hit.is_some() {
-                inner.ui.pressed = hit;
-                paint_inner(inner);
-            } else if inner.ui.pinned && !inner.compact_active && y_dip <= HEADER_HEIGHT {
+            let should_drag = {
+                let Ok(mut inner) = cell.core.try_borrow_mut() else {
+                    return LRESULT(0);
+                };
+                let hit = inner.renderer.hit_test(x_dip, y_dip);
+                if hit.is_some() {
+                    inner.ui.pressed = hit;
+                    paint_inner(&mut inner);
+                    false
+                } else {
+                    inner.ui.pinned && !inner.compact_active && y_dip <= HEADER_HEIGHT
+                }
+            };
+            if should_drag {
                 let _ = KillTimer(hwnd, COLLAPSE_TIMER_ID);
                 let _ = ReleaseCapture();
                 let _ = SendMessageW(
@@ -730,27 +841,38 @@ unsafe extern "system" fn popover_wnd_proc(
         }
         WM_MOUSEMOVE => {
             let _ = KillTimer(hwnd, COLLAPSE_TIMER_ID);
-            if !inner.tracking_mouse {
-                let mut tme = TRACKMOUSEEVENT {
-                    cbSize: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
-                    dwFlags: TME_LEAVE,
-                    hwndTrack: hwnd,
-                    dwHoverTime: 0,
-                };
-                let _ = TrackMouseEvent(&mut tme);
-                inner.tracking_mouse = true;
-            }
-            if !inner.ui.mouse_inside {
-                inner.ui.mouse_inside = true;
-                if inner.compact_active {
-                    position_and_resize_inner(inner, None, false);
-                    paint_inner(inner);
-                }
-            }
             let (x_dip, y_dip) = lparam_to_dip(hwnd, lparam);
-            let hit = inner.renderer.hit_test(x_dip, y_dip);
-            let interactive_cursor =
-                hit.is_some() && !matches!(hit, Some(HitTarget::CloseDropdown));
+            let (pos_upd, interactive_cursor, needs_paint) = {
+                let Ok(mut inner) = cell.core.try_borrow_mut() else {
+                    return LRESULT(0);
+                };
+                if !inner.tracking_mouse {
+                    let mut tme = TRACKMOUSEEVENT {
+                        cbSize: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
+                        dwFlags: TME_LEAVE,
+                        hwndTrack: hwnd,
+                        dwHoverTime: 0,
+                    };
+                    let _ = TrackMouseEvent(&mut tme);
+                    inner.tracking_mouse = true;
+                }
+                let mut pos_upd = None;
+                let mut needs_paint = false;
+                if !inner.ui.mouse_inside {
+                    inner.ui.mouse_inside = true;
+                    if inner.compact_active {
+                        pos_upd = compute_position_and_resize(&mut inner, None, false);
+                        needs_paint = true;
+                    }
+                }
+                let hit = inner.renderer.hit_test(x_dip, y_dip);
+                let interactive = hit.is_some() && !matches!(hit, Some(HitTarget::CloseDropdown));
+                if hit != inner.ui.hovered {
+                    inner.ui.hovered = hit;
+                    needs_paint = true;
+                }
+                (pos_upd, interactive, needs_paint)
+            };
             if interactive_cursor {
                 if let Ok(hand) = LoadCursorW(None, IDC_HAND) {
                     let _ = SetCursor(hand);
@@ -758,35 +880,42 @@ unsafe extern "system" fn popover_wnd_proc(
             } else if let Ok(arrow) = LoadCursorW(None, IDC_ARROW) {
                 let _ = SetCursor(arrow);
             }
-            if hit != inner.ui.hovered {
-                inner.ui.hovered = hit;
-                paint_inner(inner);
+            apply_window_pos(hwnd, pos_upd);
+            if needs_paint {
+                if let Ok(mut inner) = cell.core.try_borrow_mut() {
+                    paint_inner(&mut inner);
+                }
             }
             LRESULT(0)
         }
         WM_MOUSELEAVE => {
-            inner.tracking_mouse = false;
-            if inner.ui.hovered.is_some() || inner.ui.pressed.is_some() {
-                inner.ui.hovered = None;
-                inner.ui.pressed = None;
-                paint_inner(inner);
-            }
-            if inner.ui.pinned {
-                let _ = SetTimer(hwnd, COLLAPSE_TIMER_ID, 180, None);
-            } else {
-                inner.ui.mouse_inside = false;
+            if let Ok(mut inner) = cell.core.try_borrow_mut() {
+                inner.tracking_mouse = false;
+                if inner.ui.hovered.is_some() || inner.ui.pressed.is_some() {
+                    inner.ui.hovered = None;
+                    inner.ui.pressed = None;
+                    paint_inner(&mut inner);
+                }
+                if inner.ui.pinned {
+                    let _ = SetTimer(hwnd, COLLAPSE_TIMER_ID, 180, None);
+                } else {
+                    inner.ui.mouse_inside = false;
+                }
             }
             LRESULT(0)
         }
         WM_MOUSEWHEEL => {
-            if inner.ui.open_dropdown.is_none() {
-                let delta = ((wparam.0 >> 16) as u16) as i16 as f32;
-                let max_s = inner.renderer.max_scroll();
-                if max_s > 0.0 {
-                    let next = (inner.ui.scroll_offset - (delta / 120.0) * 32.0).clamp(0.0, max_s);
-                    if (next - inner.ui.scroll_offset).abs() > 0.1 {
-                        inner.ui.scroll_offset = next;
-                        paint_inner(inner);
+            if let Ok(mut inner) = cell.core.try_borrow_mut() {
+                if inner.ui.open_dropdown.is_none() {
+                    let delta = ((wparam.0 >> 16) as u16) as i16 as f32;
+                    let max_s = inner.renderer.max_scroll();
+                    if max_s > 0.0 {
+                        let next =
+                            (inner.ui.scroll_offset - (delta / 120.0) * 32.0).clamp(0.0, max_s);
+                        if (next - inner.ui.scroll_offset).abs() > 0.1 {
+                            inner.ui.scroll_offset = next;
+                            paint_inner(&mut inner);
+                        }
                     }
                 }
             }
@@ -794,45 +923,117 @@ unsafe extern "system" fn popover_wnd_proc(
         }
         WM_LBUTTONUP => {
             let (x_dip, y_dip) = lparam_to_dip(hwnd, lparam);
-            let pressed = inner.ui.pressed.take();
-            if let Some(target) = inner.renderer.hit_test(x_dip, y_dip) {
-                if pressed.is_none() || pressed.as_ref() == Some(&target) {
-                    handle_click(inner, target);
+            let outcome = {
+                let Ok(mut inner) = cell.core.try_borrow_mut() else {
+                    return LRESULT(0);
+                };
+                let pressed = inner.ui.pressed.take();
+                if let Some(target) = inner.renderer.hit_test(x_dip, y_dip) {
+                    if pressed.is_none() || pressed.as_ref() == Some(&target) {
+                        handle_click(&mut inner, target)
+                    } else if pressed.is_some() {
+                        ClickOutcome {
+                            repaint: true,
+                            ..Default::default()
+                        }
+                    } else {
+                        ClickOutcome::default()
+                    }
                 } else if pressed.is_some() {
-                    paint_inner(inner);
+                    ClickOutcome {
+                        repaint: true,
+                        ..Default::default()
+                    }
+                } else {
+                    ClickOutcome::default()
                 }
-            } else if pressed.is_some() {
-                paint_inner(inner);
+            };
+            apply_window_pos(hwnd, outcome.pos);
+            if outcome.set_topmost_timer {
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+                let _ = SetTimer(hwnd, FEEDBACK_TIMER_ID, 1800, None);
+            }
+            if outcome.repaint {
+                if let Ok(mut inner) = cell.core.try_borrow_mut() {
+                    paint_inner(&mut inner);
+                }
+            }
+            if let Some(action) = outcome.action {
+                (cell.on_action)(action);
             }
             LRESULT(0)
         }
         WM_TIMER => {
             if wparam.0 == FEEDBACK_TIMER_ID {
                 let _ = KillTimer(hwnd, FEEDBACK_TIMER_ID);
-                inner.ui.feedback_banner = None;
-                paint_inner(inner);
+                if let Ok(mut inner) = cell.core.try_borrow_mut() {
+                    inner.ui.feedback_banner = None;
+                    paint_inner(&mut inner);
+                }
             } else if wparam.0 == COLLAPSE_TIMER_ID {
                 let _ = KillTimer(hwnd, COLLAPSE_TIMER_ID);
-                if inner.ui.pinned && !cursor_inside_window(hwnd) {
-                    inner.ui.mouse_inside = false;
-                    inner.ui.hovered = None;
-                    inner.ui.pressed = None;
-                    position_and_resize_inner(inner, None, false);
-                    paint_inner(inner);
+                let inside = cursor_inside_window(hwnd);
+                let pos_upd = if !inside {
+                    let Ok(mut inner) = cell.core.try_borrow_mut() else {
+                        return LRESULT(0);
+                    };
+                    if inner.ui.pinned {
+                        inner.ui.mouse_inside = false;
+                        inner.ui.hovered = None;
+                        inner.ui.pressed = None;
+                        compute_position_and_resize(&mut inner, None, false)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                if !inside {
+                    apply_window_pos(hwnd, pos_upd);
+                    if let Ok(mut inner) = cell.core.try_borrow_mut() {
+                        if inner.ui.pinned {
+                            paint_inner(&mut inner);
+                        }
+                    }
                 }
             }
             LRESULT(0)
         }
         WM_DPICHANGED => {
-            position_and_resize_inner(inner, None, false);
-            paint_inner(inner);
+            let pos_upd = {
+                let Ok(mut inner) = cell.core.try_borrow_mut() else {
+                    return LRESULT(0);
+                };
+                compute_position_and_resize(&mut inner, None, false)
+            };
+            apply_window_pos(hwnd, pos_upd);
+            if let Ok(mut inner) = cell.core.try_borrow_mut() {
+                paint_inner(&mut inner);
+            }
             LRESULT(0)
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
 }
 
-fn handle_click(inner: &mut PopoverInner, target: HitTarget) {
+#[derive(Default)]
+struct ClickOutcome {
+    action: Option<PopoverAction>,
+    pos: Option<WindowPosUpdate>,
+    set_topmost_timer: bool,
+    repaint: bool,
+}
+
+fn handle_click(inner: &mut PopoverInner, target: HitTarget) -> ClickOutcome {
+    let mut out = ClickOutcome::default();
     match target {
         HitTarget::TogglePin => {
             inner.ui.pinned = !inner.ui.pinned;
@@ -849,38 +1050,28 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) {
                 lang.toast_unpinned()
             };
             inner.ui.feedback_banner = Some(feedback.to_owned());
-            position_and_resize_inner(inner, None, false);
-            unsafe {
-                let _ = SetWindowPos(
-                    inner.hwnd,
-                    HWND_TOPMOST,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-                );
-                let _ = SetTimer(inner.hwnd, FEEDBACK_TIMER_ID, 1800, None);
-            }
-            paint_inner(inner);
+            out.pos = compute_position_and_resize(inner, None, false);
+            out.set_topmost_timer = true;
+            out.repaint = true;
         }
-        HitTarget::RefreshAll => (inner.on_action)(PopoverAction::RefreshAll),
+        HitTarget::RefreshAll => out.action = Some(PopoverAction::RefreshAll),
         HitTarget::OpenSettings | HitTarget::OpenSettingsFromEmpty => {
             inner.ui.view = PopoverView::Settings;
             inner.ui.close_dropdown_menu();
             inner.ui.hovered = None;
             inner.ui.pressed = None;
-            inner.ui.sync_from_snapshot(&inner.snapshot, true);
-            position_and_resize_inner(inner, None, false);
-            paint_inner(inner);
+            let snap = inner.snapshot.clone();
+            inner.ui.sync_from_snapshot(&snap, true);
+            out.pos = compute_position_and_resize(inner, None, false);
+            out.repaint = true;
         }
         HitTarget::BackToMain => {
             inner.ui.view = PopoverView::Main;
             inner.ui.close_dropdown_menu();
             inner.ui.hovered = None;
             inner.ui.pressed = None;
-            position_and_resize_inner(inner, None, false);
-            paint_inner(inner);
+            out.pos = compute_position_and_resize(inner, None, false);
+            out.repaint = true;
         }
         HitTarget::ToggleDropdown(which) => {
             if inner.ui.open_dropdown == Some(which) {
@@ -889,27 +1080,27 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) {
                 inner.ui.open_dropdown_menu(which);
             }
             sync_vsync_pacer(inner);
-            paint_inner(inner);
+            out.repaint = true;
         }
         HitTarget::CloseDropdown => {
             inner.ui.close_dropdown_menu();
             sync_vsync_pacer(inner);
-            paint_inner(inner);
+            out.repaint = true;
         }
         HitTarget::SetThemeMode(mode) => {
             inner.ui.close_dropdown_menu();
             sync_vsync_pacer(inner);
-            (inner.on_action)(PopoverAction::SetThemeMode(mode));
+            out.action = Some(PopoverAction::SetThemeMode(mode));
         }
         HitTarget::SetLanguageMode(mode) => {
             inner.ui.close_dropdown_menu();
             sync_vsync_pacer(inner);
-            (inner.on_action)(PopoverAction::SetLanguageMode(mode));
+            out.action = Some(PopoverAction::SetLanguageMode(mode));
         }
         HitTarget::SetPollInterval(secs) => {
             inner.ui.close_dropdown_menu();
             sync_vsync_pacer(inner);
-            (inner.on_action)(PopoverAction::SetPollInterval(secs));
+            out.action = Some(PopoverAction::SetPollInterval(secs));
         }
         HitTarget::ToggleDevice(id) => {
             if inner.ui.expanded_device_id.as_deref() == Some(id.as_str()) {
@@ -918,33 +1109,36 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) {
                 inner.ui.expanded_device_id = Some(id);
                 inner.ui.trigger_drawer_reveal();
             }
-            position_and_resize_inner(inner, None, false);
+            out.pos = compute_position_and_resize(inner, None, false);
             sync_vsync_pacer(inner);
-            paint_inner(inner);
+            out.repaint = true;
         }
-        HitTarget::RefreshDevice(id) => (inner.on_action)(PopoverAction::RefreshDevice(id)),
-        HitTarget::CopyError(id) => (inner.on_action)(PopoverAction::CopyError(id)),
+        HitTarget::RefreshDevice(id) => out.action = Some(PopoverAction::RefreshDevice(id)),
+        HitTarget::CopyError(id) => out.action = Some(PopoverAction::CopyError(id)),
         HitTarget::ToggleLowBatteryNotify => {
-            (inner.on_action)(PopoverAction::ToggleLowBatteryNotify)
+            out.action = Some(PopoverAction::ToggleLowBatteryNotify);
         }
         HitTarget::ToggleLowBatterySilent => {
-            (inner.on_action)(PopoverAction::ToggleLowBatterySilent)
+            out.action = Some(PopoverAction::ToggleLowBatterySilent);
         }
-        HitTarget::ToggleAutostart => (inner.on_action)(PopoverAction::ToggleAutostart),
+        HitTarget::ToggleAllowExperimental => {
+            out.action = Some(PopoverAction::ToggleAllowExperimental);
+        }
+        HitTarget::ToggleAutostart => out.action = Some(PopoverAction::ToggleAutostart),
         HitTarget::CheckUpdates => match &inner.ui.update_status {
             UpdateUiStatus::Checking => {}
             UpdateUiStatus::Available { url, .. } => {
-                let target_url = url.clone();
-                (inner.on_action)(PopoverAction::OpenUpdateUrl(target_url));
+                out.action = Some(PopoverAction::OpenUpdateUrl(url.clone()));
             }
             UpdateUiStatus::Idle | UpdateUiStatus::UpToDate | UpdateUiStatus::Failed => {
                 inner.ui.update_status = UpdateUiStatus::Checking;
-                paint_inner(inner);
-                (inner.on_action)(PopoverAction::CheckUpdates);
+                out.repaint = true;
+                out.action = Some(PopoverAction::CheckUpdates);
             }
         },
-        HitTarget::Quit => (inner.on_action)(PopoverAction::Quit),
+        HitTarget::Quit => out.action = Some(PopoverAction::Quit),
     }
+    out
 }
 
 fn cursor_inside_window(hwnd: HWND) -> bool {

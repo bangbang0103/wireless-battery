@@ -1,3 +1,4 @@
+import AppKit
 import CTrayCore
 import Foundation
 import ServiceManagement
@@ -198,10 +199,46 @@ private struct UpdateEnvelope: Codable {
     let alerts: [LowBatteryAlertModel]
 }
 
+private struct ReleaseEvaluationResponse: Decodable {
+    let status: String
+    let latestVersion: String?
+    let url: String?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case latestVersion = "latest_version"
+        case url
+    }
+}
+
+private final class CallbackBox {
+    private let lock = NSLock()
+    private weak var store: TrayStore?
+
+    init(store: TrayStore) {
+        self.store = store
+    }
+
+    func deliver(_ json: String) {
+        lock.lock()
+        let target = store
+        lock.unlock()
+        target?.handleRawUpdate(json)
+    }
+
+    func invalidate() {
+        lock.lock()
+        store = nil
+        lock.unlock()
+    }
+}
+
 final class TrayStore: ObservableObject {
     @Published var snapshot: TraySnapshotModel = .empty
     @Published var updateStatus: UpdateCheckStatus = .idle
     var handle: OpaquePointer?
+    private var callbackBox: CallbackBox?
+    private var terminationObserver: NSObjectProtocol?
 
     private static let isoWithFrac: ISO8601DateFormatter = {
         let fmt = ISO8601DateFormatter()
@@ -223,26 +260,67 @@ final class TrayStore: ObservableObject {
         AppLanguage.resolve(mode: snapshot.config.language)
     }
 
+    static func takeCString(_ ptr: UnsafeMutablePointer<CChar>?) -> String? {
+        guard let ptr else { return nil }
+        defer { wb_tray_string_free(ptr) }
+        return String(cString: ptr)
+    }
+
+    static func isValidUpdateURL(_ url: URL) -> Bool {
+        url.absoluteString.withCString { wb_tray_is_valid_update_url($0) }
+    }
+
     init() {
         if isBundledApp {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
 
-        let ctx = Unmanaged.passUnretained(self).toOpaque()
-        self.handle = wb_tray_create(trayUpdateTrampoline, ctx)
-        if let raw = wb_tray_snapshot_json(handle) {
-            defer { wb_tray_string_free(raw) }
-            if let data = String(cString: raw).data(using: .utf8),
+        let box = CallbackBox(store: self)
+        self.callbackBox = box
+        let ctx = Unmanaged.passRetained(box).toOpaque()
+        let created = wb_tray_create(trayUpdateTrampoline, ctx)
+        self.handle = created
+        if let created {
+            wb_tray_set_system_language_zh(created, AppLanguage.resolve(mode: "system").isZh)
+            if let snapshotJson = Self.takeCString(wb_tray_snapshot_json(created)),
+               let data = snapshotJson.data(using: .utf8),
                let decoded = try? JSONDecoder().decode(TraySnapshotModel.self, from: data)
             {
                 self.snapshot = decoded
                 syncLoginItem(enabled: decoded.config.autostart)
             }
+        } else {
+            Unmanaged<CallbackBox>.fromOpaque(ctx).release()
+            self.callbackBox = nil
+        }
+
+        self.terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.shutdown()
         }
     }
 
     deinit {
-        wb_tray_destroy(handle)
+        if let observer = terminationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            terminationObserver = nil
+        }
+        shutdown()
+    }
+
+    func shutdown() {
+        callbackBox?.invalidate()
+        if let h = handle {
+            handle = nil
+            wb_tray_destroy(h)
+        }
+        if let box = callbackBox {
+            callbackBox = nil
+            Unmanaged.passUnretained(box).release()
+        }
     }
 
     fileprivate func handleRawUpdate(_ json: String) {
@@ -312,7 +390,9 @@ final class TrayStore: ObservableObject {
         updateStatus = .checking
 
         let currentVersion = snapshot.appVersion
-        guard let apiURL = URL(string: "https://api.github.com/repos/bangbang0103/wireless-battery/releases/latest") else {
+        guard let apiUrlString = Self.takeCString(wb_tray_latest_release_api_url()),
+              let apiURL = URL(string: apiUrlString)
+        else {
             updateStatus = .failed
             return
         }
@@ -327,46 +407,41 @@ final class TrayStore: ObservableObject {
                       let http = response as? HTTPURLResponse,
                       (200..<300).contains(http.statusCode),
                       let data,
-                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let rawTag = json["tag_name"] as? String
+                      let body = String(data: data, encoding: .utf8)
                 else {
                     return .failed
                 }
-                let tag = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !tag.isEmpty else { return .failed }
-                if Self.isNewerVersion(current: currentVersion, candidate: tag) {
-                    let normalized = tag.lowercased().hasPrefix("v") ? "v\(tag.dropFirst())" : "v\(tag)"
-                    let rawUrl = (json["html_url"] as? String) ?? "https://github.com/bangbang0103/wireless-battery/releases"
-                    let url = URL(string: rawUrl) ?? URL(string: "https://github.com/bangbang0103/wireless-battery/releases")!
-                    return .available(latestVersion: normalized, url: url)
+                let evalJson: String? = body.withCString { bodyPtr in
+                    currentVersion.withCString { verPtr in
+                        Self.takeCString(wb_tray_evaluate_release_json(bodyPtr, verPtr))
+                    }
                 }
-                return .upToDate
+                guard let evalData = evalJson?.data(using: .utf8),
+                      let eval = try? JSONDecoder().decode(ReleaseEvaluationResponse.self, from: evalData)
+                else {
+                    return .failed
+                }
+                switch eval.status {
+                case "available":
+                    let fallback = Self.takeCString(wb_tray_releases_url()).flatMap(URL.init(string:))
+                    let candidate = eval.url
+                        .flatMap(URL.init(string:))
+                        .flatMap { Self.isValidUpdateURL($0) ? $0 : nil }
+                    guard let url = candidate ?? fallback else {
+                        return .failed
+                    }
+                    return .available(latestVersion: eval.latestVersion ?? "", url: url)
+                case "up_to_date":
+                    return .upToDate
+                default:
+                    return .failed
+                }
             }()
 
             DispatchQueue.main.async {
                 self.updateStatus = nextStatus
             }
         }.resume()
-    }
-
-    private static func isNewerVersion(current: String, candidate: String) -> Bool {
-        guard let cur = parseSemver(current), let cand = parseSemver(candidate) else {
-            return false
-        }
-        return cand > cur
-    }
-
-    private static func parseSemver(_ raw: String) -> (Int, Int, Int)? {
-        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if s.hasPrefix("v") || s.hasPrefix("V") {
-            s.removeFirst()
-        }
-        let core = s.split(whereSeparator: { $0 == "-" || $0 == "+" }).first.map(String.init) ?? s
-        let parts = core.split(separator: ".")
-        guard let major = parts.first.flatMap({ Int($0) }) else { return nil }
-        let minor = parts.count > 1 ? (Int(parts[1]) ?? 0) : 0
-        let patch = parts.count > 2 ? (Int(parts[2]) ?? 0) : 0
-        return (major, minor, patch)
     }
 
     static func parseISO8601(_ raw: String) -> Date? {
@@ -412,6 +487,6 @@ final class TrayStore: ObservableObject {
 
 private let trayUpdateTrampoline: WbTrayUpdateCallback = { cJson, userData in
     guard let cJson, let userData else { return }
-    let store = Unmanaged<TrayStore>.fromOpaque(userData).takeUnretainedValue()
-    store.handleRawUpdate(String(cString: cJson))
+    let box = Unmanaged<CallbackBox>.fromOpaque(userData).takeUnretainedValue()
+    box.deliver(String(cString: cJson))
 }

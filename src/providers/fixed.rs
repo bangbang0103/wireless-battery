@@ -2,7 +2,7 @@
 
 use crate::error::BatteryError;
 use crate::model::{
-    Capabilities, ChargeState, Endpoint, ProviderReading, ReadingSource, SupportStatus,
+    Capabilities, ChargeState, DeviceKind, Endpoint, ProviderReading, ReadingSource, SupportStatus,
 };
 use crate::providers::{Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata};
 use crate::transport::{HidReport, HidSession, TransportError};
@@ -22,6 +22,7 @@ pub(crate) const OUTPUT_THEN_SET: &[SendMode] = &[SendMode::Output, SendMode::Se
 pub(crate) struct FixedSpec {
     pub(crate) id: &'static str,
     pub(crate) name: &'static str,
+    pub(crate) kind: DeviceKind,
     pub(crate) status: SupportStatus,
     pub(crate) matches: fn(&Endpoint) -> bool,
     pub(crate) query: fn() -> Vec<u8>,
@@ -51,6 +52,7 @@ impl Provider for FixedProvider {
     fn metadata(&self) -> ProviderMetadata {
         ProviderMetadata {
             version: "1.0.0".to_owned(),
+            device_kind: self.spec.kind,
             support_status: self.spec.status,
             capabilities: self.spec.capabilities,
             io_timeout: self.spec.io_timeout,
@@ -106,12 +108,30 @@ impl Provider for FixedProvider {
 }
 
 pub(crate) fn experimental_metadata(
+    device_kind: DeviceKind,
     capabilities: Capabilities,
     io_timeout: Duration,
 ) -> ProviderMetadata {
     ProviderMetadata {
         version: "1.0.0".to_owned(),
+        device_kind,
         support_status: SupportStatus::Experimental,
+        capabilities,
+        io_timeout,
+        cooldown: Duration::from_millis(100),
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) fn verified_metadata(
+    device_kind: DeviceKind,
+    capabilities: Capabilities,
+    io_timeout: Duration,
+) -> ProviderMetadata {
+    ProviderMetadata {
+        version: "1.0.0".to_owned(),
+        device_kind,
+        support_status: SupportStatus::Verified,
         capabilities,
         io_timeout,
         cooldown: Duration::from_millis(100),

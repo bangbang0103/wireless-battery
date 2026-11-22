@@ -2,9 +2,12 @@
 
 use crate::error::BatteryError;
 use crate::model::{
-    Capabilities, Endpoint, ProviderReading, ReadingSource, SupportStatus, TransportKind,
+    Capabilities, DeviceKind, Endpoint, ProviderReading, ReadingSource, SupportStatus,
+    TransportKind,
 };
-use crate::providers::{Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata};
+use crate::providers::{
+    infer_device_kind_from_name, Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata,
+};
 use crate::transport::Transport;
 use std::time::Duration;
 
@@ -18,6 +21,7 @@ impl Provider for BluetoothBasProvider {
     fn metadata(&self) -> ProviderMetadata {
         ProviderMetadata {
             version: "1.0.0".to_owned(),
+            device_kind: DeviceKind::Peripheral,
             support_status: SupportStatus::Experimental,
             capabilities: Capabilities {
                 percentage: true,
@@ -26,6 +30,11 @@ impl Provider for BluetoothBasProvider {
             io_timeout: Duration::from_secs(3),
             cooldown: Duration::ZERO,
         }
+    }
+
+    fn device_kind(&self, endpoint: &Endpoint) -> DeviceKind {
+        infer_device_kind_from_name(endpoint.product_name.as_deref())
+            .unwrap_or(DeviceKind::Peripheral)
     }
 
     fn display_name(&self, endpoint: &Endpoint) -> Option<String> {

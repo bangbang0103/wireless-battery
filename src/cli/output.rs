@@ -236,7 +236,7 @@ mod tests {
         let ok_fixture = Fixture {
             schema_version: 1,
             target: FixtureTarget {
-                kind: "package".to_owned(),
+                kind: "provider".to_owned(),
                 id: "synthetic.feature.mouse".to_owned(),
             },
             case: "ok".to_owned(),

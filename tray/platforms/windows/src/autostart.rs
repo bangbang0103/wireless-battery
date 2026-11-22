@@ -3,7 +3,7 @@
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HANDLE, HWND};
+use windows::Win32::Foundation::{GlobalFree, HANDLE, HWND};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
 };
@@ -69,6 +69,7 @@ pub fn copy_text_to_clipboard(owner: HWND, text: &str) -> bool {
 
         let ptr = GlobalLock(hmem);
         if ptr.is_null() {
+            let _ = GlobalFree(hmem);
             let _ = CloseClipboard();
             return false;
         }
@@ -76,6 +77,9 @@ pub fn copy_text_to_clipboard(owner: HWND, text: &str) -> bool {
         let _ = GlobalUnlock(hmem);
 
         let result = SetClipboardData(CF_UNICODETEXT, HANDLE(hmem.0 as isize));
+        if result.is_err() {
+            let _ = GlobalFree(hmem);
+        }
         let _ = CloseClipboard();
         result.is_ok()
     }

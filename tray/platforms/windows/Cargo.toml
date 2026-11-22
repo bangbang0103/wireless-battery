@@ -18,7 +18,7 @@ dev-tools = ["wireless-battery-tray-core/dev-tools"]
 [dependencies]
 chrono = { version = "0.4.38", features = ["serde"] }
 wireless-battery = { path = "../../..", default-features = false }
-wireless-battery-tray-core = { path = "../../crates/tray-core" }
+wireless-battery-tray-core = { path = "../../crates/tray-core", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.57.0", features = [

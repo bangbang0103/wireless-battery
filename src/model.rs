@@ -136,30 +136,36 @@ pub struct Capabilities {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MatchStatus {
-    /// Exactly one provider matched statically.
+    /// One highest-priority provider matched statically.
     Exact,
-    /// One or more providers marked the endpoint as a candidate.
-    Candidate,
-    /// Multiple providers returned an exact match.
+    /// Multiple highest-priority providers matched the same endpoint.
     Conflict,
     /// No provider matched.
     Unmatched,
 }
 
-/// Package lifecycle status. `Unknown` is used for unmatched endpoints.
+/// Provider lifecycle and evidence status. `Unknown` is used for unmatched endpoints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SupportStatus {
     /// Unknown because no provider is selected.
     Unknown,
-    /// Development-only package.
-    Draft,
-    /// Opt-in package with limited evidence.
+    /// Opt-in provider with inferred/unverified protocol evidence.
     Experimental,
-    /// Package with real-hardware evidence.
+    /// Provider with real-hardware evidence.
     Verified,
-    /// Still readable, but no longer recommended.
-    Deprecated,
+}
+
+/// Peripheral form factor reported from authoritative static provider metadata.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeviceKind {
+    Mouse,
+    Keyboard,
+    Headset,
+    Gamepad,
+    #[default]
+    Peripheral,
 }
 
 /// A discovered endpoint and its selected provider, if any.
@@ -177,20 +183,21 @@ pub struct Device {
     pub vendor: Option<String>,
     /// Product name, when supplied by the operating system.
     pub model: Option<String>,
-    /// Selected provider or package ID.
+    /// Selected provider ID.
     pub provider_id: Option<String>,
     /// Selected provider version.
     pub provider_version: Option<String>,
-    /// Package lifecycle status.
+    /// Provider lifecycle status.
     pub support_status: SupportStatus,
     /// Static match result.
     pub match_status: MatchStatus,
+    /// Coarse hardware category derived from provider metadata.
+    #[serde(default)]
+    pub device_kind: DeviceKind,
     /// Coarse provider capabilities.
     pub capabilities: Capabilities,
     /// Whether policy currently allows an explicit read.
     pub readable: bool,
-    /// Statically proven receiver relationship, if available.
-    pub receiver_id: Option<String>,
 }
 
 /// Discrete battery level without fabricated percentage conversion.
@@ -376,7 +383,7 @@ impl Default for ReadOptions {
         Self {
             timeout: Duration::from_millis(1_000),
             allow_stale: false,
-            allow_experimental: true,
+            allow_experimental: false,
         }
     }
 }

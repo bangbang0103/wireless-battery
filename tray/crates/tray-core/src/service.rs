@@ -1,9 +1,11 @@
 //! Background polling coordinator and immutable snapshot builder.
 
-use crate::config::{default_config_path, load_config, save_config, TrayConfig};
+use crate::config::{default_config_path, load_config, save_config, LanguageMode, TrayConfig};
 use crate::device_kind::classify_device;
 use crate::notify::LowBatteryTracker;
-use crate::state::{format_tooltip, DeviceView, LowBatteryAlert, TrayIconState, TraySnapshot};
+use crate::state::{
+    format_tooltip_with_locale, DeviceView, LowBatteryAlert, TrayIconState, TraySnapshot,
+};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -24,6 +26,7 @@ pub struct TrayUpdate {
 
 pub(crate) struct ServiceState {
     pub(crate) config: TrayConfig,
+    pub(crate) system_is_zh: bool,
     devices: Vec<Device>,
     readings: HashMap<String, BatteryReading>,
     errors: HashMap<String, ErrorKind>,
@@ -73,6 +76,7 @@ impl TrayService {
             config_path,
             state: Mutex::new(ServiceState {
                 config: config.normalized(),
+                system_is_zh: detect_env_is_zh(),
                 devices: Vec::new(),
                 readings: HashMap::new(),
                 errors: HashMap::new(),
@@ -85,6 +89,12 @@ impl TrayService {
             refresh_guard: Mutex::new(()),
             save_guard: Mutex::new(()),
         }
+    }
+
+    /// Update the detected OS language flag used when `config.language == LanguageMode::System`.
+    pub fn set_system_is_zh(&self, is_zh: bool) {
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        guard.system_is_zh = is_zh;
     }
 
     /// Return the current immutable UI snapshot without performing device I/O.
@@ -165,7 +175,21 @@ impl TrayService {
             guard.config.clone()
         };
 
-        let listed = self.client.list_devices().unwrap_or_default();
+        let listed = match self.client.list_devices() {
+            Ok(devices) => devices,
+            Err(_) => {
+                // Keep previously discovered devices and cached readings intact on transient
+                // OS/bus enumeration errors instead of wiping the UI to empty.
+                let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                guard.refreshing = false;
+                let snapshot = build_snapshot(&guard);
+                on_progress(snapshot.clone());
+                return TrayUpdate {
+                    snapshot,
+                    alerts: Vec::new(),
+                };
+            }
+        };
         let eligible_ids: Vec<String> = listed
             .iter()
             .filter(|device| is_device_eligible(device, config.allow_experimental))
@@ -325,7 +349,9 @@ struct PollerSignal {
     shutdown: bool,
     refresh_requested: bool,
     single_device: Option<String>,
-    config_changed: bool,
+    wake_interval: bool,
+    emit_snapshot: bool,
+    pending_alerts: Vec<LowBatteryAlert>,
 }
 
 /// Handle controlling the single lightweight background polling thread (no async runtime).
@@ -337,7 +363,7 @@ pub struct PollerHandle {
 
 impl PollerHandle {
     /// Start background polling and notify `on_update` on every snapshot change.
-    pub fn start<F>(service: Arc<TrayService>, on_update: F) -> Self
+    pub fn start<F>(service: Arc<TrayService>, on_update: F) -> std::io::Result<Self>
     where
         F: Fn(TrayUpdate) + Send + 'static,
     {
@@ -367,6 +393,11 @@ impl PollerHandle {
                             if sig.shutdown {
                                 break PollerAction::Shutdown;
                             }
+                            if sig.emit_snapshot || !sig.pending_alerts.is_empty() {
+                                sig.emit_snapshot = false;
+                                let alerts = std::mem::take(&mut sig.pending_alerts);
+                                break PollerAction::EmitSnapshot(alerts);
+                            }
                             if let Some(id) = sig.single_device.take() {
                                 break PollerAction::RefreshDevice(id);
                             }
@@ -374,9 +405,9 @@ impl PollerHandle {
                                 sig.refresh_requested = false;
                                 break PollerAction::RefreshAll;
                             }
-                            if sig.config_changed {
-                                sig.config_changed = false;
-                                break PollerAction::ConfigChanged;
+                            if sig.wake_interval {
+                                sig.wake_interval = false;
+                                break PollerAction::RecalcInterval;
                             }
 
                             match poll_interval {
@@ -398,7 +429,14 @@ impl PollerHandle {
 
                     match action {
                         PollerAction::Shutdown => break,
-                        PollerAction::RefreshAll | PollerAction::ConfigChanged => {
+                        PollerAction::RecalcInterval => {}
+                        PollerAction::EmitSnapshot(alerts) => {
+                            on_update(TrayUpdate {
+                                snapshot: thread_service.snapshot(),
+                                alerts,
+                            });
+                        }
+                        PollerAction::RefreshAll => {
                             let update = thread_service.refresh_all_with_progress(|snap| {
                                 on_update(TrayUpdate {
                                     snapshot: snap,
@@ -418,14 +456,13 @@ impl PollerHandle {
                         }
                     }
                 }
-            })
-            .expect("failed to spawn tray poller thread");
+            })?;
 
-        Self {
+        Ok(Self {
             service,
             signal,
             thread: Some(handle),
-        }
+        })
     }
 
     /// Access the underlying `TrayService`.
@@ -450,24 +487,57 @@ impl PollerHandle {
         cvar.notify_one();
     }
 
-    /// Update configuration and wake the poller so new intervals/policies take effect immediately.
-    pub fn update_config(&self, config: TrayConfig) -> TraySnapshot {
-        let snapshot = self.service.update_config(config);
+    /// Ask the background poller thread to emit the current snapshot via `on_update`.
+    pub fn request_snapshot_emit(&self) {
         let (lock, cvar) = &*self.signal;
         let mut sig = lock.lock().unwrap_or_else(|e| e.into_inner());
-        sig.config_changed = true;
+        sig.emit_snapshot = true;
         cvar.notify_one();
+    }
+
+    /// Queue a low-battery alert and emit the current snapshot from the background poller thread.
+    #[cfg(feature = "dev-tools")]
+    pub fn request_alert_emit(&self, alert: LowBatteryAlert) {
+        let (lock, cvar) = &*self.signal;
+        let mut sig = lock.lock().unwrap_or_else(|e| e.into_inner());
+        sig.pending_alerts.push(alert);
+        sig.emit_snapshot = true;
+        cvar.notify_one();
+    }
+
+    fn notify_config_diff(&self, prev: &TrayConfig, next: &TrayConfig) {
+        let enable_experimental = !prev.allow_experimental && next.allow_experimental;
+        let poll_changed = prev.poll_interval_secs != next.poll_interval_secs;
+        if !enable_experimental && !poll_changed {
+            return;
+        }
+        let (lock, cvar) = &*self.signal;
+        let mut sig = lock.lock().unwrap_or_else(|e| e.into_inner());
+        if enable_experimental {
+            sig.refresh_requested = true;
+        }
+        if poll_changed {
+            sig.wake_interval = true;
+        }
+        cvar.notify_one();
+    }
+
+    /// Update configuration and wake the poller when intervals or discovery policy changed.
+    pub fn update_config(&self, config: TrayConfig) -> TraySnapshot {
+        let prev = self.service.config();
+        let next = config.normalized();
+        let snapshot = self.service.update_config(next.clone());
+        self.notify_config_diff(&prev, &next);
         snapshot
     }
 
     /// Non-blocking variant of `update_config` that persists on a background thread while
-    /// waking the poller immediately.
+    /// waking the poller only when intervals or discovery policy changed.
     pub fn update_config_async(&self, config: TrayConfig) -> TraySnapshot {
-        let snapshot = self.service.update_config_async(config);
-        let (lock, cvar) = &*self.signal;
-        let mut sig = lock.lock().unwrap_or_else(|e| e.into_inner());
-        sig.config_changed = true;
-        cvar.notify_one();
+        let prev = self.service.config();
+        let next = config.normalized();
+        let snapshot = self.service.update_config_async(next.clone());
+        self.notify_config_diff(&prev, &next);
         snapshot
     }
 
@@ -495,7 +565,8 @@ enum PollerAction {
     Shutdown,
     RefreshAll,
     RefreshDevice(String),
-    ConfigChanged,
+    EmitSnapshot(Vec<LowBatteryAlert>),
+    RecalcInterval,
 }
 
 fn is_device_eligible(device: &Device, allow_experimental: bool) -> bool {
@@ -503,9 +574,9 @@ fn is_device_eligible(device: &Device, allow_experimental: bool) -> bool {
         return false;
     }
     match device.support_status {
-        SupportStatus::Verified | SupportStatus::Deprecated => true,
+        SupportStatus::Verified => true,
         SupportStatus::Experimental => allow_experimental,
-        SupportStatus::Draft | SupportStatus::Unknown => false,
+        SupportStatus::Unknown => false,
     }
 }
 
@@ -621,7 +692,8 @@ pub(crate) fn build_snapshot(state: &ServiceState) -> TraySnapshot {
         TrayIconState::Normal
     };
 
-    let tooltip = format_tooltip(&views);
+    let is_zh = resolve_zh(state.config.language, state.system_is_zh);
+    let tooltip = format_tooltip_with_locale(&views, is_zh);
 
     #[cfg_attr(not(feature = "dev-tools"), allow(unused_mut))]
     let mut snapshot = TraySnapshot {
@@ -639,8 +711,25 @@ pub(crate) fn build_snapshot(state: &ServiceState) -> TraySnapshot {
         &mut snapshot,
         state.config.low_battery_threshold,
         state.config.low_battery_notify,
+        is_zh,
     );
     snapshot
+}
+
+fn resolve_zh(mode: LanguageMode, system_is_zh: bool) -> bool {
+    match mode {
+        LanguageMode::ZhCn => true,
+        LanguageMode::En => false,
+        LanguageMode::System => system_is_zh,
+    }
+}
+
+fn detect_env_is_zh() -> bool {
+    ["LC_ALL", "LC_MESSAGES", "LANG"].iter().any(|key| {
+        std::env::var(key)
+            .map(|val| val.to_ascii_lowercase().starts_with("zh"))
+            .unwrap_or(false)
+    })
 }
 
 pub(crate) fn device_sort_rank(device: &DeviceView) -> u8 {
@@ -687,6 +776,7 @@ mod tests {
         fn metadata(&self) -> ProviderMetadata {
             ProviderMetadata {
                 version: "0.1.0".to_owned(),
+                device_kind: crate::DeviceKind::Mouse,
                 support_status: self.status,
                 capabilities: Capabilities {
                     percentage: true,
@@ -870,5 +960,98 @@ mod tests {
         let update = service.refresh_all();
         assert_eq!(update.snapshot.icon_state, TrayIconState::LowBattery);
         assert!(update.alerts.is_empty());
+    }
+
+    #[test]
+    fn transient_list_error_preserves_cached_devices_and_interval_change_avoids_poll() {
+        use std::sync::atomic::AtomicUsize;
+
+        struct FlakyTransport {
+            endpoints: Vec<Endpoint>,
+            fail_enumerate: Arc<AtomicBool>,
+            enumerate_calls: Arc<AtomicUsize>,
+        }
+
+        impl Transport for FlakyTransport {
+            fn enumerate(&self) -> Result<Vec<Endpoint>, TransportError> {
+                self.enumerate_calls.fetch_add(1, Ordering::SeqCst);
+                if self.fail_enumerate.load(Ordering::SeqCst) {
+                    return Err(TransportError::DeviceBusy);
+                }
+                Ok(self.endpoints.clone())
+            }
+
+            fn open(&self, _endpoint: &EndpointId) -> Result<Box<dyn HidSession>, TransportError> {
+                Err(TransportError::Timeout)
+            }
+        }
+
+        let fail_read = Arc::new(AtomicBool::new(false));
+        let fail_enumerate = Arc::new(AtomicBool::new(false));
+        let enumerate_calls = Arc::new(AtomicUsize::new(0));
+        let mut ep_mouse = Endpoint::synthetic("ep-mouse-flaky", 0x046D, 0xC547);
+        ep_mouse.product_name = Some("Logitech GPW3".to_owned());
+
+        let registry = Registry::new(vec![Arc::new(StaticProvider {
+            id: "logitech.hidpp",
+            vid: 0x046D,
+            pid: 0xC547,
+            status: SupportStatus::Verified,
+            percentage: 55,
+            fail: fail_read,
+        })])
+        .unwrap();
+
+        let client = BatteryClient::with_transport(
+            ClientConfig {
+                default_timeout: Duration::from_secs(1),
+                allow_experimental: false,
+                enable_cache: true,
+            },
+            Arc::new(FlakyTransport {
+                endpoints: vec![ep_mouse],
+                fail_enumerate: Arc::clone(&fail_enumerate),
+                enumerate_calls: Arc::clone(&enumerate_calls),
+            }),
+            registry,
+        )
+        .unwrap();
+
+        let service = Arc::new(TrayService::with_client(
+            Arc::new(client),
+            TrayConfig::default(),
+            None,
+        ));
+
+        let ok_update = service.refresh_all();
+        assert_eq!(ok_update.snapshot.devices.len(), 1);
+        assert_eq!(ok_update.snapshot.devices[0].percentage, Some(55));
+
+        fail_enumerate.store(true, Ordering::SeqCst);
+        let preserved = service.refresh_all();
+        assert_eq!(preserved.snapshot.devices.len(), 1);
+        assert_eq!(preserved.snapshot.devices[0].percentage, Some(55));
+
+        // Verify PollerHandle interval-only change does not fire a full hardware refresh.
+        let calls_before = enumerate_calls.load(Ordering::SeqCst);
+        let (tx, rx) = std::sync::mpsc::channel();
+        let poller = PollerHandle::start(Arc::clone(&service), move |upd| {
+            let _ = tx.send(upd.snapshot);
+        })
+        .unwrap();
+        loop {
+            let snap = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+            if !snap.refreshing {
+                break;
+            }
+        }
+        let after_initial = enumerate_calls.load(Ordering::SeqCst);
+        assert!(after_initial > calls_before);
+
+        let mut next = service.config();
+        next.poll_interval_secs = 900;
+        let _ = poller.update_config(next);
+        std::thread::sleep(Duration::from_millis(80));
+        assert_eq!(enumerate_calls.load(Ordering::SeqCst), after_initial);
     }
 }

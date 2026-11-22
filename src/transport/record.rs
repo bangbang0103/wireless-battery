@@ -59,14 +59,59 @@ impl Transport for RecordTransport {
         endpoint: &EndpointId,
         timeout: Duration,
     ) -> Result<Option<u8>, TransportError> {
-        self.inner.read_bas(endpoint, timeout)
+        let result = self.inner.read_bas(endpoint, timeout);
+        let outcome = match &result {
+            Ok(Some(percentage)) => Some(StepOutcome::Bas {
+                percentage: *percentage,
+            }),
+            Ok(None) => None,
+            Err(error) => Some(StepOutcome::Error {
+                error: RecordSession::error(error),
+            }),
+        };
+        if let Some(outcome) = outcome {
+            Self::record(
+                &self.steps,
+                FixtureStep {
+                    operation: Operation::ReadBas,
+                    report_id: None,
+                    request_hex: None,
+                    length: None,
+                    outcome,
+                },
+            )?;
+        }
+        result
     }
 
     fn read_xinput(
         &self,
         endpoint: &EndpointId,
     ) -> Result<Option<super::XInputReport>, TransportError> {
-        self.inner.read_xinput(endpoint)
+        let result = self.inner.read_xinput(endpoint);
+        let outcome = match &result {
+            Ok(Some(report)) => Some(StepOutcome::XInput {
+                battery_type: report.battery_type,
+                battery_level: report.battery_level,
+            }),
+            Ok(None) => None,
+            Err(error) => Some(StepOutcome::Error {
+                error: RecordSession::error(error),
+            }),
+        };
+        if let Some(outcome) = outcome {
+            Self::record(
+                &self.steps,
+                FixtureStep {
+                    operation: Operation::ReadXinput,
+                    report_id: None,
+                    request_hex: None,
+                    length: None,
+                    outcome,
+                },
+            )?;
+        }
+        result
     }
 }
 

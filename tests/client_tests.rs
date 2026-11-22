@@ -151,6 +151,7 @@ fn matching_conflict_is_diagnostic_and_never_probed() {
         fn metadata(&self) -> wireless_battery::ProviderMetadata {
             wireless_battery::ProviderMetadata {
                 version: "1.0.0".to_owned(),
+                device_kind: wireless_battery::DeviceKind::Mouse,
                 support_status: wireless_battery::SupportStatus::Verified,
                 capabilities: wireless_battery::Capabilities::default(),
                 io_timeout: std::time::Duration::from_millis(200),
@@ -304,12 +305,118 @@ fn record_transport_delegates_read_xinput() {
             allow_experimental: true,
             ..ClientConfig::default()
         },
-        recorder,
+        recorder.clone(),
         Registry::with_synthetic().unwrap(),
     )
     .unwrap();
     let device = client.list_devices().unwrap().remove(0);
     let reading = client.read_battery(&device.id.0).unwrap();
     assert_eq!(reading.level, Some(wireless_battery::BatteryLevel::Medium));
+    assert_eq!(recorder.steps().unwrap(), fixture.steps);
     replay.finish().unwrap();
+}
+
+#[test]
+fn record_transport_records_read_bas() {
+    let fixture = fixture("bluetooth_bas.json");
+    let replay = Arc::new(ReplayTransport::new(&fixture));
+    let recorder = Arc::new(RecordTransport::new(replay.clone()));
+    let client = BatteryClient::with_transport(
+        ClientConfig {
+            allow_experimental: true,
+            ..ClientConfig::default()
+        },
+        recorder.clone(),
+        Registry::with_synthetic().unwrap(),
+    )
+    .unwrap();
+    let device = client.list_devices().unwrap().remove(0);
+    let reading = client.read_battery(&device.id.0).unwrap();
+    assert_eq!(reading.percentage, Some(55));
+    assert_eq!(recorder.steps().unwrap(), fixture.steps);
+    replay.finish().unwrap();
+}
+
+#[test]
+fn read_options_default_respects_allow_experimental_false_and_exact_beats_family() {
+    let replay = Arc::new(ReplayTransport::new(&fixture("feature_normal.json")));
+    let client = BatteryClient::with_transport(
+        ClientConfig {
+            allow_experimental: false,
+            ..ClientConfig::default()
+        },
+        replay,
+        Registry::with_synthetic().unwrap(),
+    )
+    .unwrap();
+    let device = client.list_devices().unwrap().remove(0);
+    let err = client
+        .read_battery_with_options(&device.id.0, ReadOptions::default())
+        .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::Unsupported);
+
+    struct FamilyProvider;
+    struct ExactProvider;
+    impl wireless_battery::Provider for FamilyProvider {
+        fn id(&self) -> &str {
+            "synthetic.family"
+        }
+        fn metadata(&self) -> wireless_battery::ProviderMetadata {
+            wireless_battery::ProviderMetadata {
+                version: "1.0.0".to_owned(),
+                device_kind: wireless_battery::DeviceKind::Mouse,
+                support_status: wireless_battery::SupportStatus::Verified,
+                capabilities: wireless_battery::Capabilities::default(),
+                io_timeout: std::time::Duration::from_millis(200),
+                cooldown: std::time::Duration::ZERO,
+            }
+        }
+        fn matches(&self, ep: &Endpoint) -> wireless_battery::MatchDecision {
+            if ep.vid == Some(0x1234) {
+                wireless_battery::MatchDecision::Family
+            } else {
+                wireless_battery::MatchDecision::NoMatch
+            }
+        }
+    }
+    impl wireless_battery::Provider for ExactProvider {
+        fn id(&self) -> &str {
+            "synthetic.exact"
+        }
+        fn metadata(&self) -> wireless_battery::ProviderMetadata {
+            wireless_battery::ProviderMetadata {
+                version: "1.0.0".to_owned(),
+                device_kind: wireless_battery::DeviceKind::Keyboard,
+                support_status: wireless_battery::SupportStatus::Verified,
+                capabilities: wireless_battery::Capabilities::default(),
+                io_timeout: std::time::Duration::from_millis(200),
+                cooldown: std::time::Duration::ZERO,
+            }
+        }
+        fn matches(&self, ep: &Endpoint) -> wireless_battery::MatchDecision {
+            if ep.vid == Some(0x1234) && ep.pid == Some(0x5678) {
+                wireless_battery::MatchDecision::Exact
+            } else {
+                wireless_battery::MatchDecision::NoMatch
+            }
+        }
+    }
+    let prio_registry =
+        Registry::new(vec![Arc::new(FamilyProvider), Arc::new(ExactProvider)]).unwrap();
+    let transport = Arc::new(DiscoveryTransport {
+        endpoints: vec![
+            Endpoint::synthetic("ep_exact", 0x1234, 0x5678),
+            Endpoint::synthetic("ep_family_only", 0x1234, 0x9999),
+        ],
+        opens: AtomicUsize::new(0),
+    });
+    let prio_client =
+        BatteryClient::with_transport(ClientConfig::default(), transport, prio_registry).unwrap();
+    let list = prio_client.list_devices().unwrap();
+    assert_eq!(list[0].provider_id.as_deref(), Some("synthetic.exact"));
+    assert_eq!(list[0].match_status, wireless_battery::MatchStatus::Exact);
+    assert_eq!(list[0].device_kind, wireless_battery::DeviceKind::Keyboard);
+    assert_eq!(list[1].provider_id.as_deref(), Some("synthetic.family"));
+    assert_eq!(list[1].match_status, wireless_battery::MatchStatus::Exact);
+    assert_eq!(list[1].device_kind, wireless_battery::DeviceKind::Mouse);
 }

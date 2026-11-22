@@ -2,7 +2,7 @@
 
 > **Language / 语言**: **English** | [简体中文](support-matrix.zh-CN.md)
 
-**152 built-in vendor and OS provider paths** (plus Bluetooth LE BAS) are included and enabled by default. If you encounter reading issues on a specific model or firmware, please open an Issue.
+**153 built-in providers** (**151** vendor HID providers + `os.xinput` + `bluetooth.bas`) are included and enabled by default in `ClientConfig::default()` (2 hardware-verified and 151 experimental; see [`provenance/builtin-providers.md`](../provenance/builtin-providers.md)). If you encounter reading issues on a specific model or firmware, please open an Issue.
 
 ## Built-in Vendor & OS Providers
 

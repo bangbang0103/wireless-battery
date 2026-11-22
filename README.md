@@ -7,16 +7,16 @@ A synchronous Rust library and CLI for conservative peripheral battery readings 
 The project prioritizes protocol safety and reproducibility over device count:
 
 - passive discovery never opens HID sessions, writes reports, or starts a Bluetooth scan;
-- unknown values stay unknown—timeouts never become 0%, and voltage or discrete levels are not converted into fake percentages;
+- unknown values stay unknown—timeouts and out-of-range percentages never become 0% or clamped 100%, and discrete levels or voltages are never turned into guessed percentages without an explicit, documented model curve or vendor step scale;
 - every declarative protocol can be replayed from minimal JSON without hardware;
 - synthetic protocols are excluded from real discovery and the support matrix;
 - raw system paths, serial numbers, and HID bytes are absent from normal readings and logs.
 
 ## Current support
 
-> **Supported Product Matrix**: See [**Support Matrix (`docs/support-matrix.md`)**](docs/support-matrix.md) for the full table organized by **Vendor**, **Device**, and **Support Method**.
+> **Supported Product Matrix**: See [**Support Matrix (`docs/support-matrix.md`)**](docs/support-matrix.md) for the full table organized by **Vendor**, **Type**, **Device / Model**, and **Provider ID**.
 
-**152 built-in vendor and OS provider paths** (plus Bluetooth LE BAS) are included, covering Logitech / Astro, Razer, SteelSeries, Corsair, HyperX, ASUS ROG, Sony, Nintendo, Valve, GameSir, Flydigi, 8BitDo, Beitong, Keychron, Cherry, Akko, NuPhy, AULA, MCHOSE, ATK / VXE / VGN, DAREU, EWEADN, Rapoo, WOB, Glorious, Lamzu, WLmouse, Pulsar, VAXEE, Ninjutso, Endgame Gear, Finalmouse, ZOWIE, Audeze, JBL, Jabra, Turtle Beach, AKG, Fractal, Alienware, Moondrop, Maono, XInput, and others listed in the [support matrix](docs/support-matrix.md). All built-in devices are enabled by default; if you encounter issues on specific hardware or firmware, please open an Issue.
+**153 built-in providers** (**151** vendor HID providers + `os.xinput` + `bluetooth.bas`; 2 hardware-verified and 151 experimental) are included, covering Logitech / Astro, Razer, SteelSeries, Corsair, HyperX, ASUS ROG, Sony, Nintendo, Valve, GameSir, Flydigi, 8BitDo, Beitong, Keychron, Cherry, Akko, NuPhy, AULA, MCHOSE, ATK / VXE / VGN, DAREU, EWEADN, Rapoo, WOB, Glorious, Lamzu, WLmouse, Pulsar, VAXEE, Ninjutso, Endgame Gear, Finalmouse, ZOWIE, Audeze, JBL, Jabra, Turtle Beach, AKG, Fractal, Alienware, Moondrop, Maono, XInput, and others listed in the [support matrix](docs/support-matrix.md). Experimental providers are enabled by default in `ClientConfig::default()`; see [provenance and verification status](provenance/builtin-providers.md) for details, and open an Issue if you encounter problems on specific hardware or firmware.
 
 Built-in vendor protocol definitions reference [Wireless-Device-Battery-Monitor / BatteryHub](NOTICE) (GPL-3.0-or-later) and [Voltide](NOTICE) (MIT); see [NOTICE](NOTICE) for full attribution.
 
@@ -53,7 +53,7 @@ if let Some(device) = devices.iter().find(|device| device.readable) {
 # Ok::<(), wireless_battery::BatteryError>(())
 ```
 
-Experimental providers require `ClientConfig::allow_experimental` or `ReadOptions::allow_experimental`. A stale value is returned only when caching is enabled and the caller explicitly sets `ReadOptions::allow_stale`; its original `observed_at` is preserved and `freshness` becomes `stale`.
+`ClientConfig::default()` enables experimental providers by default (`allow_experimental: true`), while `ReadOptions::default().allow_experimental` is `false`; setting `ClientConfig::allow_experimental = false` restricts reads to `Verified` providers unless explicitly overridden via `ReadOptions::allow_experimental = true`. A stale value is returned only when caching is enabled and the caller explicitly sets `ReadOptions::allow_stale`; its original `observed_at` is preserved and `freshness` becomes `stale`.
 
 `ReadOptions::timeout` is the total call budget. A provider's `io_timeout` is a separate per-I/O preference, capped by the remaining total budget. Some platform feature operations cannot be forcibly cancelled.
 
@@ -104,7 +104,7 @@ If your device shows up as `unmatched` or reports `null` / `unknown` battery rea
 
 3. **Open an Issue or PR**
    - **Issue**: Share your device model, connection mode, `wireless-battery list --json` output, and paired request/response `probe` packets for discharging/charging states (verified with the vendor app closed).
-   - **PR**: Add a `FixedSpec` or `Provider` in `src/providers/vendors/`, add tests, and verify with `cargo test --locked`.
+   - **PR**: Add a `FixedSpec` or `Provider` under `src/providers/vendors/{protocols,brands}/` with `DeviceKind` set accurately, add replay tests, update `docs/support-matrix*.md` and `provenance/builtin-providers.md`, and verify with `cargo test --locked --all-features`.
 
 ### Copy-Paste Prompt for an AI Agent
 
@@ -127,17 +127,18 @@ Follow these steps in order:
    - **2b. Bidirectional Capture (when no clue works and `--listen` yields no battery reply)**: Guide me to use **Wireshark + USBPcap (Windows) / `usbmon` (Linux)** (or browser WebHID DevTools) to capture **both Host → Device (sent) and Device → Host (received)** packets while reading battery, and record the **ground-truth percentage and charging state** shown by the vendor software/device indicator (ideally covering discharging, charging, and two different percentage levels). If I provide a `.pcapng` or capture log, extract paired request/response frames, handshakes, and changing bytes.
    - **2c. `probe` Testing & Independent Verification (avoid false positives)**:
      - Map candidate or captured commands to `probe` (distinguish `--send` vs `--send --set-output`, and `--send-feature` / `--get-feature` / `--get-input`; keep `--report-id` separate from the hex payload; use `--read-replies` to read multiple packets and skip heartbeats or command echoes). Note that a successful OS write does not mean the device accepted the command.
-     - Once a working query is found, **fully quit the vendor app / WebHID tab**, wake the device, and independently reproduce consistent replies in both **discharging** and **charging** states with `probe` (never guess percentages from voltage or discrete levels; unverified charge states and unknown sentinels must stay `unknown`).
+     - Once a working query is found, **fully quit the vendor app / WebHID tab**, wake the device, and independently reproduce consistent replies in both **discharging** and **charging** states with `probe` (never guess percentages from arbitrary bytes; voltage curves or discrete step scales must follow an explicit, model-specific rule, and unverified charge states and unknown sentinels must stay `unknown`).
 
 3. **Next Steps**:
    - If only the prebuilt binary is available (no source repo): format a clean summary with device model, connection mode, `list --json` endpoint metadata, and paired discharging/charging `probe` request/response hex (verified with the vendor app closed) plus ground-truth percentage/state so I can open a GitHub Issue.
-   - If we are inside the cloned source repository: read `docs/contributing-device.md` and `docs/capture-and-replay.md` first, implement a `FixedSpec` or `Provider` under `src/providers/vendors/`, add replay fixtures under `tests/fixtures/vendors/`, update `docs/support-matrix.md` & `docs/support-matrix.zh-CN.md`, and verify everything passes with `cargo test --locked`.
+   - If we are inside the cloned source repository: read `docs/contributing-device.md` and `docs/capture-and-replay.md` first, implement a `FixedSpec` or `Provider` under `src/providers/vendors/{protocols,brands}/`, add replay fixtures under `tests/fixtures/vendors/` and `tests/extended_vendor/`, update `docs/support-matrix.md`, `docs/support-matrix.zh-CN.md`, and `provenance/builtin-providers.md`, and verify everything passes with `cargo test --locked --all-features`.
 ```
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Support matrix](docs/support-matrix.md)
+- [Provider provenance](provenance/builtin-providers.md)
 - [Platform support](docs/platform-support.md)
 - [Capture and replay](docs/capture-and-replay.md)
 - [Contributing a device](docs/contributing-device.md)
@@ -145,6 +146,6 @@ Follow these steps in order:
 
 ## Contributing
 
-Start with [device contributions](docs/contributing-device.md). Simple fixed protocols should use `FixedSpec`; dynamic negotiation belongs in a focused `Provider` under `src/providers/vendors/`.
+Start with [device contributions](docs/contributing-device.md). Simple fixed protocols should use `FixedSpec`; dynamic negotiation belongs in a focused `Provider` under `src/providers/vendors/{protocols,brands}/`.
 
 Licensed under the [GNU General Public License v3.0 or later](LICENSE).

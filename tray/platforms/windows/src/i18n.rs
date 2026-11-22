@@ -3,7 +3,10 @@
 use chrono::{DateTime, Utc};
 use windows::Win32::Globalization::GetUserDefaultUILanguage;
 use wireless_battery::{BatteryLevel, ChargeState, ErrorKind, Freshness, Precision, Reachability};
-use wireless_battery_tray_core::{DeviceView, LanguageMode, ThemeMode};
+use wireless_battery_tray_core::{
+    format_footer_summary, format_poll_label, format_relative_time, DeviceView, LanguageMode,
+    ThemeMode,
+};
 
 /// Resolved active display language.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,10 +74,10 @@ impl Lang {
         if hidden_experimental_count > 0 {
             match self {
                 Self::ZhCn => format!(
-                    "已检测到 {hidden_experimental_count} 台实验性协议设备，默认未启用。可在设置中开启。"
+                    "已检测到 {hidden_experimental_count} 台实验性协议设备，当前已隐藏。可在设置中开启。"
                 ),
                 Self::En => format!(
-                    "{hidden_experimental_count} experimental device(s) detected but hidden by default."
+                    "{hidden_experimental_count} experimental device(s) detected while disabled. Enable in Settings."
                 ),
             }
         } else {
@@ -236,21 +239,8 @@ impl Lang {
         }
     }
 
-    pub const fn poll_interval_label(self, secs: u64) -> &'static str {
-        match (self, secs) {
-            (Self::ZhCn, 300) => "5 分钟",
-            (Self::ZhCn, 900) => "15 分钟",
-            (Self::ZhCn, 1800) => "30 分钟",
-            (Self::ZhCn, 3600) => "1 小时",
-            (Self::ZhCn, 0) => "仅手动",
-            (Self::ZhCn, _) => "5 分钟",
-            (Self::En, 300) => "5 min",
-            (Self::En, 900) => "15 min",
-            (Self::En, 1800) => "30 min",
-            (Self::En, 3600) => "1 hour",
-            (Self::En, 0) => "Manual",
-            (Self::En, _) => "5 min",
-        }
+    pub fn poll_interval_label(self, secs: u64) -> String {
+        format_poll_label(secs, self.is_zh())
     }
 
     pub const fn setting_low_battery_title(self) -> &'static str {
@@ -282,6 +272,20 @@ impl Lang {
         match self {
             Self::ZhCn => "开启后不发送系统通知",
             Self::En => "Suppress OS toast notifications",
+        }
+    }
+
+    pub const fn setting_experimental_title(self) -> &'static str {
+        match self {
+            Self::ZhCn => "实验性协议设备",
+            Self::En => "Experimental devices",
+        }
+    }
+
+    pub const fn setting_experimental_desc(self) -> &'static str {
+        match self {
+            Self::ZhCn => "包含社区推导但未实机验证的设备",
+            Self::En => "Include inferred protocols pending verification",
         }
     }
 
@@ -543,46 +547,11 @@ impl Lang {
         last_sync_at: Option<DateTime<Utc>>,
         poll_secs: u64,
     ) -> String {
-        let sync_time = self.format_relative_time(last_sync_at);
-        let poll_str = match (self, poll_secs) {
-            (Self::ZhCn, 0) => "仅手动".to_owned(),
-            (Self::ZhCn, secs) if secs % 3600 == 0 => format!("每 {} 小时", secs / 3600),
-            (Self::ZhCn, secs) if secs % 60 == 0 => format!("每 {} 分钟", secs / 60),
-            (Self::ZhCn, secs) => format!("每 {secs} 秒"),
-            (Self::En, 0) => "Manual".to_owned(),
-            (Self::En, secs) if secs % 3600 == 0 => format!("Every {} hr", secs / 3600),
-            (Self::En, secs) if secs % 60 == 0 => format!("Every {} min", secs / 60),
-            (Self::En, secs) => format!("Every {secs}s"),
-        };
-        format!("{app_version} · {sync_time} · {poll_str}")
+        format_footer_summary(app_version, last_sync_at, poll_secs, self.is_zh())
     }
 
     pub fn format_relative_time(self, at: Option<DateTime<Utc>>) -> String {
-        let Some(ts) = at else {
-            return match self {
-                Self::ZhCn => "未同步".to_owned(),
-                Self::En => "Not synced".to_owned(),
-            };
-        };
-        let elapsed = Utc::now().signed_duration_since(ts).num_seconds().max(0);
-        if elapsed < 45 {
-            match self {
-                Self::ZhCn => "刚刚".to_owned(),
-                Self::En => "Just now".to_owned(),
-            }
-        } else if elapsed < 3600 {
-            let mins = elapsed / 60;
-            match self {
-                Self::ZhCn => format!("{mins} 分钟前"),
-                Self::En => format!("{mins}m ago"),
-            }
-        } else {
-            let hrs = elapsed / 3600;
-            match self {
-                Self::ZhCn => format!("{hrs} 小时前"),
-                Self::En => format!("{hrs}h ago"),
-            }
-        }
+        format_relative_time(at, self.is_zh())
     }
 
     pub const fn discrete_info(self, level: Option<BatteryLevel>) -> (u8, &'static str) {

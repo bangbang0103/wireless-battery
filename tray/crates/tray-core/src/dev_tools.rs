@@ -5,7 +5,9 @@
 
 use crate::device_kind::DeviceKind;
 use crate::service::{device_sort_rank, TrayService};
-use crate::state::{format_tooltip, DeviceView, LowBatteryAlert, TrayIconState, TraySnapshot};
+use crate::state::{
+    format_tooltip_with_locale, DeviceView, LowBatteryAlert, TrayIconState, TraySnapshot,
+};
 use chrono::Utc;
 use wireless_battery::{
     ChargeState, ErrorKind, Freshness, Precision, Reachability, SupportStatus, TransportKind,
@@ -37,6 +39,7 @@ impl DevState {
         snapshot: &mut TraySnapshot,
         threshold: u8,
         low_battery_notify: bool,
+        zh: bool,
     ) {
         if !self.virtual_devices.is_empty() {
             for dev in &self.virtual_devices {
@@ -104,7 +107,7 @@ impl DevState {
             } else {
                 TrayIconState::Normal
             };
-            snapshot.tooltip = format_tooltip(&snapshot.devices);
+            snapshot.tooltip = format_tooltip_with_locale(&snapshot.devices, zh);
         }
     }
 }

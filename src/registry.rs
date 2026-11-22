@@ -2,7 +2,7 @@
 
 use crate::error::BatteryError;
 use crate::model::{
-    Capabilities, ChargeState, Endpoint, ProviderReading, ReadingSource, SupportStatus,
+    Capabilities, ChargeState, DeviceKind, Endpoint, ProviderReading, ReadingSource, SupportStatus,
     TransportKind,
 };
 use crate::providers::{Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata};
@@ -85,6 +85,7 @@ impl Provider for SyntheticFeatureMouseProvider {
     fn metadata(&self) -> ProviderMetadata {
         ProviderMetadata {
             version: "1.0.0".to_owned(),
+            device_kind: DeviceKind::Mouse,
             support_status: SupportStatus::Experimental,
             capabilities: Capabilities {
                 percentage: true,

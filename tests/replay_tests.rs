@@ -104,6 +104,7 @@ impl Provider for SyntheticMultiStepProvider {
     fn metadata(&self) -> ProviderMetadata {
         ProviderMetadata {
             version: "1.0.0".to_owned(),
+            device_kind: wireless_battery::DeviceKind::Mouse,
             support_status: SupportStatus::Verified,
             capabilities: Capabilities {
                 percentage: true,
