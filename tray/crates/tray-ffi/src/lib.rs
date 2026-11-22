@@ -8,13 +8,16 @@ use std::ptr;
 use std::sync::Arc;
 use wireless_battery_tray_core::{PollerHandle, TrayConfig, TrayService, TrayUpdate};
 
+#[cfg(feature = "dev-tools")]
+mod dev_tools;
+
 /// Callback signature matching `WbTrayUpdateCallback` in `wireless_battery_tray.h`.
 pub type WbTrayUpdateCallback = Option<unsafe extern "C" fn(*const c_char, *mut c_void)>;
 
 /// Opaque handle exposed across the C ABI.
 pub struct WbTrayHandle {
-    poller: PollerHandle,
-    callback: CallbackContext,
+    pub(crate) poller: PollerHandle,
+    pub(crate) callback: CallbackContext,
 }
 
 #[derive(serde::Serialize)]
@@ -24,13 +27,13 @@ struct UpdateEnvelope<'a> {
 }
 
 #[derive(Clone, Copy)]
-struct CallbackContext {
+pub(crate) struct CallbackContext {
     func: Option<unsafe extern "C" fn(*const c_char, *mut c_void)>,
     user_data: usize,
 }
 
 impl CallbackContext {
-    fn invoke(self, update: &TrayUpdate) {
+    pub(crate) fn invoke(self, update: &TrayUpdate) {
         let Some(func) = self.func else {
             return;
         };
@@ -202,7 +205,7 @@ pub unsafe extern "C" fn wb_tray_string_free(ptr: *mut c_char) {
     }
 }
 
-unsafe fn read_c_str(ptr: *const c_char) -> Option<String> {
+pub(crate) unsafe fn read_c_str(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
         return None;
     }

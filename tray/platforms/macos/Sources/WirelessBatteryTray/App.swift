@@ -18,6 +18,11 @@ struct WirelessBatteryTrayApp: App {
         } label: {
             // Pure minimalist Logo in macOS menu bar (zero numbers; subtle low-battery dot).
             MenuBarLogoIcon(state: store.snapshot.iconState, tooltip: store.snapshot.tooltip)
+            #if DEV_TOOLS
+                .onAppear {
+                    DevPanelController.shared.showIfNeeded(store: store)
+                }
+            #endif
         }
         .menuBarExtraStyle(.window)
     }

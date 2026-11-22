@@ -157,7 +157,7 @@ private struct UpdateEnvelope: Codable {
 
 final class TrayStore: ObservableObject {
     @Published var snapshot: TraySnapshotModel = .empty
-    private var handle: OpaquePointer?
+    var handle: OpaquePointer?
 
     private static let isoWithFrac: ISO8601DateFormatter = {
         let fmt = ISO8601DateFormatter()
@@ -280,7 +280,7 @@ final class TrayStore: ObservableObject {
         }
     }
 
-    private func deliverNotification(_ alert: LowBatteryAlertModel) {
+    func deliverNotification(_ alert: LowBatteryAlertModel) {
         guard isBundledApp else { return }
         let lang = AppLanguage.resolve(mode: snapshot.config.language)
         let tier = notificationTier(for: alert.percentage)

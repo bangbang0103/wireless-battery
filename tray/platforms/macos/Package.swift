@@ -3,10 +3,21 @@ import Foundation
 import PackageDescription
 
 let packageDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+let isDevTools = ProcessInfo.processInfo.environment["WB_DEV_TOOLS"] == "1"
+let rustDebugLibDir = packageDir
+    .appendingPathComponent("../../target/debug")
+    .standardizedFileURL
+    .path
 let rustReleaseLibDir = packageDir
     .appendingPathComponent("../../target/release")
     .standardizedFileURL
     .path
+let rustLibDir: String = {
+    if isDevTools && FileManager.default.fileExists(atPath: rustDebugLibDir + "/libwireless_battery_tray_ffi.a") {
+        return rustDebugLibDir
+    }
+    return rustReleaseLibDir
+}()
 
 let package = Package(
     name: "WirelessBatteryTray",
@@ -23,8 +34,9 @@ let package = Package(
             name: "WirelessBatteryTray",
             dependencies: ["CTrayCore"],
             path: "Sources/WirelessBatteryTray",
+            swiftSettings: isDevTools ? [.define("DEV_TOOLS")] : [],
             linkerSettings: [
-                .unsafeFlags(["-L", rustReleaseLibDir, "-lwireless_battery_tray_ffi"]),
+                .unsafeFlags(["-L", rustLibDir, "-lwireless_battery_tray_ffi"]),
                 .linkedFramework("CoreBluetooth"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("CoreFoundation"),

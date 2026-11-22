@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,6 +64,15 @@ char *wb_tray_error_report_json(const WbTrayHandle *handle, const char *device_i
 
 /** Release any UTF-8 string allocated by this library. Safe to call with NULL. */
 void wb_tray_string_free(char *ptr);
+
+/*
+ * Development-only symbols exported ONLY when `wireless-battery-tray-ffi` is
+ * built with `--features dev-tools`. Do not call from release builds.
+ */
+bool wb_tray_dev_toggle_low_battery(const WbTrayHandle *handle);
+void wb_tray_dev_send_low_battery_alert(const WbTrayHandle *handle, uint8_t percentage);
+bool wb_tray_dev_add_device_json(const WbTrayHandle *handle, const char *spec_json_utf8);
+void wb_tray_dev_reset(const WbTrayHandle *handle);
 
 #ifdef __cplusplus
 }
