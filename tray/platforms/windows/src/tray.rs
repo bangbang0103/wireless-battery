@@ -290,6 +290,8 @@ impl TrayIconHost {
                 &HSTRING::from(lang.menu_autostart()),
             );
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
+            #[cfg(feature = "dev-tools")]
+            crate::dev_tools::append_context_menu(menu);
             let _ = AppendMenuW(
                 menu,
                 MF_STRING,

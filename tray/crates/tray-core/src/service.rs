@@ -22,21 +22,23 @@ pub struct TrayUpdate {
     pub alerts: Vec<LowBatteryAlert>,
 }
 
-struct ServiceState {
-    config: TrayConfig,
+pub(crate) struct ServiceState {
+    pub(crate) config: TrayConfig,
     devices: Vec<Device>,
     readings: HashMap<String, BatteryReading>,
     errors: HashMap<String, ErrorKind>,
-    last_sync_at: Option<chrono::DateTime<Utc>>,
+    pub(crate) last_sync_at: Option<chrono::DateTime<Utc>>,
     refreshing: bool,
     tracker: LowBatteryTracker,
+    #[cfg(feature = "dev-tools")]
+    pub(crate) dev: crate::dev_tools::DevState,
 }
 
 /// Thread-safe core coordinator shared by every native platform tray shell.
 pub struct TrayService {
     client: Arc<BatteryClient>,
     config_path: Option<PathBuf>,
-    state: Mutex<ServiceState>,
+    pub(crate) state: Mutex<ServiceState>,
     refresh_guard: Mutex<()>,
     save_guard: Mutex<()>,
 }
@@ -77,6 +79,8 @@ impl TrayService {
                 last_sync_at: None,
                 refreshing: false,
                 tracker: LowBatteryTracker::default(),
+                #[cfg(feature = "dev-tools")]
+                dev: crate::dev_tools::DevState::default(),
             }),
             refresh_guard: Mutex::new(()),
             save_guard: Mutex::new(()),
@@ -519,7 +523,7 @@ fn transport_label(device: &Device) -> String {
     }
 }
 
-fn build_snapshot(state: &ServiceState) -> TraySnapshot {
+pub(crate) fn build_snapshot(state: &ServiceState) -> TraySnapshot {
     let mut hidden_experimental_count = 0usize;
     let mut views = Vec::new();
 
@@ -619,7 +623,8 @@ fn build_snapshot(state: &ServiceState) -> TraySnapshot {
 
     let tooltip = format_tooltip(&views);
 
-    TraySnapshot {
+    #[cfg_attr(not(feature = "dev-tools"), allow(unused_mut))]
+    let mut snapshot = TraySnapshot {
         devices: views,
         hidden_experimental_count,
         icon_state,
@@ -627,10 +632,17 @@ fn build_snapshot(state: &ServiceState) -> TraySnapshot {
         last_sync_at: state.last_sync_at,
         refreshing: state.refreshing,
         config: state.config.clone(),
-    }
+    };
+    #[cfg(feature = "dev-tools")]
+    state.dev.apply_to_snapshot(
+        &mut snapshot,
+        state.config.low_battery_threshold,
+        state.config.low_battery_notify,
+    );
+    snapshot
 }
 
-fn device_sort_rank(device: &DeviceView) -> u8 {
+pub(crate) fn device_sort_rank(device: &DeviceView) -> u8 {
     if device.is_low && device.freshness == Some(Freshness::Live) {
         0
     } else if device.freshness == Some(Freshness::Live)

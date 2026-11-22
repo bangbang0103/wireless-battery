@@ -9,6 +9,7 @@ description = "Platform-agnostic state machine, polling, notification deduplicat
 [features]
 default = ["bluetooth"]
 bluetooth = ["wireless-battery/bluetooth"]
+dev-tools = []
 
 [dependencies]
 chrono = { version = "0.4.38", features = ["serde"] }
