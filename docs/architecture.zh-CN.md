@@ -43,8 +43,8 @@ HID Provider 实现 `Provider::read(&DeviceContext, &mut dyn HidSession, Deadlin
 
 ## 能力证据
 
-运行时 `Capabilities` 刻意保持粗粒度；包生命周期与单能力/单状态证据分开记录。例如，支持 `charge_state` 并不意味着 `full`、`sleeping` 或 `offline` 状态已经过实机验证。
+运行时 `Capabilities` 刻意保持粗粒度；Provider 生命周期与单能力/单状态证据分开记录。例如，支持 `charge_state` 并不意味着 `full`、`sleeping` 或 `offline` 状态已经过实机验证。
 
 ---
 
-相关文档：[设备支持矩阵](support-matrix.zh-CN.md) · [录制与回放](capture-and-replay.zh-CN.md) · [平台支持](platform-support.zh-CN.md) · [原生系统托盘](../tray/README.zh-CN.md) · [返回 README](../README.zh-CN.md)
+相关文档：[设备支持矩阵](support-matrix.zh-CN.md) · [录制与回放](capture-and-replay.zh-CN.md) · [平台支持](platform-support.zh-CN.md) · [设备贡献指南](contributing-device.zh-CN.md) · [原生系统托盘](../tray/README.zh-CN.md) · [返回 README](../README.zh-CN.md)

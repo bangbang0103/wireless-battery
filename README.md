@@ -24,13 +24,13 @@ Standard HID battery usages and Classic Bluetooth/HFP battery reports are reserv
 
 ## Build
 
-Rust 1.76 or newer is supported. `Cargo.lock` pins dependency versions to preserve that MSRV (`--locked`). Both `cli` and `bluetooth` features are enabled by default; library consumers can disable default features with `--no-default-features` to avoid compiling CLI (`clap`, `walkdir`) and BLE (`btleplug`, `tokio`, `uuid`) dependencies, or enable only `--features cli` / `--features bluetooth`.
+Rust 1.76 or newer is supported. `Cargo.lock` pins dependency versions to preserve that MSRV (`--locked`). Both `cli` and `bluetooth` features are enabled by default; library consumers can disable default features with `--no-default-features` to avoid compiling CLI (`clap`) and BLE (`btleplug`, `tokio`, `uuid`) dependencies, or enable only `--features cli` / `--features bluetooth`.
 
 ```bash
 cargo build --locked
 cargo build --locked --no-default-features
 cargo test --locked --all-features
-cargo run --locked -- validate
+cargo clippy --locked --all-targets --all-features -- -D warnings
 ```
 
 See [platform support](docs/platform-support.md) for system dependencies and permission limitations.
@@ -55,7 +55,7 @@ if let Some(device) = devices.iter().find(|device| device.readable) {
 
 Experimental providers require `ClientConfig::allow_experimental` or `ReadOptions::allow_experimental`. A stale value is returned only when caching is enabled and the caller explicitly sets `ReadOptions::allow_stale`; its original `observed_at` is preserved and `freshness` becomes `stale`.
 
-`ReadOptions::timeout` is the total call budget. A package's `timeout_ms` is a separate per-I/O preference, capped by the remaining total budget. Some platform feature operations cannot be forcibly cancelled.
+`ReadOptions::timeout` is the total call budget. A provider's `io_timeout` is a separate per-I/O preference, capped by the remaining total budget. Some platform feature operations cannot be forcibly cancelled.
 
 ## CLI
 
@@ -135,6 +135,7 @@ Follow these steps in order:
 - [Architecture](docs/architecture.md)
 - [Support matrix](docs/support-matrix.md)
 - [Platform support](docs/platform-support.md)
+- [Capture and replay](docs/capture-and-replay.md)
 - [Contributing a device](docs/contributing-device.md)
 - [Native system tray](tray/README.md)
 

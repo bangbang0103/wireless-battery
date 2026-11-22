@@ -26,7 +26,7 @@
 
 ## 验证标签规范
 
-包生命周期（`draft`、`experimental`、`verified`、`deprecated`）与单能力证据（`verified`、`experimental`、`unverified`、`unsupported`）相互独立。合成资产永远不能标为 `verified`，也不能进入真实支持矩阵。
+Provider 生命周期（`draft`、`experimental`、`verified`、`deprecated`）与单能力证据（`verified`、`experimental`、`unverified`、`unsupported`）相互独立。合成资产永远不能标为 `verified`，也不能进入真实支持矩阵。
 
 参考其他实现时必须保留对应许可证与署名说明。协议事实、借鉴代码与实机验证属于不同类别的证据，必须分开记录。
 

@@ -10,16 +10,15 @@ Each fixture step maps one-to-one to a transport operation: HID `send_feature`, 
 
 ## Capture
 
-First list devices, then explicitly capture a matched device:
+First list devices, then inspect raw HID packets with `probe` (for unknown or unmatched devices) or record a registered provider session via `RecordTransport` in Rust:
 
 ```bash
 wireless-battery list --json
-wireless-battery capture --device <device-id> --output tests/fixtures/vendors/<vendor>/<device>.json
+wireless-battery probe <device-id> --listen 5000
+wireless-battery probe <device-id> --report-id 0 --send "5A A5 01 02 00"
 ```
 
-Capture executes only the registered provider's battery query; for unknown/unmatched HID devices, use `wireless-battery probe` instead. Existing output files are rejected rather than overwritten. The terminal reports the target, step count, and output path.
-
-The v0.1 capture command wraps real HID transport. BLE BAS fixtures can be constructed from the standard one-byte reading, but active BLE capture is not exposed as an arbitrary GATT tool.
+`RecordTransport` wraps a real `Transport` implementation and records only registered provider calls. BLE BAS fixtures can be constructed from the standard one-byte reading, as active BLE capture is not exposed as an arbitrary GATT tool.
 
 ## Sanitization
 

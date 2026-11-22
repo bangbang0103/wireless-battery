@@ -24,13 +24,13 @@
 
 ## 构建
 
-支持 Rust 1.76 及以上版本。`Cargo.lock` 锁定依赖版本以维持 MSRV（`--locked`）。`cli` 与 `bluetooth` feature 默认均已开启；纯库消费者可通过 `--no-default-features` 关闭默认特性，避免编译 CLI（`clap`、`walkdir`）与 BLE（`btleplug`、`tokio`、`uuid`）依赖，也可按需单独开启 `--features cli` 或 `--features bluetooth`。
+支持 Rust 1.76 及以上版本。`Cargo.lock` 锁定依赖版本以维持 MSRV（`--locked`）。`cli` 与 `bluetooth` feature 默认均已开启；纯库消费者可通过 `--no-default-features` 关闭默认特性，避免编译 CLI（`clap`）与 BLE（`btleplug`、`tokio`、`uuid`）依赖，也可按需单独开启 `--features cli` 或 `--features bluetooth`。
 
 ```bash
 cargo build --locked
 cargo build --locked --no-default-features
 cargo test --locked --all-features
-cargo run --locked -- validate
+cargo clippy --locked --all-targets --all-features -- -D warnings
 ```
 
 系统依赖与权限限制详见[平台支持](docs/platform-support.zh-CN.md)。
@@ -55,7 +55,7 @@ if let Some(device) = devices.iter().find(|device| device.readable) {
 
 实验性 Provider 需要显式开启 `ClientConfig::allow_experimental` 或 `ReadOptions::allow_experimental`。只有在启用缓存且调用方显式设置 `ReadOptions::allow_stale` 时，刷新失败才会返回缓存的旧值；旧值保留原始 `observed_at` 时间戳，并将 `freshness` 标记为 `stale`。
 
-`ReadOptions::timeout` 是整次调用的总时间预算。设备包中的 `timeout_ms` 是单次 I/O 偏好值，受限于剩余总预算。部分平台的 Feature 报告操作无法被强制取消。
+`ReadOptions::timeout` 是整次调用的总时间预算。Provider 中的 `io_timeout` 是单次 I/O 偏好值，受限于剩余总预算。部分平台的 Feature 报告操作无法被强制取消。
 
 ## 命令行（CLI）
 
@@ -135,6 +135,7 @@ cargo build --locked --release -p wireless-battery-tray   # Windows 原生托盘
 - [架构设计](docs/architecture.zh-CN.md)
 - [设备支持矩阵](docs/support-matrix.zh-CN.md)
 - [平台支持与限制](docs/platform-support.zh-CN.md)
+- [录制与回放](docs/capture-and-replay.zh-CN.md)
 - [设备贡献指南](docs/contributing-device.zh-CN.md)
 - [原生系统托盘](tray/README.zh-CN.md)
 

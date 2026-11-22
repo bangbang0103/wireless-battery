@@ -26,7 +26,7 @@ The current HIDAPI version does not expose report lengths during enumeration on 
 
 ## Verification labels
 
-Package lifecycle (`draft`, `experimental`, `verified`, `deprecated`) is separate from per-capability evidence (`verified`, `experimental`, `unverified`, `unsupported`). Synthetic material can never be `verified` or enter the real support matrix.
+Provider lifecycle (`draft`, `experimental`, `verified`, `deprecated`) is separate from per-capability evidence (`verified`, `experimental`, `unverified`, `unsupported`). Synthetic material can never be `verified` or enter the real support matrix.
 
 Preserve applicable licenses and attribution when referring to another implementation. Protocol facts, copied code, and real-hardware verification are different kinds of evidence and must be recorded separately.
 
