@@ -11,7 +11,7 @@
 
 - [ ] Discovery and static matching perform no device I/O
 - [ ] Matching conflicts cannot select an arbitrary provider
-- [ ] Normal, malformed, invalid-field, and relevant timeout/fallback fixtures are included under `tests/fixtures/`
+- [ ] Normal, malformed, invalid-field, and relevant timeout/fallback fixtures are included under `tests/fixtures/` or `tests/extended_vendor/`
 - [ ] Unknown values are not converted to zero, not-charging, or offline
 - [ ] Synthetic evidence is marked and excluded from real support
 - [ ] Licenses and attribution are preserved where applicable

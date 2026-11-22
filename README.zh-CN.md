@@ -1,26 +1,18 @@
-# Wireless Battery
+<div align="center">
+  <img src="tray/assets/app-icon.png" alt="Wireless Battery 图标" width="128">
+  <h1>Wireless Battery</h1>
+</div>
 
 > **Language / 语言**: [English](README.md) | **简体中文**
 
 一个同步 Rust 库与命令行工具，用于通过 HID 保守地读取外设电量，并默认支持只读 Bluetooth LE Battery Service（BAS）。
 
-本项目将**协议安全性**和**可复现性**置于设备数量之上：
+## 功能特性
 
-- 被动发现阶段绝不打开 HID 会话、不发送任何报告、不启动蓝牙扫描；
-- 未知值保持未知——超时或超范围百分比绝不会伪造成 0% 或静默钳位成 100%；在没有明确且有据可查的型号曲线或厂商档位换算规则前，电压或离散档位绝不会被猜测成百分比；
-- 每个声明式协议和内置 Provider 都可以通过精简 JSON Fixture 在无硬件环境下严格回放；
-- 合成（synthetic）协议与真实发现及支持矩阵完全隔离；
-- 正常读数与日志中绝不暴露原始系统路径、序列号或原始 HID 字节。
-
-## 当前支持情况
-
-> **支持的产品矩阵**：完整设备列表见 [**设备支持矩阵（`docs/support-matrix.zh-CN.md`）**](docs/support-matrix.zh-CN.md)，内含按**厂商、设备类型、设备 / 型号与 Provider ID** 组织的完整表格。
-
-**当前内置 153 条 Provider**（151 条厂商 HID + `os.xinput` + `bluetooth.bas`），覆盖 Logitech / Astro、Razer、SteelSeries、Corsair、HyperX、ASUS ROG、Sony、Nintendo、Valve、GameSir、Flydigi、8BitDo、Beitong、Keychron、Cherry、Akko、NuPhy、AULA、MCHOSE、ATK / VXE / VGN、DAREU、EWEADN、Rapoo、WOB、Glorious、Lamzu、WLmouse、Pulsar、VAXEE、Ninjutso、Endgame Gear、Finalmouse、ZOWIE、Audeze、JBL、Jabra、Turtle Beach、AKG、Fractal、Alienware、Moondrop、Maono、XInput 等设备，完整列表见[支持矩阵](docs/support-matrix.zh-CN.md)。所有 Provider 默认启用；如在特定型号或固件上遇到读数异常，欢迎直接提交 Issue 反馈。
-
-内置厂商协议实现参考了 [Wireless-Device-Battery-Monitor / BatteryHub](NOTICE)（GPL-3.0-or-later）及 [Voltide](NOTICE)（MIT），完整署名见 [NOTICE](NOTICE)。
-
-标准 HID 电池 Usage 与经典蓝牙/HFP 电量报告预留给后续版本。BLE 支持仅实现 BAS Battery Level（`0x2A19`）只读查询，不包含配对、通知订阅、充电状态推断或跨传输设备去重。
+- **广泛的设备支持**：目前内置 **153 个 Provider**（151 个厂商 HID Provider，以及 `os.xinput` 和 `bluetooth.bas`），覆盖鼠标、键盘、耳机、手柄等无线外设。完整设备与型号列表见[设备支持矩阵](docs/support-matrix.zh-CN.md)。
+- **多种交付形态**：提供 **Tray、CLI 与 Rust API**，分别满足桌面交互、脚本自动化与第三方应用集成需求。
+- **原生托盘体验**：Tray 支持 **macOS 与 Windows**，分别采用 SwiftUI 与 Win32 / Direct2D，界面风格与系统原生 UI 保持一致。
+- **可靠的设备适配**：设备支持主要来自真实设备逆向，并参考其他开源仓库的设备适配；相关说明与署名见 [NOTICE](NOTICE)。
 
 ## 构建
 
@@ -35,7 +27,53 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 
 系统依赖与权限限制详见[平台支持](docs/platform-support.zh-CN.md)。
 
-## Rust API
+## 交付产物
+
+### Tray（原生系统托盘）
+
+[`tray/`](tray/README.zh-CN.md) 是一个独立于根库与 CLI 的 Cargo 工作区，采用 **共享 Rust 核心（`tray-core`） + 各平台极薄原生 UI 壳** 架构（Windows 为 Win32 + DWM Acrylic + Direct2D；macOS 为 SwiftUI `MenuBarExtra` + `tray-ffi` 静态库），避免 GUI 依赖污染核心库与 CLI。
+
+<p align="center"><strong>Windows</strong></p>
+<p align="center">
+  <img src="docs/assests/windows_devices.png" alt="Windows Tray 设备列表" width="360">
+  <img src="docs/assests/windows_settings.png" alt="Windows Tray 设置页" width="360">
+</p>
+
+<p align="center"><strong>macOS</strong></p>
+<p align="center">
+  <img src="docs/assests/macos_devices.png" alt="macOS Tray 设备列表" width="360">
+  <img src="docs/assests/macos_settings.png" alt="macOS Tray 设置页" width="360">
+</p>
+
+```bash
+cd tray
+cargo test --locked
+cargo build --locked --release -p wireless-battery-tray   # Windows 原生托盘
+```
+
+架构细节、macOS `.app` 打包及 BLE 支持说明详见 [托盘说明文档](tray/README.zh-CN.md)。
+
+### CLI（命令行）
+
+```bash
+wireless-battery list --json
+wireless-battery list --read
+wireless-battery list --read --json --timeout-ms 5000
+wireless-battery read <device-id> --json --timeout-ms 1000
+wireless-battery diagnose <device-id> --json
+wireless-battery probe <device-id> --listen 3000
+wireless-battery probe <device-id> --report-id 0 --send "5A A5 01 02 00"
+```
+
+所有已内置的厂商与系统 Provider 默认均已启用，无需额外开关。`list` 会返回所有枚举到的端点（含未匹配与冲突端点）。默认 `list` 保持完全被动，电量显示为 `not read`；`list --read` 仅显式读取当前可读的设备，其 JSON 条目在原始设备字段基础上附加 `reading` 与 `read_error`，单个设备失败不会导致整个列表失败。JSON 仅输出到 stdout，警告与进度信息输出到 stderr。
+
+对于未支持的 HID 设备，可以直接使用 `probe` 对任意端点进行被动监听（`--listen`）或发送自定义 Output / Feature 报文（`--send`、`--send-feature`、`--get-feature`、`--get-input`）以辅助逆向分析。
+
+设备 ID 是不可逆哈希值而非序列号，主要面向单次会话使用。在操作系统路径稳定的平台上，其确定性足以支持后续 `read` 命令调用，但不保证跨重启、跨机器或路径重分配后保持不变。
+
+退出码约定：`0` 成功；`2` 参数错误；`3` 设备不存在或不支持；`4` 权限不足；`5` 超时或传输错误；`6` 响应校验失败；`70` 内部错误。
+
+### Rust API
 
 ```rust
 use wireless_battery::{BatteryClient, ClientConfig};
@@ -56,38 +94,6 @@ if let Some(device) = devices.iter().find(|device| device.readable) {
 所有已注册 Provider 默认可直接读取。只有在启用缓存且调用方显式设置 `ReadOptions::allow_stale` 时，刷新失败才会返回缓存的旧值；旧值保留原始 `observed_at` 时间戳，并将 `freshness` 标记为 `stale`。
 
 `ReadOptions::timeout` 是整次调用的总时间预算。Provider 中的 `io_timeout` 是单次 I/O 偏好值，受限于剩余总预算。部分平台的 Feature 报告操作无法被强制取消。
-
-## 命令行（CLI）
-
-```bash
-wireless-battery list --json
-wireless-battery list --read
-wireless-battery list --read --json --timeout-ms 5000
-wireless-battery read <device-id> --json --timeout-ms 1000
-wireless-battery diagnose <device-id> --json
-wireless-battery probe <device-id> --listen 3000
-wireless-battery probe <device-id> --report-id 0 --send "5A A5 01 02 00"
-```
-
-所有已内置的厂商与系统 Provider 默认均已启用，无需额外开关。`list` 会返回所有枚举到的端点（含未匹配与冲突端点）。默认 `list` 保持完全被动，电量显示为 `not read`；`list --read` 仅显式读取当前可读的设备，其 JSON 条目在原始设备字段基础上附加 `reading` 与 `read_error`，单个设备失败不会导致整个列表失败。JSON 仅输出到 stdout，警告与进度信息输出到 stderr。
-
-对于未支持的 HID 设备，可以直接使用 `probe` 对任意端点进行被动监听（`--listen`）或发送自定义 Output / Feature 报文（`--send`、`--send-feature`、`--get-feature`、`--get-input`）以辅助逆向分析。
-
-设备 ID 是不可逆哈希值而非序列号，主要面向单次会话使用。在操作系统路径稳定的平台上，其确定性足以支持后续 `read` 命令调用，但不保证跨重启、跨机器或路径重分配后保持不变。
-
-退出码约定：`0` 成功；`2` 参数错误；`3` 设备不存在或不支持；`4` 权限不足；`5` 超时或传输错误；`6` 响应校验失败；`70` 内部错误。
-
-## 原生系统托盘（`tray/`）
-
-[`tray/`](tray/README.zh-CN.md) 是一个独立于根库与 CLI 的 Cargo 工作区，采用 **共享 Rust 核心（`tray-core`） + 各平台极薄原生 UI 壳** 架构（Windows 为 Win32 + DWM Acrylic + Direct2D；macOS 为 SwiftUI `MenuBarExtra` + `tray-ffi` 静态库），避免 GUI 依赖污染核心库与 CLI。
-
-```bash
-cd tray
-cargo test --locked
-cargo build --locked --release -p wireless-battery-tray   # Windows 原生托盘
-```
-
-架构细节、macOS `.app` 打包及 BLE 支持说明详见 [托盘说明文档](tray/README.zh-CN.md)。
 
 ## 未支持的设备怎么办
 

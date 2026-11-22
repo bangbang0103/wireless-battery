@@ -4,9 +4,9 @@
 
 ## 规范化报告格式
 
-Fixture 中的 `hex` 以及字段偏移量均**不包含** HID Report ID；Report ID 单独保存在 `report_id` 字段中。`get_feature.length` 与响应长度仅统计有效载荷字节数。HIDAPI 的前导报告字节属于底层传输实现细节。
+Fixture 中的 `hex` 以及字段偏移量均**不包含** HID Report ID；Report ID 单独保存在 `report_id` 字段中。`get_feature.length`、`get_input.length` 与响应长度仅统计有效载荷字节数。HIDAPI 的前导报告字节属于底层传输实现细节。
 
-每个 Fixture 步骤与一次传输操作一一对应：HID 的 `send_feature`、`get_feature`、`write_output`、`set_output`、`read_input`，以及标准传输的 `read_bas` 与 `read_xinput`。这避免了无法区分错误发生在请求阶段还是响应阶段的歧义。
+每个 Fixture 步骤与一次传输操作一一对应：HID 的 `send_feature`、`get_feature`、`get_input`、`write_output`、`set_output`、`read_input`，以及标准传输的 `read_bas` 与 `read_xinput`。这避免了无法区分错误发生在请求阶段还是响应阶段的歧义。
 
 ## 录制与抓包（Capture）
 

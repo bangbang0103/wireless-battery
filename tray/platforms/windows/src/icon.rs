@@ -92,7 +92,7 @@ pub fn resolve_icon_font_family(dwrite: &IDWriteFactory) -> PCWSTR {
     w!("Segoe MDL2 Assets")
 }
 
-/// Generate a crisp DPI-matched minimalist SVG vector tray icon (battery + wireless arcs).
+/// Generate a crisp DPI-matched minimalist SVG vector tray icon (lightning + wireless arcs).
 pub fn build_tray_logo_icon(state: TrayIconState, taskbar_dark: bool) -> Option<OwnedIcon> {
     let size = tray_icon_pixel_size();
     let bmi = BITMAPINFO {
