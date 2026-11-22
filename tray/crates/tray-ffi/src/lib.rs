@@ -14,6 +14,7 @@ pub type WbTrayUpdateCallback = Option<unsafe extern "C" fn(*const c_char, *mut 
 /// Opaque handle exposed across the C ABI.
 pub struct WbTrayHandle {
     poller: PollerHandle,
+    callback: CallbackContext,
 }
 
 #[derive(serde::Serialize)]
@@ -63,7 +64,10 @@ pub extern "C" fn wb_tray_create(
     let poller = PollerHandle::start(Arc::new(service), move |update| {
         ctx.invoke(&update);
     });
-    Box::into_raw(Box::new(WbTrayHandle { poller }))
+    Box::into_raw(Box::new(WbTrayHandle {
+        poller,
+        callback: ctx,
+    }))
 }
 
 /// Stop polling and free the handle.
@@ -136,7 +140,20 @@ pub unsafe extern "C" fn wb_tray_update_config_json(
     let Ok(config) = serde_json::from_str::<TrayConfig>(&raw) else {
         return false;
     };
-    handle.poller.update_config(config);
+    let prev = handle.poller.service().config();
+    let needs_repoll = prev.poll_interval_secs != config.poll_interval_secs
+        || prev.allow_experimental != config.allow_experimental
+        || prev.allow_stale != config.allow_stale
+        || prev.read_timeout_ms != config.read_timeout_ms;
+    let snapshot = if needs_repoll {
+        handle.poller.update_config_async(config)
+    } else {
+        handle.poller.service().update_config_async(config)
+    };
+    handle.callback.invoke(&TrayUpdate {
+        snapshot,
+        alerts: Vec::new(),
+    });
     true
 }
 
@@ -155,6 +172,23 @@ pub unsafe extern "C" fn wb_tray_diagnose_json(
         return ptr::null_mut();
     };
     to_c_string(handle.poller.service().diagnose_json(&id).ok())
+}
+
+/// Return sanitized error report JSON (including `last_error`) for one device.
+///
+/// # Safety
+/// `handle` must be valid and `device_id_utf8` must be a valid NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn wb_tray_error_report_json(
+    handle: *const WbTrayHandle,
+    device_id_utf8: *const c_char,
+) -> *mut c_char {
+    let (Some(handle), Some(id)) = (unsafe { handle.as_ref() }, unsafe {
+        read_c_str(device_id_utf8)
+    }) else {
+        return ptr::null_mut();
+    };
+    to_c_string(handle.poller.service().error_report_json(&id).ok())
 }
 
 /// Free a UTF-8 string returned by this library.

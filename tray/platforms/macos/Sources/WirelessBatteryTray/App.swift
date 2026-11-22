@@ -38,6 +38,7 @@ final class FloatingPinController: ObservableObject {
 
     func pin(store: TrayStore) {
         if let existing = panel {
+            applyAppearance(themeMode: store.snapshot.config.themeMode, to: existing)
             existing.orderFrontRegardless()
             isPinned = true
             return
@@ -64,6 +65,7 @@ final class FloatingPinController: ObservableObject {
         panel.contentView?.wantsLayer = true
         panel.contentView?.layer?.cornerRadius = 14
         panel.contentView?.layer?.masksToBounds = true
+        applyAppearance(themeMode: store.snapshot.config.themeMode, to: panel)
 
         if let screen = NSScreen.main {
             let visible = screen.visibleFrame
@@ -80,6 +82,28 @@ final class FloatingPinController: ObservableObject {
         panel?.close()
         panel = nil
         isPinned = false
+    }
+
+    func updateChromeVisibility(_ visible: Bool) {
+        guard let panel else { return }
+        panel.hasShadow = visible
+        panel.contentView?.layer?.cornerRadius = visible ? 14 : 0
+    }
+
+    func updateAppearance(themeMode: String) {
+        guard let panel else { return }
+        applyAppearance(themeMode: themeMode, to: panel)
+    }
+
+    private func applyAppearance(themeMode: String, to panel: NSPanel) {
+        switch themeMode {
+        case "light":
+            panel.appearance = NSAppearance(named: .aqua)
+        case "dark":
+            panel.appearance = NSAppearance(named: .darkAqua)
+        default:
+            panel.appearance = nil
+        }
     }
 }
 
@@ -164,8 +188,24 @@ private struct PopoverRootView: View {
     @State private var copiedBanner = false
     @State private var isHovering = false
 
+    private var lang: AppLanguage {
+        store.language
+    }
+
     private var showChrome: Bool {
         !inFloatingPanel || isHovering || showSettings || store.snapshot.devices.isEmpty
+    }
+
+    private var compactTransparent: Bool {
+        inFloatingPanel && !showChrome
+    }
+
+    private var preferredScheme: ColorScheme? {
+        switch store.snapshot.config.themeMode {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
     }
 
     var body: some View {
@@ -176,118 +216,161 @@ private struct PopoverRootView: View {
                 mainView
             }
         }
-        .background(.ultraThinMaterial)
-        .animation(.easeInOut(duration: 0.16), value: showChrome)
+        .background(showChrome ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.clear))
+        .preferredColorScheme(preferredScheme)
+        .animation(.easeInOut(duration: 0.18), value: showChrome)
         .onHover { hovering in
             isHovering = hovering
         }
+        .onChange(of: showChrome) { visible in
+            if inFloatingPanel {
+                pinController.updateChromeVisibility(visible)
+            }
+        }
+        .onChange(of: store.snapshot.config.themeMode) { mode in
+            pinController.updateAppearance(themeMode: mode)
+        }
         .onAppear {
+            if inFloatingPanel {
+                pinController.updateChromeVisibility(showChrome)
+                pinController.updateAppearance(themeMode: store.snapshot.config.themeMode)
+            }
             store.refreshIfNeededOnOpen()
         }
     }
 
+    // MARK: - Main View
+
     private var mainView: some View {
         VStack(spacing: 0) {
             if showChrome {
-                // Header
+                // Native macOS Menu Bar Popover Header
                 HStack(spacing: 8) {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 7, height: 7)
                     Text("Wireless Battery")
                         .font(.system(size: 13, weight: .semibold))
-                    Text(store.snapshot.refreshing ? "· 读取中…" : "· \(TrayStore.relativeTime(from: store.snapshot.lastSyncAt))")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                    if store.snapshot.refreshing {
+                        ProgressView()
+                            .controlSize(.mini)
+                    }
                     Spacer()
-                    Button {
+                    HeaderIconButton(
+                        systemName: pinController.isPinned ? "pin.fill" : "pin",
+                        active: pinController.isPinned,
+                        help: pinController.isPinned ? lang.pinHelpPinned : lang.pinHelpUnpinned
+                    ) {
                         if inFloatingPanel {
                             pinController.unpin()
                         } else {
                             pinController.toggle(store: store)
                         }
-                    } label: {
-                        Image(systemName: pinController.isPinned ? "pin.fill" : "pin")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(pinController.isPinned ? Color.green : Color.secondary)
                     }
-                    .buttonStyle(.borderless)
-                    .help(pinController.isPinned ? "取消置顶" : "固定在屏幕最上层（可拖动）")
-                    Button { store.refreshAll() } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 12, weight: .medium))
+                    HeaderIconButton(
+                        systemName: "arrow.clockwise",
+                        active: false,
+                        help: lang.refreshAllHelp
+                    ) {
+                        store.refreshAll()
                     }
-                    .buttonStyle(.borderless)
-                    .help("立即刷新全部可读设备")
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
-                            .font(.system(size: 12, weight: .medium))
+                    HeaderIconButton(
+                        systemName: "gearshape",
+                        active: false,
+                        help: lang.settingsHelp
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            showSettings = true
+                        }
                     }
-                    .buttonStyle(.borderless)
-                    .help("偏好与安全策略")
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 11)
+                .padding(.vertical, 10)
 
                 Divider()
             }
 
-            // Device list
+            // Divider-separated device list (native macOS Control Center / Bluetooth list style)
             if store.snapshot.devices.isEmpty {
                 emptyState
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 6) {
-                        ForEach(store.snapshot.devices) { device in
-                            DeviceCardView(
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(store.snapshot.devices.enumerated()), id: \.element.id) { index, device in
+                            if index > 0 {
+                                Divider()
+                                    .padding(.horizontal, 14)
+                            }
+                            DeviceRowView(
                                 device: device,
-                                expanded: expandedId == device.id,
+                                lang: lang,
+                                expanded: !compactTransparent && expandedId == device.id,
+                                compact: compactTransparent,
                                 onToggle: {
+                                    guard !compactTransparent else { return }
                                     withAnimation(.easeInOut(duration: 0.16)) {
                                         expandedId = expandedId == device.id ? nil : device.id
                                     }
                                 },
                                 onRefresh: { store.refreshDevice(device.id) },
-                                onCopyDiagnose: {
-                                    if let json = store.diagnoseJSON(for: device.id) {
+                                onCopyError: {
+                                    if let json = store.errorReportJSON(for: device.id) {
                                         NSPasteboard.general.clearContents()
                                         NSPasteboard.general.setString(json, forType: .string)
-                                        copiedBanner = true
+                                        withAnimation(.easeInOut(duration: 0.15)) {
+                                            copiedBanner = true
+                                        }
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
-                                            copiedBanner = false
+                                            withAnimation(.easeInOut(duration: 0.15)) {
+                                                copiedBanner = false
+                                            }
                                         }
                                     }
                                 }
                             )
                         }
                     }
-                    .padding(10)
+                    .padding(.vertical, 6)
                 }
                 .frame(maxHeight: 360)
             }
 
             if copiedBanner {
-                Text("已复制脱敏诊断 JSON")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .background(Color.green.opacity(0.9), in: Capsule())
-                    .padding(.bottom, 6)
+                HStack(spacing: 5) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.green)
+                    Text(lang.toastErrorCopied)
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
+                .padding(.bottom, 8)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
 
             if showChrome {
                 Divider()
 
-                // Footer
-                HStack {
-                    Text(policyLabel)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                // Minimalist macOS Footer
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 6, height: 6)
+                    Text(
+                        store.snapshot.refreshing
+                            ? lang.readingPeripherals
+                            : lang.footerSummary(
+                                lastSyncAt: store.snapshot.lastSyncAt,
+                                pollSecs: store.snapshot.config.pollIntervalSecs
+                            )
+                    )
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
                     Spacer()
-                    Button("退出") { NSApp.terminate(nil) }
+                    Button(lang.quitLabel) { NSApp.terminate(nil) }
                         .buttonStyle(.borderless)
-                        .font(.system(size: 11))
+                        .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 14)
@@ -296,103 +379,201 @@ private struct PopoverRootView: View {
         }
     }
 
+    // MARK: - Empty State
+
     private var emptyState: some View {
-        VStack(spacing: 8) {
+        let hasHidden = store.snapshot.hiddenExperimentalCount > 0
+        return VStack(spacing: 8) {
             Image(systemName: "battery.75")
                 .font(.system(size: 24))
                 .foregroundStyle(.secondary)
-            Text("未发现可读取的无线外设")
-                .font(.system(size: 12, weight: .medium))
-            if store.snapshot.hiddenExperimentalCount > 0 {
-                Text("检测到 \(store.snapshot.hiddenExperimentalCount) 台实验性协议设备，默认未启用，可在设置中开启。")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                Button("前往开启实验性协议") { showSettings = true }
-                    .controlSize(.small)
-            } else {
-                Text("被动枚举未匹配到已知接收器或外设，请确认接收器已接入并处于唤醒状态。")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                Button("重新扫描端点") { store.refreshAll() }
-                    .controlSize(.small)
+            Text(lang.emptyTitle)
+                .font(.system(size: 12.5, weight: .medium))
+            Text(lang.emptyHint(hiddenExperimentalCount: store.snapshot.hiddenExperimentalCount))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button(lang.emptyAction(hasHiddenExperimental: hasHidden)) {
+                if hasHidden {
+                    showSettings = true
+                } else {
+                    store.refreshAll()
+                }
             }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .padding(.top, 2)
         }
         .padding(.vertical, 28)
         .padding(.horizontal, 20)
     }
 
+    // MARK: - Native macOS Settings View
+
     private var settingsView: some View {
         let cfg = store.snapshot.config
         return VStack(spacing: 0) {
+            // Native macOS navigation header
             HStack {
-                Button { showSettings = false } label: {
-                    Label("返回", systemImage: "chevron.left")
-                        .font(.system(size: 12, weight: .medium))
+                Button {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        showSettings = false
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(lang.backLabel)
+                            .font(.system(size: 12, weight: .medium))
+                    }
                 }
                 .buttonStyle(.borderless)
                 Spacer()
-                Text("偏好与安全策略")
+                Text(lang.settingsTitle)
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Color.clear.frame(width: 44, height: 1)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.vertical, 10)
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("轮询频率").font(.system(size: 12, weight: .medium))
-                        Spacer()
-                        Text("休眠设备不主动唤醒")
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(.secondary)
-                    }
-                    Picker("", selection: Binding(
-                        get: { cfg.pollIntervalSecs },
-                        set: { next in
-                            var updated = cfg
-                            updated.pollIntervalSecs = next
-                            store.updateConfig(updated)
+            // Native macOS Ventura/Sonoma/Sequoia grouped inset Settings containers
+            VStack(spacing: 10) {
+                // Group 1: Appearance, Language, Poll Interval (native macOS pop-up menu Pickers)
+                MacSettingsGroup {
+                    MacPickerRow(
+                        icon: "circle.lefthalf.filled",
+                        title: lang.settingThemeTitle
+                    ) {
+                        Picker("", selection: Binding(
+                            get: { cfg.themeMode },
+                            set: { next in
+                                var u = cfg
+                                u.themeMode = next
+                                store.updateConfig(u)
+                            }
+                        )) {
+                            Text(lang.themeLabel("system")).tag("system")
+                            Text(lang.themeLabel("light")).tag("light")
+                            Text(lang.themeLabel("dark")).tag("dark")
                         }
-                    )) {
-                        Text("1 分钟").tag(UInt64(60))
-                        Text("5 分钟").tag(UInt64(300))
-                        Text("15 分钟").tag(UInt64(900))
-                        Text("手动").tag(UInt64(0))
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .fixedSize()
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
+
+                    Divider().padding(.leading, 38)
+
+                    MacPickerRow(
+                        icon: "globe",
+                        title: lang.settingLanguageTitle
+                    ) {
+                        Picker("", selection: Binding(
+                            get: { cfg.language },
+                            set: { next in
+                                var u = cfg
+                                u.language = next
+                                store.updateConfig(u)
+                            }
+                        )) {
+                            Text(lang.languageLabel("system")).tag("system")
+                            Text(lang.languageLabel("zh_cn")).tag("zh_cn")
+                            Text(lang.languageLabel("en")).tag("en")
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .fixedSize()
+                    }
+
+                    Divider().padding(.leading, 38)
+
+                    MacPickerRow(
+                        icon: "clock",
+                        title: lang.settingPollTitle,
+                        subtitle: lang.settingPollDesc
+                    ) {
+                        Picker("", selection: Binding(
+                            get: { cfg.pollIntervalSecs },
+                            set: { next in
+                                var u = cfg
+                                u.pollIntervalSecs = next
+                                store.updateConfig(u)
+                            }
+                        )) {
+                            Text(lang.pollLabel(300)).tag(UInt64(300))
+                            Text(lang.pollLabel(900)).tag(UInt64(900))
+                            Text(lang.pollLabel(1800)).tag(UInt64(1800))
+                            Text(lang.pollLabel(3600)).tag(UInt64(3600))
+                            Text(lang.pollLabel(0)).tag(UInt64(0))
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .fixedSize()
+                    }
                 }
 
-                Divider()
+                // Group 2: Low Battery Alert + nested Silent Notifications sub-option
+                MacSettingsGroup {
+                    MacToggleRow(
+                        icon: "bell.badge",
+                        title: lang.settingLowBatteryTitle,
+                        subtitle: lang.lowBatteryDesc(enabled: cfg.lowBatteryNotify, silent: cfg.lowBatterySilent),
+                        isOn: Binding(
+                            get: { cfg.lowBatteryNotify },
+                            set: { v in
+                                var u = cfg
+                                u.lowBatteryNotify = v
+                                withAnimation(.easeInOut(duration: 0.16)) {
+                                    store.updateConfig(u)
+                                }
+                            }
+                        )
+                    )
 
-                Toggle("允许实验性协议（Experimental）", isOn: Binding(
-                    get: { cfg.allowExperimental },
-                    set: { v in var u = cfg; u.allowExperimental = v; store.updateConfig(u) }
-                ))
-                Toggle("失败时保留上次缓存（Stale）", isOn: Binding(
-                    get: { cfg.allowStale },
-                    set: { v in var u = cfg; u.allowStale = v; store.updateConfig(u) }
-                ))
-                Toggle("低电量系统提醒（≤ 15%）", isOn: Binding(
-                    get: { cfg.lowBatteryNotify },
-                    set: { v in var u = cfg; u.lowBatteryNotify = v; store.updateConfig(u) }
-                ))
-                Toggle("登录时静默自启", isOn: Binding(
-                    get: { cfg.autostart },
-                    set: { v in var u = cfg; u.autostart = v; store.updateConfig(u) }
-                ))
-                .disabled(!store.isBundledApp)
-                .help(store.isBundledApp ? "登录 macOS 时仅驻留菜单栏" : "打包为 .app 后可用")
+                    if cfg.lowBatteryNotify {
+                        Divider().padding(.leading, 38)
+
+                        MacToggleRow(
+                            icon: "bell.slash",
+                            title: lang.settingSilentTitle,
+                            subtitle: lang.settingSilentDesc,
+                            indented: true,
+                            isOn: Binding(
+                                get: { cfg.lowBatterySilent },
+                                set: { v in
+                                    var u = cfg
+                                    u.lowBatterySilent = v
+                                    store.updateConfig(u)
+                                }
+                            )
+                        )
+                    }
+                }
+
+                // Group 3: Launch at Login
+                MacSettingsGroup {
+                    MacToggleRow(
+                        icon: "power",
+                        title: lang.settingAutostartTitle,
+                        subtitle: lang.settingAutostartDesc,
+                        isOn: Binding(
+                            get: { cfg.autostart },
+                            set: { v in
+                                var u = cfg
+                                u.autostart = v
+                                store.updateConfig(u)
+                            }
+                        )
+                    )
+                    .disabled(!store.isBundledApp)
+                    .help(store.isBundledApp ? lang.settingAutostartHelpBundled : lang.settingAutostartHelpUnbundled)
+                }
             }
-            .font(.system(size: 12))
-            .toggleStyle(.switch)
-            .controlSize(.small)
             .padding(14)
         }
     }
@@ -404,86 +585,237 @@ private struct PopoverRootView: View {
         default: return .secondary
         }
     }
+}
 
-    private var policyLabel: String {
-        let secs = store.snapshot.config.pollIntervalSecs
-        if secs == 0 { return "仅手动刷新" }
-        return secs % 60 == 0 ? "每 \(secs / 60) 分钟静默轮询" : "每 \(secs) 秒静默轮询"
+// MARK: - Native macOS Helper Components
+
+private struct HeaderIconButton: View {
+    let systemName: String
+    let active: Bool
+    let help: String
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(active ? Color.accentColor : (hovered ? Color.primary : Color.secondary))
+                .frame(width: 24, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(
+                            active
+                                ? Color.accentColor.opacity(0.16)
+                                : (hovered ? Color.primary.opacity(0.08) : Color.clear)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .help(help)
     }
 }
 
-private struct DeviceCardView: View {
+private struct MacSettingsGroup<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            content()
+        }
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+        )
+    }
+}
+
+private struct MacPickerRow<Control: View>: View {
+    let icon: String
+    let title: String
+    var subtitle: String? = nil
+    @ViewBuilder let control: () -> Control
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .frame(width: 18, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+            control()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+    }
+}
+
+private struct MacToggleRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    var indented: Bool = false
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if indented {
+                Spacer().frame(width: 12)
+            }
+            Image(systemName: icon)
+                .font(.system(size: indented ? 12 : 13))
+                .foregroundStyle(.secondary)
+                .frame(width: 18, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 12, weight: indented ? .regular : .medium))
+                Text(subtitle)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Toggle("", isOn: $isOn)
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .labelsHidden()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, indented ? 8 : 9)
+    }
+}
+
+// MARK: - Divider-Separated Device Row
+
+private struct DeviceRowView: View {
     let device: DeviceViewModel
+    let lang: AppLanguage
     let expanded: Bool
+    let compact: Bool
     let onToggle: () -> Void
     let onRefresh: () -> Void
-    let onCopyDiagnose: () -> Void
+    let onCopyError: () -> Void
+    @State private var hovered = false
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.primary.opacity(0.06))
-                        .frame(width: 34, height: 34)
+                if compact {
                     Image(systemName: symbolName)
-                        .font(.system(size: 14))
+                        .font(.system(size: 15))
+                        .frame(width: 30, height: 30)
+                        .shadow(color: Color.black.opacity(0.35), radius: 1.5, x: 0, y: 1)
+                } else {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.primary.opacity(0.06))
+                            .frame(width: 34, height: 34)
+                        Image(systemName: symbolName)
+                            .font(.system(size: 14))
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(device.name)
                         .font(.system(size: 13, weight: .medium))
                         .lineLimit(1)
-                    Text(subtitle)
+                    Text(lang.deviceSubtitle(for: device))
                         .font(.system(size: 11))
                         .foregroundStyle(subtitleColor)
                         .lineLimit(1)
                 }
+                .shadow(color: compact ? Color.black.opacity(0.35) : .clear, radius: 1.5, x: 0, y: 1)
 
                 Spacer()
 
                 readoutView
-                    .frame(width: 70, alignment: .trailing)
+                    .frame(width: 68, alignment: .trailing)
+                    .shadow(color: compact ? Color.black.opacity(0.35) : .clear, radius: 1.5, x: 0, y: 1)
+
+                if !compact {
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(
+                            hovered || expanded
+                                ? HierarchicalShapeStyle.secondary
+                                : HierarchicalShapeStyle.tertiary
+                        )
+                        .frame(width: 14)
+                }
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(!compact && hovered ? Color.primary.opacity(0.055) : Color.clear)
+            )
+            .padding(.horizontal, 6)
             .contentShape(Rectangle())
+            .onHover { hovered = $0 }
             .onTapGesture(perform: onToggle)
 
             if expanded {
-                Divider().padding(.vertical, 8)
-                VStack(spacing: 8) {
+                VStack(spacing: 7) {
                     HStack {
-                        Text("协议").foregroundStyle(.secondary)
+                        Text(lang.labelProtocol).foregroundStyle(.secondary)
                         Spacer()
-                        Text(device.providerId ?? "--").font(.system(size: 10.5, design: .monospaced))
+                        Text(device.providerId ?? "--")
+                            .font(.system(size: 10.5, design: .monospaced))
                     }
                     HStack {
-                        Text("证据").foregroundStyle(.secondary)
-                        Spacer()
-                        Text(evidenceLabel)
-                            .foregroundStyle(device.supportStatus == "verified" ? .green : .orange)
-                    }
-                    HStack {
-                        Text("总线").foregroundStyle(.secondary)
+                        Text(lang.labelBus).foregroundStyle(.secondary)
                         Spacer()
                         Text(device.transportLabel)
                     }
                     HStack {
-                        Text("状态").foregroundStyle(.secondary)
+                        Text(lang.labelStatus).foregroundStyle(.secondary)
                         Spacer()
                         Text(expandedStatusLabel)
+                            .foregroundStyle(expandedStatusColor)
                     }
-                    HStack {
+                    HStack(spacing: 8) {
                         Spacer()
-                        Button("重新读取", action: onRefresh).controlSize(.small)
-                        Button("复制脱敏诊断", action: onCopyDiagnose).controlSize(.small)
+                        Button(lang.btnRefreshDevice, action: onRefresh)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        if device.lastError != nil {
+                            Button(lang.btnCopyError, action: onCopyError)
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                        }
                     }
+                    .padding(.top, 2)
                 }
                 .font(.system(size: 11))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
+                )
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
+                .transition(.opacity)
             }
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 9)
-        .background(Color.primary.opacity(expanded ? 0.07 : 0.035), in: RoundedRectangle(cornerRadius: 10))
     }
 
     @ViewBuilder
@@ -502,7 +834,7 @@ private struct DeviceCardView: View {
                 }
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color.primary.opacity(0.1))
+                        Capsule().fill(Color.primary.opacity(0.12))
                         Capsule()
                             .fill(barColor)
                             .frame(width: max(3, geo.size.width * CGFloat(pct) / 100.0))
@@ -513,11 +845,12 @@ private struct DeviceCardView: View {
         } else if device.precision == "discrete_level" {
             let segs = discreteSegments
             VStack(alignment: .trailing, spacing: 5) {
-                Text(discreteLabel).font(.system(size: 12, weight: .semibold))
+                Text(lang.discreteLabel(device.level))
+                    .font(.system(size: 12, weight: .semibold))
                 HStack(spacing: 3) {
                     ForEach(0..<4, id: \.self) { i in
                         Capsule()
-                            .fill(i < segs ? barColor : Color.primary.opacity(0.1))
+                            .fill(i < segs ? barColor : Color.primary.opacity(0.12))
                             .frame(height: 3.5)
                     }
                 }
@@ -546,57 +879,19 @@ private struct DeviceCardView: View {
         return .secondary
     }
 
-    private var subtitle: String {
-        var parts: [String] = []
-        if device.chargeState == "charging" {
-            parts.append("充电中")
-        } else if device.reachability == "sleeping" {
-            parts.append("休眠")
-        } else if device.reachability == "offline" {
-            parts.append("离线")
-        } else if device.precision == "none" {
-            switch device.lastError {
-            case "timeout": parts.append("读取超时 · 请唤醒后重试")
-            case "device_busy": parts.append("接口正忙 · 稍后重试")
-            case "permission_denied": parts.append("权限不足（请检查输入监控权限）")
-            case "device_disconnected": parts.append("连接已断开")
-            case .some: parts.append("读取失败 · 点此重读")
-            case .none: parts.append("\(device.transportLabel) · 读取中")
-            }
-        } else if device.precision == "discrete_level" {
-            parts.append("离散档位")
-        } else {
-            parts.append(device.transportLabel)
-        }
-
-        if device.freshness == "stale" {
-            parts.append("缓存 · \(TrayStore.relativeTime(from: device.observedAt))")
-        } else if device.precision == "percentage", let mv = device.voltageMv {
-            parts.append(String(format: "%.2f V", Double(mv) / 1000.0))
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private var evidenceLabel: String {
-        switch device.supportStatus {
-        case "verified": return "Verified"
-        case "experimental": return "Experimental"
-        case "deprecated": return "Deprecated"
-        default: return "Unknown"
-        }
-    }
-
     private var expandedStatusLabel: String {
-        if device.freshness == "stale" { return "Stale（缓存）" }
-        if device.freshness == "live" { return "Live（实时）" }
-        switch device.lastError {
-        case "timeout": return "读取超时"
-        case "device_busy": return "接口正忙"
-        case "permission_denied": return "权限不足"
-        case "device_disconnected": return "连接已断开"
-        case .some: return "读取失败"
-        case .none: return "未读取"
+        if let err = device.lastError {
+            return lang.errorShortLabel(err)
         }
+        if device.freshness == "stale" { return lang.statusStale }
+        if device.freshness == "live" { return lang.statusLive }
+        return lang.statusUnread
+    }
+
+    private var expandedStatusColor: Color {
+        if device.lastError != nil { return .orange }
+        if device.freshness == "live" { return .green }
+        return .secondary
     }
 
     private var readoutTextColor: Color {
@@ -624,17 +919,6 @@ private struct DeviceCardView: View {
         case "medium": return 2
         case "low", "critical": return 1
         default: return 0
-        }
-    }
-
-    private var discreteLabel: String {
-        switch device.level {
-        case "full": return "满"
-        case "high": return "高"
-        case "medium": return "中"
-        case "low": return "低"
-        case "critical": return "极低"
-        default: return "未知"
         }
     }
 }

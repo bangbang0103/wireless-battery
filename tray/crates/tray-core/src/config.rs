@@ -14,6 +14,44 @@ pub const DEFAULT_LOW_BATTERY_THRESHOLD: u8 = 15;
 /// providers like WOB Rainy75 (3 x 1200ms) and Rapoo VT3S (4500ms) have full budget.
 pub const DEFAULT_READ_TIMEOUT_MS: u64 = 5_000;
 
+/// User-selected appearance theme for the tray UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeMode {
+    /// Follow the operating system's light/dark appearance automatically.
+    #[default]
+    System,
+    /// Always render the light theme.
+    Light,
+    /// Always render the dark theme.
+    Dark,
+}
+
+impl ThemeMode {
+    /// Cycle through `System -> Light -> Dark -> System`.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::System => Self::Light,
+            Self::Light => Self::Dark,
+            Self::Dark => Self::System,
+        }
+    }
+}
+
+/// User-selected UI language preference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LanguageMode {
+    /// Follow the operating system's UI language automatically.
+    #[default]
+    System,
+    /// Simplified Chinese (`简体中文`).
+    ZhCn,
+    /// English.
+    En,
+}
+
 /// User-facing tray settings aligned with `wireless-battery` safety policies.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -24,14 +62,21 @@ pub struct TrayConfig {
     pub allow_experimental: bool,
     /// Return the last successful reading marked as `Stale` when a refresh fails.
     pub allow_stale: bool,
-    /// Enable low-battery OS notifications and subtle low-battery dot on the tray logo.
+    /// Enable low-battery warnings (tray badge & tiered OS notifications at 15%, 10%, 5%, 1%).
     pub low_battery_notify: bool,
+    /// Sub-option under `low_battery_notify`: when true, suppress OS system notifications
+    /// while still keeping the low-battery visual indicator.
+    pub low_battery_silent: bool,
     /// Percentage threshold at or below which a device is considered low battery.
     pub low_battery_threshold: u8,
     /// Launch silently into the system tray on login.
     pub autostart: bool,
     /// Total read time budget per device in milliseconds.
     pub read_timeout_ms: u64,
+    /// UI appearance theme preference (`system`, `light`, or `dark`).
+    pub theme_mode: ThemeMode,
+    /// UI language preference (`system`, `zh_cn`, or `en`).
+    pub language: LanguageMode,
 }
 
 impl Default for TrayConfig {
@@ -41,9 +86,12 @@ impl Default for TrayConfig {
             allow_experimental: true,
             allow_stale: true,
             low_battery_notify: true,
+            low_battery_silent: false,
             low_battery_threshold: DEFAULT_LOW_BATTERY_THRESHOLD,
             autostart: false,
             read_timeout_ms: DEFAULT_READ_TIMEOUT_MS,
+            theme_mode: ThemeMode::System,
+            language: LanguageMode::System,
         }
     }
 }
@@ -182,17 +230,40 @@ mod tests {
         assert_eq!(load_config(&path).unwrap(), TrayConfig::default());
 
         let custom = TrayConfig {
-            poll_interval_secs: 60,
+            poll_interval_secs: 3600,
             allow_experimental: true,
             allow_stale: false,
             low_battery_notify: true,
+            low_battery_silent: true,
             low_battery_threshold: 20,
             autostart: true,
             read_timeout_ms: 5_500,
+            theme_mode: ThemeMode::Dark,
+            language: LanguageMode::En,
         };
         save_config(&path, &custom).unwrap();
         assert_eq!(load_config(&path).unwrap(), custom);
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn legacy_config_without_new_fields_uses_safe_defaults() {
+        let legacy_json = r#"{
+            "poll_interval_secs": 300,
+            "allow_experimental": true,
+            "allow_stale": true,
+            "low_battery_notify": true,
+            "low_battery_threshold": 15,
+            "autostart": false,
+            "read_timeout_ms": 5000
+        }"#;
+        let parsed: TrayConfig = serde_json::from_str(legacy_json).unwrap();
+        assert_eq!(parsed.theme_mode, ThemeMode::System);
+        assert_eq!(parsed.language, LanguageMode::System);
+        assert!(!parsed.low_battery_silent);
+        assert_eq!(ThemeMode::System.next(), ThemeMode::Light);
+        assert_eq!(ThemeMode::Light.next(), ThemeMode::Dark);
+        assert_eq!(ThemeMode::Dark.next(), ThemeMode::System);
     }
 }

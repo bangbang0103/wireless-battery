@@ -38,6 +38,7 @@ pub struct TrayService {
     config_path: Option<PathBuf>,
     state: Mutex<ServiceState>,
     refresh_guard: Mutex<()>,
+    save_guard: Mutex<()>,
 }
 
 impl TrayService {
@@ -78,6 +79,7 @@ impl TrayService {
                 tracker: LowBatteryTracker::default(),
             }),
             refresh_guard: Mutex::new(()),
+            save_guard: Mutex::new(()),
         }
     }
 
@@ -101,12 +103,42 @@ impl TrayService {
     /// Update configuration, persist to disk (best effort), and return the updated snapshot.
     pub fn update_config(&self, config: TrayConfig) -> TraySnapshot {
         let normalized = config.normalized();
-        if let Some(path) = &self.config_path {
-            let _ = save_config(path, &normalized);
+        let snapshot = {
+            let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            guard.config = normalized;
+            build_snapshot(&guard)
+        };
+        self.persist_current_config();
+        snapshot
+    }
+
+    /// Update configuration in memory immediately and persist to disk on a background thread
+    /// so UI interactions never hitch on synchronous filesystem writes.
+    pub fn update_config_async(self: &Arc<Self>, config: TrayConfig) -> TraySnapshot {
+        let normalized = config.normalized();
+        let snapshot = {
+            let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            guard.config = normalized;
+            build_snapshot(&guard)
+        };
+        if self.config_path.is_some() {
+            let service = Arc::clone(self);
+            let _ = thread::Builder::new()
+                .name("wb-tray-config-save".to_owned())
+                .spawn(move || {
+                    service.persist_current_config();
+                });
         }
-        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        guard.config = normalized;
-        build_snapshot(&guard)
+        snapshot
+    }
+
+    fn persist_current_config(&self) {
+        let Some(path) = &self.config_path else {
+            return;
+        };
+        let _save_lock = self.save_guard.lock().unwrap_or_else(|e| e.into_inner());
+        let latest = self.config();
+        let _ = save_config(path, &latest);
     }
 
     /// Perform passive enumeration followed by conservative concurrent reads of eligible devices.
@@ -195,7 +227,7 @@ impl TrayService {
         guard.refreshing = false;
 
         let snapshot = build_snapshot(&guard);
-        let notify = guard.config.low_battery_notify;
+        let notify = guard.config.low_battery_notify && !guard.config.low_battery_silent;
         let threshold = guard.config.low_battery_threshold;
         let alerts = guard.tracker.evaluate(&snapshot.devices, notify, threshold);
         TrayUpdate { snapshot, alerts }
@@ -246,7 +278,7 @@ impl TrayService {
         guard.refreshing = false;
 
         let snapshot = build_snapshot(&guard);
-        let notify = guard.config.low_battery_notify;
+        let notify = guard.config.low_battery_notify && !guard.config.low_battery_silent;
         let threshold = guard.config.low_battery_threshold;
         let alerts = guard.tracker.evaluate(&snapshot.devices, notify, threshold);
         TrayUpdate { snapshot, alerts }
@@ -257,6 +289,29 @@ impl TrayService {
         let diag = self.client.diagnose(device_id)?;
         serde_json::to_string_pretty(&diag).map_err(|error| BatteryError::Internal {
             message: format!("failed to serialize diagnostic: {error}"),
+        })
+    }
+
+    /// Produce sanitized error report JSON (combining the latest read error kind and
+    /// passive diagnostic info) for clipboard copy when a device fails to read.
+    pub fn error_report_json(&self, device_id: &str) -> Result<String, BatteryError> {
+        let last_error = {
+            let guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            guard.errors.get(device_id).copied()
+        };
+        let diag = self.client.diagnose(device_id)?;
+        let mut value = serde_json::to_value(diag).map_err(|error| BatteryError::Internal {
+            message: format!("failed to serialize diagnostic: {error}"),
+        })?;
+        if let Some(obj) = value.as_object_mut() {
+            if let Some(err_kind) = last_error {
+                if let Ok(err_val) = serde_json::to_value(err_kind) {
+                    obj.insert("last_error".to_owned(), err_val);
+                }
+            }
+        }
+        serde_json::to_string_pretty(&value).map_err(|error| BatteryError::Internal {
+            message: format!("failed to serialize error report: {error}"),
         })
     }
 }
@@ -394,6 +449,17 @@ impl PollerHandle {
     /// Update configuration and wake the poller so new intervals/policies take effect immediately.
     pub fn update_config(&self, config: TrayConfig) -> TraySnapshot {
         let snapshot = self.service.update_config(config);
+        let (lock, cvar) = &*self.signal;
+        let mut sig = lock.lock().unwrap_or_else(|e| e.into_inner());
+        sig.config_changed = true;
+        cvar.notify_one();
+        snapshot
+    }
+
+    /// Non-blocking variant of `update_config` that persists on a background thread while
+    /// waking the poller immediately.
+    pub fn update_config_async(&self, config: TrayConfig) -> TraySnapshot {
+        let snapshot = self.service.update_config_async(config);
         let (lock, cvar) = &*self.signal;
         let mut sig = lock.lock().unwrap_or_else(|e| e.into_inner());
         sig.config_changed = true;
@@ -738,11 +804,58 @@ mod tests {
         assert_eq!(exp_update.snapshot.devices.len(), 2);
         assert_eq!(exp_update.snapshot.hidden_experimental_count, 0);
 
-        // Diagnostics JSON is sanitized and valid JSON.
+        // Diagnostics & error report JSON are sanitized and valid JSON.
         let diag = service
             .diagnose_json(&exp_update.snapshot.devices[0].id)
             .unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&diag).unwrap();
         assert!(parsed.get("provider_id").is_some());
+
+        let err_report = service
+            .error_report_json(&exp_update.snapshot.devices[0].id)
+            .unwrap();
+        let err_parsed: serde_json::Value = serde_json::from_str(&err_report).unwrap();
+        assert!(err_parsed.get("last_error").is_some());
+    }
+
+    #[test]
+    fn silent_low_battery_suppresses_os_alerts_while_keeping_tray_badge() {
+        let fail = Arc::new(AtomicBool::new(false));
+        let mut ep_mouse = Endpoint::synthetic("ep-mouse-silent", 0x046D, 0xC547);
+        ep_mouse.product_name = Some("Logitech GPW3".to_owned());
+
+        let registry = Registry::new(vec![Arc::new(StaticProvider {
+            id: "logitech.hidpp",
+            vid: 0x046D,
+            pid: 0xC547,
+            status: SupportStatus::Verified,
+            percentage: 10,
+            fail,
+        })])
+        .unwrap();
+
+        let client = BatteryClient::with_transport(
+            ClientConfig {
+                default_timeout: Duration::from_secs(1),
+                allow_experimental: false,
+                enable_cache: true,
+            },
+            Arc::new(MockTransport {
+                endpoints: vec![ep_mouse],
+            }),
+            registry,
+        )
+        .unwrap();
+
+        let cfg = TrayConfig {
+            low_battery_notify: true,
+            low_battery_silent: true,
+            ..TrayConfig::default()
+        };
+        let service = TrayService::with_client(Arc::new(client), cfg, None);
+
+        let update = service.refresh_all();
+        assert_eq!(update.snapshot.icon_state, TrayIconState::LowBattery);
+        assert!(update.alerts.is_empty());
     }
 }
