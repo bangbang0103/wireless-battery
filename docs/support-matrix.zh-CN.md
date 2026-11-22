@@ -2,7 +2,7 @@
 
 > **Language / 语言**: [English](support-matrix.md) | **简体中文**
 
-**当前内置 152 条厂商与操作系统协议路径**（另含默认启用的 Bluetooth LE BAS），所有已移植设备默认均已启用；如在特定型号或固件上遇到读数异常，欢迎直接提交 Issue 反馈。
+**当前内置 153 条内置 Provider**（151 条厂商 HID + `os.xinput` + `bluetooth.bas`），在 `ClientConfig::default()` 下默认全部启用（2 条已完成实机抓包验证，151 条为实验性实现，详见 [`provenance/builtin-providers.md`](../provenance/builtin-providers.md)）；如在特定型号或固件上遇到读数异常，欢迎直接提交 Issue 反馈。
 
 ## 内置厂商与系统支持列表
 

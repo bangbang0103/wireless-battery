@@ -2,8 +2,8 @@
 
 use crate::error::BatteryError;
 use crate::model::{
-    BatteryLevel, Capabilities, Endpoint, ProviderReading, ReadingSource, SupportStatus,
-    TransportKind,
+    BatteryLevel, Capabilities, DeviceKind, Endpoint, ProviderReading, ReadingSource,
+    SupportStatus, TransportKind,
 };
 use crate::providers::{Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata};
 use crate::transport::Transport;
@@ -19,6 +19,7 @@ impl Provider for XInputProvider {
     fn metadata(&self) -> ProviderMetadata {
         ProviderMetadata {
             version: "1.0.0".to_owned(),
+            device_kind: DeviceKind::Gamepad,
             support_status: SupportStatus::Experimental,
             capabilities: Capabilities {
                 discrete_level: true,

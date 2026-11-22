@@ -7,16 +7,16 @@
 本项目将**协议安全性**和**可复现性**置于设备数量之上：
 
 - 被动发现阶段绝不打开 HID 会话、不发送任何报告、不启动蓝牙扫描；
-- 未知值保持未知——超时绝不会变成 0%，电压或离散档位也不会被伪造成百分比；
+- 未知值保持未知——超时或超范围百分比绝不会伪造成 0% 或静默钳位成 100%；在没有明确且有据可查的型号曲线或厂商档位换算规则前，电压或离散档位绝不会被猜测成百分比；
 - 每个声明式协议和内置 Provider 都可以通过精简 JSON Fixture 在无硬件环境下严格回放；
 - 合成（synthetic）协议与真实发现及支持矩阵完全隔离；
 - 正常读数与日志中绝不暴露原始系统路径、序列号或原始 HID 字节。
 
 ## 当前支持情况
 
-> **支持的产品矩阵**：完整设备列表见 [**设备支持矩阵（`docs/support-matrix.zh-CN.md`）**](docs/support-matrix.zh-CN.md)，内含按**厂商、设备、支持方式**分类的完整表格。
+> **支持的产品矩阵**：完整设备列表见 [**设备支持矩阵（`docs/support-matrix.zh-CN.md`）**](docs/support-matrix.zh-CN.md)，内含按**厂商、设备类型、设备 / 型号与 Provider ID** 组织的完整表格。
 
-**当前内置 152 条厂商与操作系统协议路径**（另含默认启用的 Bluetooth LE BAS），覆盖 Logitech / Astro、Razer、SteelSeries、Corsair、HyperX、ASUS ROG、Sony、Nintendo、Valve、GameSir、Flydigi、8BitDo、Beitong、Keychron、Cherry、Akko、NuPhy、AULA、MCHOSE、ATK / VXE / VGN、DAREU、EWEADN、Rapoo、WOB、Glorious、Lamzu、WLmouse、Pulsar、VAXEE、Ninjutso、Endgame Gear、Finalmouse、ZOWIE、Audeze、JBL、Jabra、Turtle Beach、AKG、Fractal、Alienware、Moondrop、Maono、XInput 等设备，完整列表见[支持矩阵](docs/support-matrix.zh-CN.md)。所有已移植设备默认均已启用；如在特定型号或固件上遇到读数异常，欢迎直接提交 Issue 反馈。
+**当前内置 153 条内置 Provider**（151 条厂商 HID + `os.xinput` + `bluetooth.bas`，其中 2 条已完成实机抓包验证，151 条为实验性实现），覆盖 Logitech / Astro、Razer、SteelSeries、Corsair、HyperX、ASUS ROG、Sony、Nintendo、Valve、GameSir、Flydigi、8BitDo、Beitong、Keychron、Cherry、Akko、NuPhy、AULA、MCHOSE、ATK / VXE / VGN、DAREU、EWEADN、Rapoo、WOB、Glorious、Lamzu、WLmouse、Pulsar、VAXEE、Ninjutso、Endgame Gear、Finalmouse、ZOWIE、Audeze、JBL、Jabra、Turtle Beach、AKG、Fractal、Alienware、Moondrop、Maono、XInput 等设备，完整列表见[支持矩阵](docs/support-matrix.zh-CN.md)。`ClientConfig::default()` 默认启用实验性 Provider（详见[来源与验证记录](provenance/builtin-providers.md)）；如在特定型号或固件上遇到读数异常，欢迎直接提交 Issue 反馈。
 
 内置厂商协议实现参考了 [Wireless-Device-Battery-Monitor / BatteryHub](NOTICE)（GPL-3.0-or-later）及 [Voltide](NOTICE)（MIT），完整署名见 [NOTICE](NOTICE)。
 
@@ -53,7 +53,7 @@ if let Some(device) = devices.iter().find(|device| device.readable) {
 # Ok::<(), wireless_battery::BatteryError>(())
 ```
 
-实验性 Provider 需要显式开启 `ClientConfig::allow_experimental` 或 `ReadOptions::allow_experimental`。只有在启用缓存且调用方显式设置 `ReadOptions::allow_stale` 时，刷新失败才会返回缓存的旧值；旧值保留原始 `observed_at` 时间戳，并将 `freshness` 标记为 `stale`。
+`ClientConfig::default()` 默认启用实验性 Provider（`allow_experimental: true`），而 `ReadOptions::default().allow_experimental` 默认为 `false`；将 `ClientConfig::allow_experimental` 设为 `false` 时仅允许读取 `Verified` 设备，除非通过 `ReadOptions::allow_experimental = true` 单次显式覆写。只有在启用缓存且调用方显式设置 `ReadOptions::allow_stale` 时，刷新失败才会返回缓存的旧值；旧值保留原始 `observed_at` 时间戳，并将 `freshness` 标记为 `stale`。
 
 `ReadOptions::timeout` 是整次调用的总时间预算。Provider 中的 `io_timeout` 是单次 I/O 偏好值，受限于剩余总预算。部分平台的 Feature 报告操作无法被强制取消。
 
@@ -104,7 +104,7 @@ cargo build --locked --release -p wireless-battery-tray   # Windows 原生托盘
 
 3. **提交 Issue 或 PR**
    - **提 Issue**：附上设备型号、连接模式、`wireless-battery list --json` 输出，以及关闭官方软件后 `probe` 验证到的放电/充电配对请求与响应报文。
-   - **提 PR**：在 `src/providers/vendors/` 中参考现有 `FixedSpec` 或 `Provider` 实现新增协议，补充测试并通过 `cargo test --locked`。
+   - **提 PR**：在 `src/providers/vendors/{protocols,brands}/` 中参考现有 `FixedSpec` 或 `Provider` 实现新增协议并标注准确的 `DeviceKind`，补充回放测试、更新 `docs/support-matrix*.md` 与 `provenance/builtin-providers.md`，并通过 `cargo test --locked --all-features`。
 
 ### 直接复制给 AI Agent 的排查 / 逆向 Prompt
 
@@ -127,17 +127,18 @@ cargo build --locked --release -p wireless-battery-tray   # Windows 原生托盘
    - **2b. 双向抓包（无现成线索且监听无有效回复时）**：引导我使用 **Wireshark + USBPcap（Windows）/ `usbmon`（Linux）**（或浏览器 WebHID 调试），在读取电量时**同时捕获 Host → Device（发出）与 Device → Host（返回）的双向报文**，并记录当时官方软件或设备指示显示的**真实电量 % 与充放电状态**（尽量覆盖放电、充电及两个不同电量值）。若我提供了 `.pcapng` 或抓包片段，优先提取配对的请求/响应、前置握手与变化字节。
    - **2c. `probe` 测试与独立复现（防假阳性）**：
      - 将候选或抓包指令映射到 `probe`（区分 `--send` 与 `--send --set-output`，以及 `--send-feature` / `--get-feature` / `--get-input`；注意 `--report-id` 与 hex payload 分离；可用 `--read-replies` 多读几包以跳过心跳或请求回显）。注意“写入成功”不代表“设备应答”。
-     - 确认有效指令后，**必须完全退出官方软件/网页驱动**、唤醒设备，单独用 `probe` 分别在**放电**和**充电**态复现一致响应（严禁将电压或离散档位强行猜成百分比，未验证的充电字段与未知哨兵值必须保持 `unknown`）。
+     - 确认有效指令后，**必须完全退出官方软件/网页驱动**、唤醒设备，单独用 `probe` 分别在**放电**和**充电**态复现一致响应（严禁凭空猜测百分比；电压曲线或离散档位换算必须依据明确型号规则，未验证的充电字段与未知哨兵值必须保持 `unknown`）。
 
 3. **输出与下一步**：
    - 若当前只有可执行文件（无源码仓库）：请整理好「设备型号 + 连接模式 + `list --json` 端点信息 + 关闭官方软件后的配对请求/响应双向 hex + 对应的真实电量与充放电状态」，方便我直接提交到 GitHub Issue。
-   - 若当前就在源码仓库中：请先阅读 `docs/contributing-device.md` 与 `docs/capture-and-replay.md`，再在 `src/providers/vendors/` 下参考现有 `FixedSpec` 或 `Provider` 实现新增协议并注册，在 `tests/fixtures/vendors/` 补充回放测试，更新 `docs/support-matrix.zh-CN.md` 与 `docs/support-matrix.md`，最后运行 `cargo test --locked` 验证全部通过。
+   - 若当前就在源码仓库中：请先阅读 `docs/contributing-device.md` 与 `docs/capture-and-replay.md`，再在 `src/providers/vendors/{protocols,brands}/` 下参考现有 `FixedSpec` 或 `Provider` 实现新增协议并注册，在 `tests/fixtures/vendors/` 与 `tests/extended_vendor/` 补充回放测试，更新 `docs/support-matrix.zh-CN.md`、`docs/support-matrix.md` 与 `provenance/builtin-providers.md`，最后运行 `cargo test --locked --all-features` 验证全部通过。
 ```
 
 ## 文档导航
 
 - [架构设计](docs/architecture.zh-CN.md)
 - [设备支持矩阵](docs/support-matrix.zh-CN.md)
+- [Provider 来源与验证记录](provenance/builtin-providers.md)
 - [平台支持与限制](docs/platform-support.zh-CN.md)
 - [录制与回放](docs/capture-and-replay.zh-CN.md)
 - [设备贡献指南](docs/contributing-device.zh-CN.md)
@@ -145,6 +146,6 @@ cargo build --locked --release -p wireless-battery-tray   # Windows 原生托盘
 
 ## 参与贡献
 
-请从[设备贡献指南](docs/contributing-device.zh-CN.md)开始。简单的固定协议优先使用 `FixedSpec`，需要动态协商的逻辑使用聚焦的 `Provider` 在 `src/providers/vendors/` 下实现。
+请从[设备贡献指南](docs/contributing-device.zh-CN.md)开始。简单的固定协议优先使用 `FixedSpec`，需要动态协商的逻辑使用聚焦的 `Provider` 在 `src/providers/vendors/{protocols,brands}/` 下实现。
 
 本项目基于 [GNU GPL-3.0 或更高版本](LICENSE)开源。

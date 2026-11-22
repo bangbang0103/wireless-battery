@@ -22,8 +22,8 @@ pub enum ErrorKind {
     InvalidResponse,
     /// A response checksum did not match.
     ChecksumFailed,
-    /// A device package failed validation.
-    InvalidPackage,
+    /// A CLI or caller-supplied argument failed validation.
+    InvalidArgument,
     /// A replay fixture failed validation or did not match.
     InvalidFixture,
     /// An underlying transport failed.
@@ -80,13 +80,11 @@ pub enum BatteryError {
     /// The device returned a checksum mismatch.
     #[error("response checksum failed")]
     ChecksumFailed,
-    /// A package is malformed or semantically unsafe.
-    #[error("invalid package {package}: {reason}")]
-    InvalidPackage {
-        /// The package identifier or path.
-        package: String,
-        /// The validation failure.
-        reason: String,
+    /// A caller-supplied argument is invalid.
+    #[error("invalid argument: {message}")]
+    InvalidArgument {
+        /// A sanitized validation failure message.
+        message: String,
     },
     /// A replay fixture is malformed or did not match.
     #[error("invalid fixture {fixture}: {reason}")]
@@ -123,7 +121,7 @@ impl BatteryError {
             Self::DeviceDisconnected { .. } => ErrorKind::DeviceDisconnected,
             Self::InvalidResponse { .. } => ErrorKind::InvalidResponse,
             Self::ChecksumFailed => ErrorKind::ChecksumFailed,
-            Self::InvalidPackage { .. } => ErrorKind::InvalidPackage,
+            Self::InvalidArgument { .. } => ErrorKind::InvalidArgument,
             Self::InvalidFixture { .. } => ErrorKind::InvalidFixture,
             Self::Transport { .. } => ErrorKind::Transport,
             Self::Internal { .. } => ErrorKind::Internal,
@@ -134,16 +132,14 @@ impl BatteryError {
     #[must_use]
     pub const fn exit_code(&self) -> i32 {
         match self.kind() {
+            ErrorKind::InvalidArgument => 2,
             ErrorKind::NotFound | ErrorKind::Unsupported => 3,
             ErrorKind::PermissionDenied => 4,
             ErrorKind::Timeout
             | ErrorKind::DeviceBusy
             | ErrorKind::DeviceDisconnected
             | ErrorKind::Transport => 5,
-            ErrorKind::InvalidResponse
-            | ErrorKind::ChecksumFailed
-            | ErrorKind::InvalidPackage
-            | ErrorKind::InvalidFixture => 6,
+            ErrorKind::InvalidResponse | ErrorKind::ChecksumFailed | ErrorKind::InvalidFixture => 6,
             ErrorKind::Internal => 70,
         }
     }

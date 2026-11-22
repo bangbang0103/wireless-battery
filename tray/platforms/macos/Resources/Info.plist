@@ -28,5 +28,7 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Wireless Battery needs Bluetooth access to discover and read battery levels from Bluetooth peripherals.</string>
 </dict>
 </plist>

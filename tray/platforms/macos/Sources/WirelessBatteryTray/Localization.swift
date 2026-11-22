@@ -1,3 +1,4 @@
+import CTrayCore
 import Foundation
 
 /// Resolved active display language for the macOS menu bar app.
@@ -36,8 +37,8 @@ enum AppLanguage: Equatable {
     func emptyHint(hiddenExperimentalCount: Int) -> String {
         if hiddenExperimentalCount > 0 {
             return isZh
-                ? "检测到 \(hiddenExperimentalCount) 台实验性协议设备，默认未启用，可在设置中开启。"
-                : "\(hiddenExperimentalCount) experimental device(s) detected but hidden by default."
+                ? "检测到 \(hiddenExperimentalCount) 台实验性协议设备，当前已隐藏，可在设置中开启。"
+                : "\(hiddenExperimentalCount) experimental device(s) detected while disabled. Enable in Settings."
         }
         return isZh
             ? "被动枚举未匹配到已知接收器或外设，请确认接收器已接入并处于唤醒状态。"
@@ -81,6 +82,11 @@ enum AppLanguage: Equatable {
     var settingAutostartHelpBundled: String { isZh ? "登录 macOS 时仅驻留菜单栏" : "Stay in the menu bar when logging in" }
     var settingAutostartHelpUnbundled: String { isZh ? "打包为 .app 后可用" : "Available when packaged as a .app bundle" }
 
+    var settingExperimentalTitle: String { isZh ? "实验性协议设备" : "Experimental devices" }
+    var settingExperimentalDesc: String {
+        isZh ? "包含社区推导但未实机验证的设备" : "Include inferred protocols pending verification"
+    }
+
     var settingVersionTitle: String { isZh ? "版本与更新" : "Version & Updates" }
     var settingVersionChecking: String { isZh ? "正在检查更新…" : "Checking for updates…" }
     var settingVersionFailed: String { isZh ? "检查更新失败，请重试" : "Update check failed" }
@@ -117,14 +123,7 @@ enum AppLanguage: Equatable {
     }
 
     func pollLabel(_ secs: UInt64) -> String {
-        switch secs {
-        case 300: return isZh ? "5 分钟" : "5 min"
-        case 900: return isZh ? "15 分钟" : "15 min"
-        case 1800: return isZh ? "30 分钟" : "30 min"
-        case 3600: return isZh ? "1 小时" : "1 hour"
-        case 0: return isZh ? "仅手动" : "Manual"
-        default: return isZh ? "5 分钟" : "5 min"
-        }
+        TrayStore.takeCString(wb_tray_format_poll_label(secs, isZh)) ?? "\(secs)s"
     }
 
     func lowBatteryDesc(enabled: Bool, silent: Bool) -> String {
@@ -165,34 +164,28 @@ enum AppLanguage: Equatable {
     // MARK: - Dynamic Formatters
 
     func footerSummary(appVersion: String, lastSyncAt: String?, pollSecs: UInt64) -> String {
-        let sync = relativeTime(from: lastSyncAt)
-        let poll: String
-        if pollSecs == 0 {
-            poll = isZh ? "仅手动" : "Manual"
-        } else if pollSecs % 3600 == 0 {
-            poll = isZh ? "每 \(pollSecs / 3600) 小时" : "Every \(pollSecs / 3600) hr"
-        } else if pollSecs % 60 == 0 {
-            poll = isZh ? "每 \(pollSecs / 60) 分钟" : "Every \(pollSecs / 60) min"
-        } else {
-            poll = isZh ? "每 \(pollSecs) 秒" : "Every \(pollSecs)s"
+        appVersion.withCString { verPtr in
+            if let lastSyncAt {
+                return lastSyncAt.withCString { syncPtr in
+                    TrayStore.takeCString(wb_tray_format_footer_summary(verPtr, syncPtr, pollSecs, isZh))
+                        ?? appVersion
+                }
+            } else {
+                return TrayStore.takeCString(wb_tray_format_footer_summary(verPtr, nil, pollSecs, isZh))
+                    ?? appVersion
+            }
         }
-        return "\(appVersion) · \(sync) · \(poll)"
     }
 
     func relativeTime(from raw: String?) -> String {
-        guard let raw, let date = TrayStore.parseISO8601(raw) else {
-            return isZh ? "未同步" : "Not synced"
+        if let raw {
+            return raw.withCString { ptr in
+                TrayStore.takeCString(wb_tray_format_relative_time(ptr, isZh))
+                    ?? (isZh ? "未同步" : "Not synced")
+            }
         }
-        let elapsed = max(0, Int(Date().timeIntervalSince(date)))
-        if elapsed < 45 {
-            return isZh ? "刚刚" : "Just now"
-        }
-        if elapsed < 3600 {
-            let mins = elapsed / 60
-            return isZh ? "\(mins) 分钟前" : "\(mins)m ago"
-        }
-        let hrs = elapsed / 3600
-        return isZh ? "\(hrs) 小时前" : "\(hrs)h ago"
+        return TrayStore.takeCString(wb_tray_format_relative_time(nil, isZh))
+            ?? (isZh ? "未同步" : "Not synced")
     }
 
     func discreteLabel(_ level: String?) -> String {

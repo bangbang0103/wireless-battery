@@ -7,8 +7,8 @@
 `BatteryClient` 将被动端点枚举、静态 `Registry`、精确匹配策略、按端点串行锁、总超时预算、Provider 执行、结果归一化、诊断与进程内最近成功缓存组合在一起。
 
 1. 枚举静态端点元数据，过程中不打开任何设备会话。
-2. 返回所有枚举到的端点；未匹配、候选（candidate）与冲突（conflict）端点均带有明确的匹配状态及对应支持状态。
-3. 发起显式读取时，要求在统一 `Registry` 中存在唯一精确匹配的 Provider。内置厂商 HID Provider、BLE BAS（`bluetooth.bas`）以及 XInput（`os.xinput`）全部通过同一套 `Provider` 接口派发。
+2. 返回所有枚举到的端点；未匹配、冲突（conflict）与匹配端点均带有明确的匹配状态、来自 Provider 元数据的 `DeviceKind` 及对应支持状态。
+3. 发起显式读取时，要求在统一 `Registry` 中存在唯一最高优先级 Provider（`Exact` 自动优先于 `Family`）。内置厂商 HID Provider、BLE BAS（`bluetooth.bas`）以及 XInput（`os.xinput`）全部通过同一套 `Provider` 接口派发。
 4. 在调用方的总截止时间（deadline）内获取端点锁并满足冷却间隔，随后执行协议读取。
 5. 仅执行有界的协议交互步骤，每一步都校验共享截止时间。
 6. 校验电量百分比范围，并根据实际存在的字段推导精度（`precision`）。仅当协议未显式报告可达性时，才在一次成功交互后保守推断为 `online`。
@@ -29,7 +29,7 @@ HID Provider 仅依赖 `HidSession`，不直接耦合 HIDAPI 类型。Report ID 
 
 ## Provider 体系
 
-`Provider::matches()` 是静态且零 I/O 的。仅 `Exact` 匹配允许读取；`Candidate` 仅用于诊断；多个 `Exact` 匹配会报告 `Conflict`，绝不随意择一。所有内置 Provider 默认均已启用。
+`Provider::matches()` 是静态且零 I/O 的，返回 `Exact`、`Family` 或 `NoMatch`；`Exact` 自动优先于 `Family`，同优先级存在多个命中时报告 `MatchStatus::Conflict`，绝不随意择一。`ClientConfig::default()` 默认启用实验性 Provider，而 `ReadOptions::default().allow_experimental` 默认为 `false`。
 
 HID Provider 实现 `Provider::read(&DeviceContext, &mut dyn HidSession, Deadline)`，非 HID Provider（`bluetooth.bas`、`os.xinput`）直接覆写 `Provider::execute(&DeviceContext, &dyn Transport, Deadline)`。
 

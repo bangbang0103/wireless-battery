@@ -370,7 +370,7 @@ pub fn handle_context_menu_cmd(
     dev_panel: &DevPanelWindow,
     poller: &PollerHandle,
     tray: &mut TrayIconHost,
-    popover: &mut PopoverWindow,
+    popover: &PopoverWindow,
     theme: SystemTheme,
 ) {
     match cmd {
@@ -420,7 +420,7 @@ pub fn dispatch_dev_action(
     dev_panel: &DevPanelWindow,
     poller: &PollerHandle,
     tray: &mut TrayIconHost,
-    popover: &mut PopoverWindow,
+    popover: &PopoverWindow,
     theme: SystemTheme,
 ) {
     let service = poller.service();
@@ -518,11 +518,11 @@ unsafe extern "system" fn dev_panel_wnd_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut DevPanelInner;
+    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const DevPanelInner;
     if ptr.is_null() {
         return DefWindowProcW(hwnd, msg, wparam, lparam);
     }
-    let inner = &mut *ptr;
+    let inner = &*ptr;
 
     match msg {
         WM_CLOSE => {

@@ -9,7 +9,10 @@ use windows::Win32::Networking::WinHttp::{
 };
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-use wireless_battery_tray_core::{evaluate_release_json, UpdateCheckResult, APP_VERSION};
+use wireless_battery_tray_core::{
+    evaluate_release_json, is_valid_update_url, UpdateCheckResult, APP_VERSION, GITHUB_API_HOST,
+    LATEST_RELEASE_API_PATH,
+};
 
 const MAX_RESPONSE_BYTES: usize = 512 * 1024;
 
@@ -21,9 +24,9 @@ pub fn check_latest_release() -> UpdateCheckResult {
     }
 }
 
-/// Open an HTTPS URL in the user's default web browser.
+/// Open an HTTPS GitHub URL in the user's default web browser.
 pub fn open_url(url: &str) {
-    if !url.starts_with("https://") {
+    if !is_valid_update_url(url) {
         return;
     }
     let wide_url = HSTRING::from(url);
@@ -60,16 +63,18 @@ fn fetch_latest_release_body() -> Result<String, String> {
         let _session = WinHttpHandle(session);
         let _ = WinHttpSetTimeouts(session, 4_000, 4_000, 5_000, 5_000);
 
-        let connect = WinHttpConnect(session, w!("api.github.com"), 443, 0);
+        let host = HSTRING::from(GITHUB_API_HOST);
+        let connect = WinHttpConnect(session, &host, 443, 0);
         if connect.is_null() {
             return Err("WinHttpConnect failed".to_owned());
         }
         let _connect = WinHttpHandle(connect);
 
+        let path = HSTRING::from(LATEST_RELEASE_API_PATH);
         let request = WinHttpOpenRequest(
             connect,
             w!("GET"),
-            w!("/repos/bangbang0103/wireless-battery/releases/latest"),
+            &path,
             None,
             None,
             std::ptr::null(),

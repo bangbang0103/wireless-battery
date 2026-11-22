@@ -13,6 +13,9 @@ let rustReleaseLibDir = packageDir
     .standardizedFileURL
     .path
 let rustLibDir: String = {
+    if let override = ProcessInfo.processInfo.environment["WB_RUST_LIB_DIR"], !override.isEmpty {
+        return override
+    }
     if isDevTools && FileManager.default.fileExists(atPath: rustDebugLibDir + "/libwireless_battery_tray_ffi.a") {
         return rustDebugLibDir
     }

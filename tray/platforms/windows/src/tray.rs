@@ -165,10 +165,11 @@ impl TrayIconHost {
         unsafe { Shell_NotifyIconGetRect(&ident).ok() }
     }
 
-    /// Show a bilingual native Win32 context menu on tray right-click.
+    /// Show a bilingual native Win32 context menu on tray right-click without holding
+    /// a borrow on `TrayIconHost` while `TrackPopupMenu` pumps nested messages.
     #[allow(clippy::too_many_arguments)]
-    pub fn show_context_menu(
-        &self,
+    pub fn show_context_menu_for(
+        owner: HWND,
         autostart_enabled: bool,
         low_battery_notify: bool,
         low_battery_silent: bool,
@@ -323,7 +324,7 @@ impl TrayIconHost {
 
             let mut pt = POINT::default();
             let _ = GetCursorPos(&mut pt);
-            let _ = SetForegroundWindow(self.owner);
+            let _ = SetForegroundWindow(owner);
 
             let cmd = TrackPopupMenu(
                 menu,
@@ -331,7 +332,7 @@ impl TrayIconHost {
                 pt.x,
                 pt.y,
                 0,
-                self.owner,
+                owner,
                 None,
             );
             let _ = DestroyMenu(menu);

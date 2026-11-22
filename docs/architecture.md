@@ -7,8 +7,8 @@
 `BatteryClient` combines passive endpoint enumeration, a static `Registry`, exact-match policy, per-endpoint serial locks, total deadlines, provider execution, normalization, diagnostics, and a process-local last-success cache.
 
 1. Enumerate static endpoint metadata without opening a session.
-2. Return every endpoint. Unmatched, candidate, and conflicting endpoints have explicit match status and unknown support where appropriate.
-3. On an explicit read, require one exact provider from the unified `Registry`. Built-in vendor HID providers, BLE BAS (`bluetooth.bas`), and XInput (`os.xinput`) all dispatch through the same `Provider` interface.
+2. Return every endpoint. Unmatched, conflicting, and matched endpoints have explicit match status, `DeviceKind` derived from provider metadata, and unknown support where appropriate.
+3. On an explicit read, require one highest-priority provider (`Exact` automatically outranks `Family`) from the unified `Registry`. Built-in vendor HID providers, BLE BAS (`bluetooth.bas`), and XInput (`os.xinput`) all dispatch through the same `Provider` interface.
 4. Acquire the endpoint lock within the caller's total deadline, apply provider cooldown, then open a session.
 5. Run at most the provider's bounded protocol. Each step checks the shared deadline.
 6. Validate percentage range and derive precision from values actually present. A successful exchange infers `online` only when the protocol did not explicitly report reachability.
@@ -29,7 +29,7 @@ Classic Bluetooth, arbitrary GATT access, event subscriptions, and arbitrary HID
 
 ## Providers
 
-`Provider::matches()` is static and I/O-free. Only `Exact` matches are readable. Candidates are diagnostic; conflicts are never resolved arbitrarily. All built-in providers are enabled by default.
+`Provider::matches()` is static and I/O-free, returning `Exact`, `Family`, or `NoMatch`. `Exact` outranks `Family`, while multiple matches at the same priority become `MatchStatus::Conflict` rather than choosing arbitrarily. `ClientConfig::default()` enables built-in experimental providers by default while `ReadOptions::default().allow_experimental` defaults to `false`.
 
 HID providers implement `Provider::read(&DeviceContext, &mut dyn HidSession, Deadline)`, while non-HID providers (`bluetooth.bas`, `os.xinput`) override `Provider::execute(&DeviceContext, &dyn Transport, Deadline)` directly.
 

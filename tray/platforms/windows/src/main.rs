@@ -48,6 +48,7 @@ mod win_app {
         MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY, MENU_CMD_TOGGLE_LOW_BATTERY_SILENT, WM_TRAY_CALLBACK,
     };
     use crate::updater;
+    use std::cell::{Cell, RefCell};
     use std::sync::{mpsc, Arc, Mutex};
     use windows::core::w;
     use windows::Win32::Foundation::{
@@ -61,10 +62,11 @@ mod win_app {
     };
     use windows::Win32::UI::Shell::NIN_SELECT;
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, GetWindowLongPtrW,
-        KillTimer, PostMessageW, PostQuitMessage, RegisterClassExW, RegisterWindowMessageW,
-        SetTimer, SetWindowLongPtrW, TranslateMessage, GWLP_USERDATA, MSG, WINDOW_EX_STYLE, WM_APP,
-        WM_CONTEXTMENU, WM_DEVICECHANGE, WM_SETTINGCHANGE, WM_TIMER, WNDCLASSEXW, WS_OVERLAPPED,
+        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
+        GetWindowLongPtrW, KillTimer, PostMessageW, PostQuitMessage, RegisterClassExW,
+        RegisterWindowMessageW, SetTimer, SetWindowLongPtrW, TranslateMessage, GWLP_USERDATA, MSG,
+        WINDOW_EX_STYLE, WM_APP, WM_CONTEXTMENU, WM_DEVICECHANGE, WM_SETTINGCHANGE, WM_TIMER,
+        WNDCLASSEXW, WS_OVERLAPPED,
     };
 
     const NIN_KEYSELECT: u32 = NIN_SELECT + 1;
@@ -109,8 +111,8 @@ mod win_app {
     struct HostState {
         host_hwnd: HWND,
         taskbar_created_msg: u32,
-        theme: SystemTheme,
-        tray: TrayIconHost,
+        theme: Cell<SystemTheme>,
+        tray: RefCell<TrayIconHost>,
         popover: PopoverWindow,
         poller: PollerHandle,
         updates_rx: mpsc::Receiver<TrayUpdate>,
@@ -143,6 +145,7 @@ mod win_app {
 
     fn run_loop() -> Result<(), Box<dyn std::error::Error>> {
         let service = Arc::new(TrayService::new()?);
+        service.set_system_is_zh(Lang::detect_system() == Lang::ZhCn);
         let initial_snapshot = service.snapshot();
         let theme = SystemTheme::detect();
 
@@ -214,7 +217,7 @@ mod win_app {
             unsafe {
                 let _ = PostMessageW(HWND(host_hwnd_raw), WM_CORE_UPDATE, WPARAM(0), LPARAM(0));
             }
-        });
+        })?;
 
         #[cfg(feature = "dev-tools")]
         let (dev_panel, dev_actions_rx) = {
@@ -224,11 +227,11 @@ mod win_app {
             (panel, dev_rx)
         };
 
-        let mut host = Box::new(HostState {
+        let host = Box::new(HostState {
             host_hwnd,
             taskbar_created_msg,
-            theme,
-            tray,
+            theme: Cell::new(theme),
+            tray: RefCell::new(tray),
             popover,
             poller,
             updates_rx,
@@ -245,21 +248,24 @@ mod win_app {
             SetWindowLongPtrW(
                 host_hwnd,
                 GWLP_USERDATA,
-                (&mut *host as *mut HostState) as isize,
+                (&*host as *const HostState) as isize,
             );
         }
 
         let mut msg = MSG::default();
         unsafe {
-            while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+            while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
             SetWindowLongPtrW(host_hwnd, GWLP_USERDATA, 0);
+            let _ = DestroyWindow(host_hwnd);
         }
 
-        host.tray.remove();
-        host.poller.shutdown();
+        if let Ok(mut tray) = host.tray.try_borrow_mut() {
+            tray.remove();
+        }
+        drop(host);
         Ok(())
     }
 
@@ -269,14 +275,16 @@ mod win_app {
         wparam: WPARAM,
         lparam: LPARAM,
     ) -> LRESULT {
-        let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut HostState;
+        let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const HostState;
         if ptr.is_null() {
             return DefWindowProcW(hwnd, msg, wparam, lparam);
         }
-        let host = &mut *ptr;
+        let host = &*ptr;
 
         if msg == host.taskbar_created_msg && host.taskbar_created_msg != 0 {
-            let _ = host.tray.install();
+            if let Ok(mut tray) = host.tray.try_borrow_mut() {
+                let _ = tray.install();
+            }
             return LRESULT(0);
         }
 
@@ -284,16 +292,15 @@ mod win_app {
             WM_CORE_UPDATE => {
                 while let Ok(update) = host.updates_rx.try_recv() {
                     let lang = Lang::resolve(update.snapshot.config.language);
-                    host.tray.update(
-                        update.snapshot.icon_state,
-                        host.theme.taskbar_dark,
-                        &update.snapshot.tooltip,
-                    );
-                    if update.snapshot.config.low_battery_notify
-                        && !update.snapshot.config.low_battery_silent
-                    {
-                        for alert in &update.alerts {
-                            host.tray.notify_low_battery(alert, lang);
+                    let dark = host.theme.get().taskbar_dark;
+                    if let Ok(mut tray) = host.tray.try_borrow_mut() {
+                        tray.update(update.snapshot.icon_state, dark, &update.snapshot.tooltip);
+                        if update.snapshot.config.low_battery_notify
+                            && !update.snapshot.config.low_battery_silent
+                        {
+                            for alert in &update.alerts {
+                                tray.notify_low_battery(alert, lang);
+                            }
                         }
                     }
                     host.popover.set_snapshot(update.snapshot);
@@ -320,7 +327,9 @@ mod win_app {
                                 url: url.clone(),
                             });
                             if from_menu {
-                                host.tray.notify_info(lang.notify_update_title(), &body);
+                                if let Ok(tray) = host.tray.try_borrow() {
+                                    tray.notify_info(lang.notify_update_title(), &body);
+                                }
                                 updater::open_url(&url);
                             } else {
                                 host.popover.show_feedback(body);
@@ -330,7 +339,9 @@ mod win_app {
                             let body = lang.notify_update_up_to_date(&current_version);
                             host.popover.set_update_status(UpdateUiStatus::UpToDate);
                             if from_menu {
-                                host.tray.notify_info(lang.notify_update_title(), &body);
+                                if let Ok(tray) = host.tray.try_borrow() {
+                                    tray.notify_info(lang.notify_update_title(), &body);
+                                }
                             } else {
                                 host.popover.show_feedback(body);
                             }
@@ -338,10 +349,12 @@ mod win_app {
                         UpdateCheckResult::Failed(_) => {
                             host.popover.set_update_status(UpdateUiStatus::Failed);
                             if from_menu {
-                                host.tray.notify_info(
-                                    lang.notify_update_title(),
-                                    lang.notify_update_failed(),
-                                );
+                                if let Ok(tray) = host.tray.try_borrow() {
+                                    tray.notify_info(
+                                        lang.notify_update_title(),
+                                        lang.notify_update_failed(),
+                                    );
+                                }
                             } else {
                                 host.popover.show_feedback(lang.notify_update_failed());
                             }
@@ -353,25 +366,31 @@ mod win_app {
             #[cfg(feature = "dev-tools")]
             crate::dev_tools::WM_DEV_ACTION => {
                 while let Ok(action) = host.dev_actions_rx.try_recv() {
-                    crate::dev_tools::dispatch_dev_action(
-                        action,
-                        &host.dev_panel,
-                        &host.poller,
-                        &mut host.tray,
-                        &mut host.popover,
-                        host.theme,
-                    );
+                    if let Ok(mut tray) = host.tray.try_borrow_mut() {
+                        crate::dev_tools::dispatch_dev_action(
+                            action,
+                            &host.dev_panel,
+                            &host.poller,
+                            &mut tray,
+                            &host.popover,
+                            host.theme.get(),
+                        );
+                    }
                 }
                 LRESULT(0)
             }
             WM_SETTINGCHANGE | WM_DWMCOLORIZATIONCOLORCHANGED => {
+                host.poller
+                    .service()
+                    .set_system_is_zh(Lang::detect_system() == Lang::ZhCn);
                 let next_theme = SystemTheme::detect();
-                if next_theme != host.theme {
-                    host.theme = next_theme;
+                if next_theme != host.theme.get() {
+                    host.theme.set(next_theme);
                     let snap = host.poller.service().snapshot();
-                    host.tray
-                        .update(snap.icon_state, host.theme.taskbar_dark, &snap.tooltip);
-                    host.popover.set_theme(host.theme);
+                    if let Ok(mut tray) = host.tray.try_borrow_mut() {
+                        tray.update(snap.icon_state, next_theme.taskbar_dark, &snap.tooltip);
+                    }
+                    host.popover.set_theme(next_theme);
                 }
                 LRESULT(0)
             }
@@ -391,7 +410,7 @@ mod win_app {
                 let event = (lparam.0 & 0xFFFF) as u32;
                 match event {
                     NIN_SELECT | NIN_KEYSELECT => {
-                        let anchor = host.tray.anchor_rect();
+                        let anchor = host.tray.try_borrow().ok().and_then(|t| t.anchor_rect());
                         let was_visible = host.popover.is_visible();
                         host.popover.toggle(anchor);
                         if !was_visible && host.popover.is_visible() {
@@ -402,16 +421,19 @@ mod win_app {
                         host.popover.hide();
                         let cfg = host.poller.service().config();
                         let lang = Lang::resolve(cfg.language);
-                        match host.tray.show_context_menu(
+                        let cmd = TrayIconHost::show_context_menu_for(
+                            host.host_hwnd,
                             cfg.autostart,
                             cfg.low_battery_notify,
                             cfg.low_battery_silent,
                             cfg.theme_mode,
                             cfg.language,
                             lang,
-                        ) {
+                        );
+                        match cmd {
                             Some(MENU_CMD_OPEN_PANEL) => {
-                                let anchor = host.tray.anchor_rect();
+                                let anchor =
+                                    host.tray.try_borrow().ok().and_then(|t| t.anchor_rect());
                                 host.popover.show(anchor);
                                 maybe_refresh_on_open(host);
                             }
@@ -475,14 +497,16 @@ mod win_app {
                             }
                             #[cfg(feature = "dev-tools")]
                             Some(cmd) => {
-                                crate::dev_tools::handle_context_menu_cmd(
-                                    cmd,
-                                    &host.dev_panel,
-                                    &host.poller,
-                                    &mut host.tray,
-                                    &mut host.popover,
-                                    host.theme,
-                                );
+                                if let Ok(mut tray) = host.tray.try_borrow_mut() {
+                                    crate::dev_tools::handle_context_menu_cmd(
+                                        cmd,
+                                        &host.dev_panel,
+                                        &host.poller,
+                                        &mut tray,
+                                        &host.popover,
+                                        host.theme.get(),
+                                    );
+                                }
                             }
                             _ => {}
                         }
@@ -497,7 +521,7 @@ mod win_app {
 
     /// Opportunistically refresh on open when any device previously timed out
     /// (e.g., wireless keyboard woke up after startup) or data is > 15s old.
-    fn maybe_refresh_on_open(host: &mut HostState) {
+    fn maybe_refresh_on_open(host: &HostState) {
         let snap = host.poller.service().snapshot();
         let needs_retry = snap.devices.iter().any(|d| {
             d.precision == wireless_battery::Precision::None
@@ -511,7 +535,7 @@ mod win_app {
         }
     }
 
-    fn dispatch_popover_action(host: &mut HostState, action: PopoverAction) {
+    fn dispatch_popover_action(host: &HostState, action: PopoverAction) {
         match action {
             PopoverAction::RefreshAll => {
                 host.poller.request_refresh();
@@ -547,6 +571,13 @@ mod win_app {
                 if cfg.language != mode {
                     cfg.language = mode;
                     let snap = host.poller.service().update_config_async(cfg);
+                    if let Ok(mut tray) = host.tray.try_borrow_mut() {
+                        tray.update(
+                            snap.icon_state,
+                            host.theme.get().taskbar_dark,
+                            &snap.tooltip,
+                        );
+                    }
                     host.popover.set_snapshot(snap);
                 }
             }
@@ -562,14 +593,32 @@ mod win_app {
                 let mut cfg = host.poller.service().config();
                 cfg.low_battery_notify = !cfg.low_battery_notify;
                 let snap = host.poller.service().update_config_async(cfg);
-                host.tray
-                    .update(snap.icon_state, host.theme.taskbar_dark, &snap.tooltip);
+                if let Ok(mut tray) = host.tray.try_borrow_mut() {
+                    tray.update(
+                        snap.icon_state,
+                        host.theme.get().taskbar_dark,
+                        &snap.tooltip,
+                    );
+                }
                 host.popover.set_snapshot(snap);
             }
             PopoverAction::ToggleLowBatterySilent => {
                 let mut cfg = host.poller.service().config();
                 cfg.low_battery_silent = !cfg.low_battery_silent;
                 let snap = host.poller.service().update_config_async(cfg);
+                host.popover.set_snapshot(snap);
+            }
+            PopoverAction::ToggleAllowExperimental => {
+                let mut cfg = host.poller.service().config();
+                cfg.allow_experimental = !cfg.allow_experimental;
+                let snap = host.poller.update_config_async(cfg);
+                if let Ok(mut tray) = host.tray.try_borrow_mut() {
+                    tray.update(
+                        snap.icon_state,
+                        host.theme.get().taskbar_dark,
+                        &snap.tooltip,
+                    );
+                }
                 host.popover.set_snapshot(snap);
             }
             PopoverAction::ToggleAutostart => {

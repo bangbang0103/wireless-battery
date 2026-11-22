@@ -3,8 +3,7 @@
 use serde::Serialize;
 use std::time::{Duration, Instant};
 use wireless_battery::codec::{decode_hex, encode_hex};
-use wireless_battery::model::{ClientConfig, Device};
-use wireless_battery::registry::Registry;
+use wireless_battery::model::{ClientConfig, Device, EndpointId, TransportKind};
 use wireless_battery::transport::{HidApiTransport, HidSession, Transport, TransportError};
 use wireless_battery::{BatteryClient, BatteryError};
 
@@ -39,14 +38,18 @@ struct ProbeEvent {
 }
 
 pub(super) fn run(options: ProbeOptions) -> Result<(), BatteryError> {
-    let hid =
-        std::sync::Arc::new(
-            HidApiTransport::new().map_err(|error| BatteryError::Transport {
-                message: error.to_string(),
-            })?,
-        );
-    let client =
-        BatteryClient::with_transport(ClientConfig::default(), hid.clone(), Registry::builtin()?)?;
+    let feature_payloads = options
+        .send_features
+        .iter()
+        .map(|s| parse_hex_arg(s))
+        .collect::<Result<Vec<_>, _>>()?;
+    let output_payloads = options
+        .send_outputs
+        .iter()
+        .map(|s| parse_hex_arg(s))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let client = BatteryClient::new(ClientConfig::default())?;
     let device = client
         .list_devices()?
         .into_iter()
@@ -54,25 +57,33 @@ pub(super) fn run(options: ProbeOptions) -> Result<(), BatteryError> {
         .ok_or_else(|| BatteryError::NotFound {
             device_id: options.device_id.clone(),
         })?;
+    if device.endpoint.transport != TransportKind::Hid {
+        return Err(BatteryError::Unsupported {
+            reason: format!(
+                "probe only supports HID endpoints, got {:?}",
+                device.endpoint.transport
+            ),
+        });
+    }
 
-    let mut session = hid
-        .open(&device.endpoint_id)
-        .map_err(|error| error.into_battery(&device.endpoint_id))?;
+    let hid = HidApiTransport::new().map_err(|error| BatteryError::Transport {
+        message: error.to_string(),
+    })?;
+    let mut session = open_hid_session(&hid, &device.endpoint_id)?;
 
     let started = Instant::now();
     let mut events = Vec::new();
 
-    for hex_str in &options.send_features {
-        let payload = parse_hex_arg(hex_str)?;
+    for payload in &feature_payloads {
         session
-            .send_feature(options.report_id, &payload)
+            .send_feature(options.report_id, payload)
             .map_err(|error| error.into_battery(&device.endpoint_id))?;
         record_event(
             &mut events,
             started,
             "send_feature",
             options.report_id,
-            &payload,
+            payload,
             options.json,
         );
     }
@@ -105,16 +116,15 @@ pub(super) fn run(options: ProbeOptions) -> Result<(), BatteryError> {
         );
     }
 
-    for hex_str in &options.send_outputs {
-        let payload = parse_hex_arg(hex_str)?;
+    for payload in &output_payloads {
         let kind = if options.set_output {
             session
-                .set_output(options.report_id, &payload)
+                .set_output(options.report_id, payload)
                 .map_err(|error| error.into_battery(&device.endpoint_id))?;
             "set_output"
         } else {
             session
-                .write_output(options.report_id, &payload)
+                .write_output(options.report_id, payload)
                 .map_err(|error| error.into_battery(&device.endpoint_id))?;
             "write_output"
         };
@@ -123,7 +133,7 @@ pub(super) fn run(options: ProbeOptions) -> Result<(), BatteryError> {
             started,
             kind,
             options.report_id,
-            &payload,
+            payload,
             options.json,
         );
         read_replies(
@@ -260,7 +270,21 @@ fn record_event(
 }
 
 fn parse_hex_arg(value: &str) -> Result<Vec<u8>, BatteryError> {
-    decode_hex(value).map_err(|message| BatteryError::Internal { message })
+    decode_hex(value).map_err(|message| BatteryError::InvalidArgument { message })
+}
+
+fn open_hid_session(
+    transport: &dyn Transport,
+    endpoint_id: &EndpointId,
+) -> Result<Box<dyn HidSession>, BatteryError> {
+    // Populate the transport's endpoint path map before opening; `HidApiTransport::new()`
+    // starts with an empty path table until `enumerate()` has run.
+    let _ = transport
+        .enumerate()
+        .map_err(|error| error.into_battery(endpoint_id))?;
+    transport
+        .open(endpoint_id)
+        .map_err(|error| error.into_battery(endpoint_id))
 }
 
 pub(super) fn parse_u8_hex_or_dec(value: &str) -> Result<u8, String> {
@@ -274,5 +298,70 @@ pub(super) fn parse_u8_hex_or_dec(value: &str) -> Result<u8, String> {
         trimmed
             .parse::<u8>()
             .map_err(|err| format!("invalid byte `{value}`: {err}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use wireless_battery::model::Endpoint;
+    use wireless_battery::transport::HidReport;
+
+    struct DummySession;
+    impl HidSession for DummySession {
+        fn send_feature(&mut self, _report_id: u8, _payload: &[u8]) -> Result<(), TransportError> {
+            Ok(())
+        }
+        fn get_feature(
+            &mut self,
+            _report_id: u8,
+            _length: usize,
+        ) -> Result<Vec<u8>, TransportError> {
+            Err(TransportError::Timeout)
+        }
+        fn write_output(&mut self, _report_id: u8, _payload: &[u8]) -> Result<(), TransportError> {
+            Ok(())
+        }
+        fn set_output(&mut self, _report_id: u8, _payload: &[u8]) -> Result<(), TransportError> {
+            Ok(())
+        }
+        fn read_input(&mut self, _timeout: Duration) -> Result<HidReport, TransportError> {
+            Err(TransportError::Timeout)
+        }
+    }
+
+    struct EnumerateBeforeOpenTransport {
+        enumerated: AtomicBool,
+        endpoint_id: EndpointId,
+    }
+
+    impl Transport for EnumerateBeforeOpenTransport {
+        fn enumerate(&self) -> Result<Vec<Endpoint>, TransportError> {
+            self.enumerated.store(true, Ordering::SeqCst);
+            Ok(vec![Endpoint::synthetic(
+                &self.endpoint_id.0,
+                0x046D,
+                0xC547,
+            )])
+        }
+
+        fn open(&self, endpoint: &EndpointId) -> Result<Box<dyn HidSession>, TransportError> {
+            if !self.enumerated.load(Ordering::SeqCst) || endpoint != &self.endpoint_id {
+                return Err(TransportError::DeviceDisconnected);
+            }
+            Ok(Box::new(DummySession))
+        }
+    }
+
+    #[test]
+    fn open_hid_session_enumerates_before_opening() {
+        let ep_id = EndpointId("ep_probe_test".to_owned());
+        let transport = EnumerateBeforeOpenTransport {
+            enumerated: AtomicBool::new(false),
+            endpoint_id: ep_id.clone(),
+        };
+        assert!(open_hid_session(&transport, &ep_id).is_ok());
+        assert!(transport.enumerated.load(Ordering::SeqCst));
     }
 }

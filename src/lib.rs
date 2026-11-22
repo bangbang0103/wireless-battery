@@ -17,9 +17,9 @@ pub use client::BatteryClient;
 pub use error::{BatteryError, ErrorKind};
 pub use model::{
     BatteryLevel, BatteryReading, Capabilities, ChargeState, ClientConfig, Device,
-    DeviceDiagnostic, DeviceId, Endpoint, EndpointId, Freshness, HidBusType, MatchStatus,
-    Precision, ProviderReading, Reachability, ReadOptions, ReadingSource, SupportStatus,
-    TransportKind,
+    DeviceDiagnostic, DeviceId, DeviceKind, Endpoint, EndpointId, Freshness, HidBusType,
+    MatchStatus, Precision, ProviderReading, Reachability, ReadOptions, ReadingSource,
+    SupportStatus, TransportKind,
 };
 pub use providers::{Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata};
 pub use transport::{HidReport, HidSession, Transport, TransportError};

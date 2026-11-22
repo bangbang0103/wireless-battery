@@ -49,3 +49,13 @@ fn unknown_percentage_serializes_as_null_not_zero() {
     assert!(fixture["expect"]["percentage"].is_null());
     assert_ne!(fixture["expect"]["percentage"], serde_json::json!(0));
 }
+
+#[test]
+fn probe_invalid_hex_argument_exits_with_code_2() {
+    Command::cargo_bin("wireless-battery")
+        .unwrap()
+        .args(["probe", "dev_missing", "--send", "ZZ", "--json"])
+        .assert()
+        .code(2)
+        .stdout(predicate::str::contains("\"kind\":\"invalid_argument\""));
+}

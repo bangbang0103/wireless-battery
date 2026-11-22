@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "target": {"kind": "package", "id": "synthetic.feature.mouse"},
+  "target": {"kind": "provider", "id": "synthetic.feature.mouse"},
   "case": "feature_checksum_failure",
   "source": "synthetic",
   "environment": {"os": null, "connection": "2.4g_receiver", "firmware": null},

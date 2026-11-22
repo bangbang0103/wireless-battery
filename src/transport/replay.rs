@@ -20,7 +20,7 @@ use std::time::Duration;
 pub struct Fixture {
     /// Fixture format version.
     pub schema_version: u32,
-    /// Provider or package under test.
+    /// Provider under test.
     pub target: FixtureTarget,
     /// Stable test case name.
     pub case: String,
@@ -40,7 +40,7 @@ pub struct Fixture {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FixtureTarget {
-    /// Target type: `package`, `provider`, or `bluetooth_bas`.
+    /// Target type: `provider`, `bluetooth_bas`, or `xinput`.
     pub kind: String,
     /// Stable target ID.
     pub id: String,

@@ -5,7 +5,7 @@ pub(crate) mod os;
 pub(crate) mod vendors;
 
 use crate::error::BatteryError;
-use crate::model::{Capabilities, Device, Endpoint, ProviderReading, SupportStatus};
+use crate::model::{Capabilities, Device, DeviceKind, Endpoint, ProviderReading, SupportStatus};
 use crate::transport::{HidSession, Transport};
 use std::time::{Duration, Instant};
 
@@ -34,8 +34,10 @@ impl Deadline {
 /// Static provider metadata.
 #[derive(Debug, Clone)]
 pub struct ProviderMetadata {
-    /// Package or provider version.
+    /// Provider version.
     pub version: String,
+    /// Coarse device category shown in shells without name-guessing tables.
+    pub device_kind: DeviceKind,
     /// Lifecycle and evidence gate.
     pub support_status: SupportStatus,
     /// Coarse runtime capabilities.
@@ -56,26 +58,88 @@ pub struct DeviceContext<'a> {
 }
 
 /// Static match outcome. Matching must never perform I/O.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatchDecision {
     /// The provider does not recognize this endpoint.
     NoMatch,
-    /// The provider recognizes the endpoint without probing.
+    /// Broad chipset/VID family rule; yields automatically to any `Exact` match.
+    Family,
+    /// Model-specific or uniquely scoped match without probing.
     Exact,
-    /// A possible match that is diagnostic only.
-    Candidate {
-        /// Sanitized reason for the candidate.
-        reason: String,
-    },
 }
 
-/// A built-in, OS-standard, or declarative battery protocol.
+/// Infer a form factor from an endpoint product string when one provider covers
+/// multi-category receivers or generic OS standards such as Bluetooth BAS.
+#[must_use]
+pub(crate) fn infer_device_kind_from_name(name: Option<&str>) -> Option<DeviceKind> {
+    let lower = name?.to_ascii_lowercase();
+    if lower.contains("headset")
+        || lower.contains("headphone")
+        || lower.contains("delta")
+        || lower.contains("pelta")
+        || lower.contains("cetra")
+        || lower.contains("blackshark")
+        || lower.contains("barracuda")
+        || lower.contains("arctis")
+        || lower.contains("virtuoso")
+        || lower.contains("hs80")
+        || lower.contains("cloud")
+        || lower.contains("earbud")
+        || lower.contains("inzone")
+    {
+        return Some(DeviceKind::Headset);
+    }
+    if lower.contains("keyboard")
+        || lower.contains("rainy75")
+        || lower.contains("azoth")
+        || lower.contains("falchion")
+        || lower.contains("mx keys")
+        || lower.contains("g915")
+        || lower.contains("g715")
+        || lower.contains("scope")
+    {
+        return Some(DeviceKind::Keyboard);
+    }
+    if lower.contains("controller")
+        || lower.contains("dualsense")
+        || lower.contains("dualshock")
+        || lower.contains("gamepad")
+        || lower.contains("xbox")
+    {
+        return Some(DeviceKind::Gamepad);
+    }
+    if lower.contains("mouse")
+        || lower.contains("gpw")
+        || lower.contains("superlight")
+        || lower.contains("viper")
+        || lower.contains("deathadder")
+        || lower.contains("basilisk")
+        || lower.contains("harpe")
+        || lower.contains("gladius")
+        || lower.contains("keris")
+        || lower.contains("mx master")
+        || lower.contains("mx anywhere")
+        || lower.contains("g304")
+        || lower.contains("g502")
+    {
+        return Some(DeviceKind::Mouse);
+    }
+    None
+}
+
+/// A built-in or OS-standard battery protocol.
 pub trait Provider: Send + Sync {
-    /// Stable provider or package ID.
+    /// Stable provider ID.
     fn id(&self) -> &str;
 
     /// Static metadata and query policy.
     fn metadata(&self) -> ProviderMetadata;
+
+    /// Refine form factor classification using static endpoint metadata.
+    fn device_kind(&self, endpoint: &Endpoint) -> DeviceKind {
+        let _ = endpoint;
+        self.metadata().device_kind
+    }
 
     /// Return a provider-specific display name using only static endpoint data.
     fn display_name(&self, endpoint: &Endpoint) -> Option<String> {

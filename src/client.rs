@@ -1,9 +1,9 @@
 use crate::error::BatteryError;
 use crate::identity;
 use crate::model::{
-    BatteryReading, Capabilities, ClientConfig, Device, DeviceDiagnostic, DeviceId, Endpoint,
-    EndpointId, Freshness, MatchStatus, Precision, ProviderReading, ReadOptions, SupportStatus,
-    TransportKind,
+    BatteryReading, Capabilities, ClientConfig, Device, DeviceDiagnostic, DeviceId, DeviceKind,
+    Endpoint, EndpointId, Freshness, MatchStatus, Precision, ProviderReading, ReadOptions,
+    SupportStatus, TransportKind,
 };
 use crate::providers::{Deadline, DeviceContext, MatchDecision};
 use crate::registry::Registry;
@@ -149,7 +149,7 @@ impl BatteryClient {
             .map(|(provider, decision)| {
                 let kind = match decision {
                     MatchDecision::Exact => "exact",
-                    MatchDecision::Candidate { .. } => "candidate",
+                    MatchDecision::Family => "family",
                     MatchDecision::NoMatch => "no_match",
                 };
                 format!("{}:{kind}", provider.id())
@@ -187,10 +187,7 @@ impl BatteryClient {
         if device.match_status != MatchStatus::Exact {
             return Err(BatteryError::Unsupported {
                 reason: match device.match_status {
-                    MatchStatus::Candidate => {
-                        "only candidate providers matched; no probing was attempted"
-                    }
-                    MatchStatus::Conflict => "multiple providers returned an exact match",
+                    MatchStatus::Conflict => "multiple providers matched the same priority tier",
                     MatchStatus::Unmatched => "no provider matched",
                     MatchStatus::Exact => "provider match error",
                 }
@@ -210,14 +207,14 @@ impl BatteryClient {
                 message: "selected provider disappeared from the immutable registry".to_owned(),
             })?;
         match device.support_status {
-            SupportStatus::Verified | SupportStatus::Deprecated => {}
+            SupportStatus::Verified => {}
             SupportStatus::Experimental if allow_experimental => {}
             SupportStatus::Experimental => {
                 return Err(BatteryError::Unsupported {
                     reason: "experimental provider requires explicit opt-in".to_owned(),
                 });
             }
-            SupportStatus::Draft | SupportStatus::Unknown => {
+            SupportStatus::Unknown => {
                 return Err(BatteryError::Unsupported {
                     reason: "provider is not enabled for reads".to_owned(),
                 });
@@ -287,24 +284,32 @@ impl BatteryClient {
             .iter()
             .filter(|(_, decision)| *decision == MatchDecision::Exact)
             .collect::<Vec<_>>();
+        let family = matches
+            .iter()
+            .filter(|(_, decision)| *decision == MatchDecision::Family)
+            .collect::<Vec<_>>();
         let (selected, match_status) = if exact.len() == 1 {
             (Some(exact[0].0.clone()), MatchStatus::Exact)
         } else if exact.len() > 1 {
             (None, MatchStatus::Conflict)
-        } else if matches.is_empty() {
-            (None, MatchStatus::Unmatched)
+        } else if family.len() == 1 {
+            (Some(family[0].0.clone()), MatchStatus::Exact)
+        } else if family.len() > 1 {
+            (None, MatchStatus::Conflict)
         } else {
-            (None, MatchStatus::Candidate)
+            (None, MatchStatus::Unmatched)
         };
         let metadata = selected.as_ref().map(|provider| provider.metadata());
         let support_status = metadata
             .as_ref()
             .map_or(SupportStatus::Unknown, |metadata| metadata.support_status);
-        let readable = match_status == MatchStatus::Exact
-            && matches!(
-                support_status,
-                SupportStatus::Verified | SupportStatus::Deprecated
-            )
+        let device_kind = selected
+            .as_ref()
+            .map_or(DeviceKind::Peripheral, |provider| {
+                provider.device_kind(endpoint)
+            });
+        let readable = (match_status == MatchStatus::Exact
+            && support_status == SupportStatus::Verified)
             || (match_status == MatchStatus::Exact
                 && support_status == SupportStatus::Experimental
                 && self.config.allow_experimental);
@@ -330,10 +335,10 @@ impl BatteryClient {
             provider_version: metadata.as_ref().map(|metadata| metadata.version.clone()),
             support_status,
             match_status,
+            device_kind,
             capabilities: metadata
                 .map_or(Capabilities::default(), |metadata| metadata.capabilities),
             readable,
-            receiver_id: None,
         }
     }
 

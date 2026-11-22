@@ -14,10 +14,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Install Linux HID/BlueZ build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libudev-dev libusb-1.0-0-dev libdbus-1-dev
+      - name: Verify Cargo and Info.plist versions match tag
+        shell: bash
+        run: |
+          root_ver="$(awk -F'"' '/^version *= *"/{print $2; exit}' Cargo.toml)"
+          tray_ver="$(awk -F'"' '/^version *= *"/{print $2; exit}' tray/Cargo.toml)"
+          plist_ver="$(awk '/<key>CFBundleShortVersionString<\/key>/{getline; gsub(/.*<string>|<\/string>.*/, "", $0); gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0); print; exit}' tray/platforms/macos/Resources/Info.plist)"
+          echo "root=$root_ver tray=$tray_ver plist=$plist_ver ref=${GITHUB_REF_NAME}"
+          if [[ "${root_ver}" != "${tray_ver}" ]] || [[ "${root_ver}" != "${plist_ver}" ]]; then
+            echo "error: version mismatch between Cargo.toml, tray/Cargo.toml, and Info.plist" >&2
+            exit 1
+          fi
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            tag_ver="${GITHUB_REF_NAME#v}"
+            if [[ "${root_ver}" != "${tag_ver}" ]]; then
+              echo "error: release tag (${tag_ver}) does not match crate/plist version (${root_ver})" >&2
+              exit 1
+            fi
+          fi
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.76.0
@@ -30,6 +53,7 @@ jobs:
             target
           key: ${{ runner.os }}-release-cargo-1.76-${{ hashFiles('Cargo.lock') }}
       - name: Cache Tray Cargo
+        if: runner.os != 'Linux'
         uses: actions/cache@v4
         with:
           path: |
@@ -39,6 +63,12 @@ jobs:
           key: ${{ runner.os }}-release-tray-cargo-1.76-${{ hashFiles('tray/Cargo.lock') }}
       - name: Build CLI release
         run: cargo build --locked --release --bin wireless-battery
+      - name: Package Linux CLI archive
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -czf dist/wireless-battery-cli-linux-x86_64.tar.gz -C target/release wireless-battery -C "${GITHUB_WORKSPACE}" LICENSE NOTICE
       - name: Build Windows tray release
         if: runner.os == 'Windows'
         working-directory: tray

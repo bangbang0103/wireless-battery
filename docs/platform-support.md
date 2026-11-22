@@ -4,7 +4,7 @@
 
 ## Build matrix
 
-CI is configured for Windows and macOS using Rust 1.76. It runs formatting, Clippy (all-features and `--no-default-features`), all-feature tests (including synthetic and vendor replay), and release binary/tray builds. Configuration is not a claim that every platform has completed real-hardware verification.
+CI is configured for Windows, macOS, and Ubuntu Linux using Rust 1.76. It runs formatting, Clippy (all-features and `--no-default-features`), all-feature and `--no-default-features` library tests, `tray` workspace checks (including `--no-default-features` and C-header checks), and release binary/tray builds. Configuration is not a claim that every platform has completed real-hardware verification.
 
 Linux HIDAPI builds may need a C compiler, `pkg-config`, `libudev-dev`, and `libusb-1.0-0-dev`, depending on the selected HIDAPI backend. BLE uses BlueZ through `btleplug`; no arbitrary Bluetooth command interface is exposed.
 

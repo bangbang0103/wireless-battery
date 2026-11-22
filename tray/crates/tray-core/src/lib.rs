@@ -15,8 +15,13 @@ pub use config::{
 pub use device_kind::{classify_device, DeviceKind};
 pub use notify::LowBatteryTracker;
 pub use service::{PollerHandle, TrayService, TrayUpdate};
-pub use state::{DeviceView, LowBatteryAlert, TrayIconState, TraySnapshot};
+pub use state::{
+    format_footer_summary, format_footer_summary_rfc3339, format_poll_label, format_relative_time,
+    format_relative_time_rfc3339, format_relative_time_secs, format_tooltip,
+    format_tooltip_with_locale, DeviceView, LowBatteryAlert, TrayIconState, TraySnapshot,
+};
 pub use version::{
-    evaluate_release_json, is_newer_version, UpdateCheckResult, APP_DISPLAY_VERSION, APP_VERSION,
+    evaluate_release_json, is_newer_version, is_valid_update_url, UpdateCheckResult,
+    APP_DISPLAY_VERSION, APP_VERSION, GITHUB_API_HOST, LATEST_RELEASE_API_PATH,
     LATEST_RELEASE_API_URL, RELEASES_URL,
 };

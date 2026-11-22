@@ -26,10 +26,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Install Linux HID/BlueZ build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libudev-dev libusb-1.0-0-dev libdbus-1-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.76.0
@@ -46,12 +51,19 @@ jobs:
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - run: cargo clippy --locked --no-default-features -- -D warnings
       - run: cargo test --locked --all-features
+      - run: cargo test --locked --no-default-features --lib
       - name: Check synthetic devices stay out of real support
         shell: bash
         run: |
           ! grep -R 'synthetic\.' docs/support-matrix.md docs/support-matrix.zh-CN.md
       - name: Build CLI release
         run: cargo build --locked --release --bin wireless-battery
+      - name: Upload Linux CLI artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wireless-battery-cli-linux
+          path: target/release/wireless-battery
       - name: Upload Windows CLI artifact
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
@@ -69,10 +81,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Install Linux HID/BlueZ build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libudev-dev libusb-1.0-0-dev libdbus-1-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.76.0
@@ -88,9 +105,27 @@ jobs:
       - working-directory: tray
         run: cargo fmt --all -- --check
       - working-directory: tray
-        run: cargo clippy --locked --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets --all-features -p wireless-battery-tray-core -p wireless-battery-tray-ffi -- -D warnings
       - working-directory: tray
-        run: cargo test --locked
+        run: cargo clippy --locked --no-default-features -p wireless-battery-tray-core -p wireless-battery-tray-ffi -- -D warnings
+      - working-directory: tray
+        run: cargo test --locked --all-features -p wireless-battery-tray-core -p wireless-battery-tray-ffi
+      - working-directory: tray
+        run: cargo test --locked --no-default-features -p wireless-battery-tray-core -p wireless-battery-tray-ffi
+      - name: Verify --no-default-features excludes BLE runtime dependencies (FFI & core)
+        working-directory: tray
+        shell: bash
+        run: |
+          ! cargo tree --locked --no-default-features -p wireless-battery-tray-ffi | grep -Eq '\b(btleplug|tokio)\b'
+      - name: Check Windows native tray (--all-features & --no-default-features)
+        if: runner.os == 'Windows'
+        working-directory: tray
+        shell: bash
+        run: |
+          cargo clippy --locked --all-targets --all-features -p wireless-battery-tray -- -D warnings
+          cargo clippy --locked --no-default-features -p wireless-battery-tray -- -D warnings
+          cargo test --locked --all-features -p wireless-battery-tray
+          ! cargo tree --locked --no-default-features -p wireless-battery-tray | grep -Eq '\b(btleplug|tokio)\b'
       - name: Build Windows native tray release
         if: runner.os == 'Windows'
         working-directory: tray
