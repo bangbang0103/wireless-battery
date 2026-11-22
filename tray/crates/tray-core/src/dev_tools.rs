@@ -43,7 +43,10 @@ impl DevState {
                 let mut cloned = dev.clone();
                 cloned.is_low = cloned.precision == Precision::Percentage
                     && cloned.percentage.is_some_and(|pct| pct <= threshold)
-                    && !matches!(cloned.charge_state, ChargeState::Charging | ChargeState::Full);
+                    && !matches!(
+                        cloned.charge_state,
+                        ChargeState::Charging | ChargeState::Full
+                    );
                 snapshot.devices.push(cloned);
             }
         }

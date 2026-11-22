@@ -127,7 +127,10 @@ pub enum UpdateUiStatus {
     Idle,
     Checking,
     UpToDate,
-    Available { latest_version: String, url: String },
+    Available {
+        latest_version: String,
+        url: String,
+    },
     Failed,
 }
 

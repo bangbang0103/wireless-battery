@@ -221,8 +221,24 @@ fn render_minimal_tray_svg(
         let outer_wave_stroke = (1.8 * s).max(1.1);
 
         let bolt_geometry = create_rounded_bolt_geometry(&d2d, s)?;
-        let inner_arc = create_quad_curve(&d2d, 15.9 * s, 5.2 * s, 19.6 * s, 8.0 * s, 19.1 * s, 12.0 * s)?;
-        let outer_arc = create_quad_curve(&d2d, 16.8 * s, 2.0 * s, 22.6 * s, 6.0 * s, 21.6 * s, 13.0 * s)?;
+        let inner_arc = create_quad_curve(
+            &d2d,
+            15.9 * s,
+            5.2 * s,
+            19.6 * s,
+            8.0 * s,
+            19.1 * s,
+            12.0 * s,
+        )?;
+        let outer_arc = create_quad_curve(
+            &d2d,
+            16.8 * s,
+            2.0 * s,
+            22.6 * s,
+            6.0 * s,
+            21.6 * s,
+            13.0 * s,
+        )?;
 
         rt.BeginDraw();
         rt.Clear(Some(&D2D1_COLOR_F {

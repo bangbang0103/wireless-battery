@@ -19,7 +19,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyWindow,
     GetWindowLongPtrW, GetWindowTextLengthW, GetWindowTextW, LoadCursorW, PostMessageW,
     RegisterClassExW, SendMessageW, SetForegroundWindow, SetWindowLongPtrW, SetWindowTextW,
-    ShowWindow, SystemParametersInfoW, CB_ADDSTRING, CB_GETCURSEL, CB_SETCURSEL, CBS_DROPDOWNLIST,
+    ShowWindow, SystemParametersInfoW, CBS_DROPDOWNLIST, CB_ADDSTRING, CB_GETCURSEL, CB_SETCURSEL,
     ES_AUTOHSCROLL, ES_NUMBER, GWLP_USERDATA, HMENU, IDC_ARROW, MF_POPUP, MF_SEPARATOR, MF_STRING,
     SPI_GETWORKAREA, SW_HIDE, SW_SHOW, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, WINDOW_EX_STYLE,
     WINDOW_STYLE, WM_APP, WM_CLOSE, WM_COMMAND, WM_SETFONT, WNDCLASSEXW, WS_BORDER, WS_CAPTION,
@@ -90,9 +90,7 @@ impl DevPanelWindow {
                 lpfnWndProc: Some(dev_panel_wnd_proc),
                 hInstance: hinstance.into(),
                 hCursor: LoadCursorW(None, IDC_ARROW)?,
-                hbrBackground: windows::Win32::Graphics::Gdi::HBRUSH(
-                    GetStockObject(WHITE_BRUSH).0,
-                ),
+                hbrBackground: windows::Win32::Graphics::Gdi::HBRUSH(GetStockObject(WHITE_BRUSH).0),
                 lpszClassName: class_name,
                 ..Default::default()
             };
@@ -174,13 +172,28 @@ impl DevPanelWindow {
             create_static(hwnd, font, "手动添加模拟设备", 14, 114, 296, 20);
 
             create_static(hwnd, font, "名称", 14, 140, 42, 22);
-            let edit_name = create_edit(hwnd, font, "Dev Wireless Mouse", 62, 138, 248, 24, CTRL_EDIT_NAME, false);
+            let edit_name = create_edit(
+                hwnd,
+                font,
+                "Dev Wireless Mouse",
+                62,
+                138,
+                248,
+                24,
+                CTRL_EDIT_NAME,
+                false,
+            );
 
             create_static(hwnd, font, "类型", 14, 172, 42, 22);
             let combo_kind = create_combo(
                 hwnd,
                 font,
-                &["Mouse (鼠标)", "Keyboard (键盘)", "Headset (耳机)", "Gamepad (手柄)"],
+                &[
+                    "Mouse (鼠标)",
+                    "Keyboard (键盘)",
+                    "Headset (耳机)",
+                    "Gamepad (手柄)",
+                ],
                 0,
                 62,
                 168,
@@ -232,16 +245,7 @@ impl DevPanelWindow {
                 28,
                 CTRL_BTN_PRESET_SUITE,
             );
-            create_button(
-                hwnd,
-                font,
-                "清空 / 重置",
-                178,
-                274,
-                132,
-                28,
-                CTRL_BTN_RESET,
-            );
+            create_button(hwnd, font, "清空 / 重置", 178, 274, 132, 28, CTRL_BTN_RESET);
 
             let status_label = create_static(
                 hwnd,
@@ -355,12 +359,7 @@ pub unsafe fn append_context_menu(menu: HMENU) {
             MENU_CMD_DEV_RESET as usize,
             w!("清空虚拟设备 / 重置"),
         );
-        let _ = AppendMenuW(
-            menu,
-            MF_POPUP,
-            dev_menu.0 as usize,
-            w!("Dev 调试"),
-        );
+        let _ = AppendMenuW(menu, MF_POPUP, dev_menu.0 as usize, w!("Dev 调试"));
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
     }
 }
@@ -408,14 +407,9 @@ pub fn handle_context_menu_cmd(
             popover,
             theme,
         ),
-        MENU_CMD_DEV_RESET => dispatch_dev_action(
-            DevAction::ResetAll,
-            dev_panel,
-            poller,
-            tray,
-            popover,
-            theme,
-        ),
+        MENU_CMD_DEV_RESET => {
+            dispatch_dev_action(DevAction::ResetAll, dev_panel, poller, tray, popover, theme)
+        }
         _ => {}
     }
 }
@@ -646,7 +640,10 @@ unsafe fn default_panel_position(width: i32, height: i32) -> (i32, i32) {
     )
     .is_ok()
     {
-        ((work.right - width - 380).max(20), (work.bottom - height - 24).max(20))
+        (
+            (work.right - width - 380).max(20),
+            (work.bottom - height - 24).max(20),
+        )
     } else {
         (120, 120)
     }
@@ -726,7 +723,8 @@ unsafe fn create_edit(
     id: isize,
     numeric: bool,
 ) -> HWND {
-    let mut style = WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP | WINDOW_STYLE(ES_AUTOHSCROLL as u32);
+    let mut style =
+        WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP | WINDOW_STYLE(ES_AUTOHSCROLL as u32);
     if numeric {
         style |= WINDOW_STYLE(ES_NUMBER as u32);
     }
@@ -777,7 +775,12 @@ unsafe fn create_combo(
     apply_font(hwnd, font);
     for item in items {
         let wide = HSTRING::from(*item);
-        let _ = SendMessageW(hwnd, CB_ADDSTRING, WPARAM(0), LPARAM(wide.as_ptr() as isize));
+        let _ = SendMessageW(
+            hwnd,
+            CB_ADDSTRING,
+            WPARAM(0),
+            LPARAM(wide.as_ptr() as isize),
+        );
     }
     let _ = SendMessageW(hwnd, CB_SETCURSEL, WPARAM(selected), LPARAM(0));
     hwnd

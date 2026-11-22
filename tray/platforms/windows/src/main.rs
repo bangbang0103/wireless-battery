@@ -219,10 +219,8 @@ mod win_app {
         #[cfg(feature = "dev-tools")]
         let (dev_panel, dev_actions_rx) = {
             let (dev_tx, dev_rx) = mpsc::channel::<crate::dev_tools::DevAction>();
-            let panel = crate::dev_tools::DevPanelWindow::create(
-                host_hwnd,
-                Arc::new(Mutex::new(dev_tx)),
-            )?;
+            let panel =
+                crate::dev_tools::DevPanelWindow::create(host_hwnd, Arc::new(Mutex::new(dev_tx)))?;
             (panel, dev_rx)
         };
 
@@ -340,8 +338,10 @@ mod win_app {
                         UpdateCheckResult::Failed(_) => {
                             host.popover.set_update_status(UpdateUiStatus::Failed);
                             if from_menu {
-                                host.tray
-                                    .notify_info(lang.notify_update_title(), lang.notify_update_failed());
+                                host.tray.notify_info(
+                                    lang.notify_update_title(),
+                                    lang.notify_update_failed(),
+                                );
                             } else {
                                 host.popover.show_feedback(lang.notify_update_failed());
                             }
@@ -605,12 +605,8 @@ mod win_app {
                 let result = updater::check_latest_release();
                 let _ = tx.send((result, from_menu));
                 unsafe {
-                    let _ = PostMessageW(
-                        HWND(hwnd_raw),
-                        WM_UPDATE_CHECK_RESULT,
-                        WPARAM(0),
-                        LPARAM(0),
-                    );
+                    let _ =
+                        PostMessageW(HWND(hwnd_raw), WM_UPDATE_CHECK_RESULT, WPARAM(0), LPARAM(0));
                 }
             });
     }
