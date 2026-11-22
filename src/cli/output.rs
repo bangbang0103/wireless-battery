@@ -23,7 +23,6 @@ pub(super) fn read_device_list(
     client: &BatteryClient,
     devices: Vec<Device>,
     timeout_ms: u64,
-    include_experimental: bool,
 ) -> Vec<ListEntry> {
     devices
         .into_iter()
@@ -40,7 +39,7 @@ pub(super) fn read_device_list(
                 ReadOptions {
                     timeout: Duration::from_millis(timeout_ms),
                     allow_stale: false,
-                    allow_experimental: include_experimental,
+                    allow_experimental: true,
                 },
             ) {
                 Ok(reading) => ListEntry {
@@ -316,7 +315,7 @@ mod tests {
         )
         .unwrap();
         let devices = client.list_devices().unwrap();
-        let entries = read_device_list(&client, devices, 1_000, true);
+        let entries = read_device_list(&client, devices, 1_000);
         assert_eq!(entries.len(), 3);
         assert_eq!(entries[0].reading.as_ref().unwrap().percentage, Some(72));
         assert!(entries[0].read_error.is_none());
