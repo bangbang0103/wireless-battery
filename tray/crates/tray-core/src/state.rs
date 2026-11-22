@@ -63,6 +63,9 @@ pub struct DeviceView {
 /// Complete immutable snapshot pushed to native OS tray shells.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TraySnapshot {
+    /// Application display version (e.g. `v0.1.0` or `v0.1.0-dev`).
+    #[serde(default = "default_app_version")]
+    pub app_version: String,
     /// Visible supported devices sorted by priority (low -> active -> stale/sleeping -> offline).
     pub devices: Vec<DeviceView>,
     /// Number of matched experimental devices hidden because `allow_experimental` is off.
@@ -77,6 +80,10 @@ pub struct TraySnapshot {
     pub refreshing: bool,
     /// Current persisted user settings.
     pub config: TrayConfig,
+}
+
+fn default_app_version() -> String {
+    crate::version::APP_DISPLAY_VERSION.to_owned()
 }
 
 /// Deduplicated low-battery alert emitted by `TrayService` for OS native notifications.

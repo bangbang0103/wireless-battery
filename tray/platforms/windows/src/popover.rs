@@ -9,7 +9,7 @@
 use crate::i18n::Lang;
 use crate::icon::load_app_icon;
 use crate::renderer::{
-    HitTarget, PaintSurface, PopoverRenderer, PopoverView, UiState, HEADER_HEIGHT,
+    HitTarget, PaintSurface, PopoverRenderer, PopoverView, UiState, UpdateUiStatus, HEADER_HEIGHT,
     POPOVER_WIDTH_DIP,
 };
 use crate::theme::SystemTheme;
@@ -71,6 +71,8 @@ pub enum PopoverAction {
     ToggleLowBatteryNotify,
     ToggleLowBatterySilent,
     ToggleAutostart,
+    CheckUpdates,
+    OpenUpdateUrl(String),
     Quit,
 }
 
@@ -385,6 +387,13 @@ impl PopoverWindow {
 
     pub fn hwnd(&self) -> HWND {
         self.inner.hwnd
+    }
+
+    pub fn set_update_status(&mut self, status: UpdateUiStatus) {
+        self.inner.ui.update_status = status;
+        if self.is_visible() {
+            paint_inner(&mut self.inner);
+        }
     }
 
     fn position_and_resize(&mut self, anchor: Option<RECT>, reposition_from_anchor: bool) {
@@ -922,6 +931,18 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) {
             (inner.on_action)(PopoverAction::ToggleLowBatterySilent)
         }
         HitTarget::ToggleAutostart => (inner.on_action)(PopoverAction::ToggleAutostart),
+        HitTarget::CheckUpdates => match &inner.ui.update_status {
+            UpdateUiStatus::Checking => {}
+            UpdateUiStatus::Available { url, .. } => {
+                let target_url = url.clone();
+                (inner.on_action)(PopoverAction::OpenUpdateUrl(target_url));
+            }
+            UpdateUiStatus::Idle | UpdateUiStatus::UpToDate | UpdateUiStatus::Failed => {
+                inner.ui.update_status = UpdateUiStatus::Checking;
+                paint_inner(inner);
+                (inner.on_action)(PopoverAction::CheckUpdates);
+            }
+        },
         HitTarget::Quit => (inner.on_action)(PopoverAction::Quit),
     }
 }

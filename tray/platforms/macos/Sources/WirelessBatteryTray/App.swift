@@ -371,8 +371,9 @@ private struct PopoverRootView: View {
                         .frame(width: 6, height: 6)
                     Text(
                         store.snapshot.refreshing
-                            ? lang.readingPeripherals
+                            ? "\(store.snapshot.appVersion) · \(lang.readingPeripherals)"
                             : lang.footerSummary(
+                                appVersion: store.snapshot.appVersion,
                                 lastSyncAt: store.snapshot.lastSyncAt,
                                 pollSecs: store.snapshot.config.pollIntervalSecs
                             )
@@ -586,8 +587,54 @@ private struct PopoverRootView: View {
                     .disabled(!store.isBundledApp)
                     .help(store.isBundledApp ? lang.settingAutostartHelpBundled : lang.settingAutostartHelpUnbundled)
                 }
+
+                // Group 4: Version & Check for Updates
+                MacSettingsGroup {
+                    MacPickerRow(
+                        icon: "info.circle",
+                        title: lang.settingVersionTitle,
+                        subtitle: versionSubtitle
+                    ) {
+                        Button(versionActionLabel) {
+                            if case let .available(_, url) = store.updateStatus {
+                                NSWorkspace.shared.open(url)
+                            } else {
+                                store.checkForUpdates()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(store.updateStatus == .checking)
+                    }
+                }
             }
             .padding(14)
+        }
+    }
+
+    private var versionSubtitle: String {
+        switch store.updateStatus {
+        case .idle:
+            return lang.settingVersionDesc(store.snapshot.appVersion)
+        case .checking:
+            return lang.settingVersionChecking
+        case .upToDate:
+            return lang.settingVersionUpToDate(store.snapshot.appVersion)
+        case let .available(latestVersion, _):
+            return lang.settingVersionAvailable(latestVersion)
+        case .failed:
+            return lang.settingVersionFailed
+        }
+    }
+
+    private var versionActionLabel: String {
+        switch store.updateStatus {
+        case .checking:
+            return lang.btnCheckingUpdates
+        case .available:
+            return lang.btnDownloadUpdate
+        case .idle, .upToDate, .failed:
+            return lang.btnCheckUpdates
         }
     }
 

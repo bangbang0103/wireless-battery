@@ -18,6 +18,8 @@ mod renderer;
 mod theme;
 #[cfg(windows)]
 mod tray;
+#[cfg(windows)]
+mod updater;
 
 #[cfg(not(windows))]
 fn main() {
@@ -37,13 +39,15 @@ mod win_app {
     use crate::i18n::Lang;
     use crate::icon::load_app_icon;
     use crate::popover::{PopoverAction, PopoverWindow};
+    use crate::renderer::UpdateUiStatus;
     use crate::theme::SystemTheme;
     use crate::tray::{
-        TrayIconHost, MENU_CMD_LANG_EN, MENU_CMD_LANG_SYSTEM, MENU_CMD_LANG_ZH_CN,
-        MENU_CMD_OPEN_PANEL, MENU_CMD_QUIT, MENU_CMD_THEME_DARK, MENU_CMD_THEME_LIGHT,
-        MENU_CMD_THEME_SYSTEM, MENU_CMD_TOGGLE_AUTOSTART, MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY,
-        MENU_CMD_TOGGLE_LOW_BATTERY_SILENT, WM_TRAY_CALLBACK,
+        TrayIconHost, MENU_CMD_CHECK_UPDATES, MENU_CMD_LANG_EN, MENU_CMD_LANG_SYSTEM,
+        MENU_CMD_LANG_ZH_CN, MENU_CMD_OPEN_PANEL, MENU_CMD_QUIT, MENU_CMD_THEME_DARK,
+        MENU_CMD_THEME_LIGHT, MENU_CMD_THEME_SYSTEM, MENU_CMD_TOGGLE_AUTOSTART,
+        MENU_CMD_TOGGLE_LOW_BATTERY_NOTIFY, MENU_CMD_TOGGLE_LOW_BATTERY_SILENT, WM_TRAY_CALLBACK,
     };
+    use crate::updater;
     use std::sync::{mpsc, Arc, Mutex};
     use windows::core::w;
     use windows::Win32::Foundation::{
@@ -66,11 +70,12 @@ mod win_app {
     const NIN_KEYSELECT: u32 = NIN_SELECT + 1;
     const WM_DWMCOLORIZATIONCOLORCHANGED: u32 = 0x0320;
     use wireless_battery_tray_core::{
-        LanguageMode, PollerHandle, ThemeMode, TrayService, TrayUpdate,
+        LanguageMode, PollerHandle, ThemeMode, TrayService, TrayUpdate, UpdateCheckResult,
     };
 
     const WM_CORE_UPDATE: u32 = WM_APP + 20;
     const WM_POPOVER_ACTION: u32 = WM_APP + 21;
+    const WM_UPDATE_CHECK_RESULT: u32 = WM_APP + 22;
     const DBT_DEVNODES_CHANGED: usize = 0x0007;
     const TIMER_DEVICE_CHANGE: usize = 1;
 
@@ -102,6 +107,7 @@ mod win_app {
     }
 
     struct HostState {
+        host_hwnd: HWND,
         taskbar_created_msg: u32,
         theme: SystemTheme,
         tray: TrayIconHost,
@@ -109,6 +115,8 @@ mod win_app {
         poller: PollerHandle,
         updates_rx: mpsc::Receiver<TrayUpdate>,
         actions_rx: mpsc::Receiver<PopoverAction>,
+        update_check_tx: mpsc::Sender<(UpdateCheckResult, bool)>,
+        update_check_rx: mpsc::Receiver<(UpdateCheckResult, bool)>,
         #[cfg(feature = "dev-tools")]
         dev_panel: crate::dev_tools::DevPanelWindow,
         #[cfg(feature = "dev-tools")]
@@ -181,6 +189,7 @@ mod win_app {
 
         let (updates_tx, updates_rx) = mpsc::channel::<TrayUpdate>();
         let (actions_tx, actions_rx) = mpsc::channel::<PopoverAction>();
+        let (update_check_tx, update_check_rx) = mpsc::channel::<(UpdateCheckResult, bool)>();
 
         let host_hwnd_raw = host_hwnd.0;
         let action_tx_shared = Arc::new(Mutex::new(actions_tx));
@@ -218,6 +227,7 @@ mod win_app {
         };
 
         let mut host = Box::new(HostState {
+            host_hwnd,
             taskbar_created_msg,
             theme,
             tray,
@@ -225,6 +235,8 @@ mod win_app {
             poller,
             updates_rx,
             actions_rx,
+            update_check_tx,
+            update_check_rx,
             #[cfg(feature = "dev-tools")]
             dev_panel,
             #[cfg(feature = "dev-tools")]
@@ -293,6 +305,48 @@ mod win_app {
             WM_POPOVER_ACTION => {
                 while let Ok(action) = host.actions_rx.try_recv() {
                     dispatch_popover_action(host, action);
+                }
+                LRESULT(0)
+            }
+            WM_UPDATE_CHECK_RESULT => {
+                while let Ok((result, from_menu)) = host.update_check_rx.try_recv() {
+                    let lang = Lang::resolve(host.poller.service().config().language);
+                    match result {
+                        UpdateCheckResult::Available {
+                            latest_version,
+                            url,
+                        } => {
+                            let body = lang.notify_update_available(&latest_version);
+                            host.popover.set_update_status(UpdateUiStatus::Available {
+                                latest_version,
+                                url: url.clone(),
+                            });
+                            if from_menu {
+                                host.tray.notify_info(lang.notify_update_title(), &body);
+                                updater::open_url(&url);
+                            } else {
+                                host.popover.show_feedback(body);
+                            }
+                        }
+                        UpdateCheckResult::UpToDate { current_version } => {
+                            let body = lang.notify_update_up_to_date(&current_version);
+                            host.popover.set_update_status(UpdateUiStatus::UpToDate);
+                            if from_menu {
+                                host.tray.notify_info(lang.notify_update_title(), &body);
+                            } else {
+                                host.popover.show_feedback(body);
+                            }
+                        }
+                        UpdateCheckResult::Failed(_) => {
+                            host.popover.set_update_status(UpdateUiStatus::Failed);
+                            if from_menu {
+                                host.tray
+                                    .notify_info(lang.notify_update_title(), lang.notify_update_failed());
+                            } else {
+                                host.popover.show_feedback(lang.notify_update_failed());
+                            }
+                        }
+                    }
                 }
                 LRESULT(0)
             }
@@ -412,6 +466,10 @@ mod win_app {
                             Some(MENU_CMD_TOGGLE_AUTOSTART) => {
                                 dispatch_popover_action(host, PopoverAction::ToggleAutostart);
                             }
+                            Some(MENU_CMD_CHECK_UPDATES) => {
+                                host.popover.set_update_status(UpdateUiStatus::Checking);
+                                spawn_update_check(host, true);
+                            }
                             Some(MENU_CMD_QUIT) => {
                                 PostQuitMessage(0);
                             }
@@ -526,9 +584,34 @@ mod win_app {
                         let _ = set_autostart(enabled);
                     });
             }
+            PopoverAction::CheckUpdates => {
+                spawn_update_check(host, false);
+            }
+            PopoverAction::OpenUpdateUrl(url) => {
+                updater::open_url(&url);
+            }
             PopoverAction::Quit => unsafe {
                 PostQuitMessage(0);
             },
         }
+    }
+
+    fn spawn_update_check(host: &HostState, from_menu: bool) {
+        let tx = host.update_check_tx.clone();
+        let hwnd_raw = host.host_hwnd.0;
+        let _ = std::thread::Builder::new()
+            .name("wb-tray-update-check".to_owned())
+            .spawn(move || {
+                let result = updater::check_latest_release();
+                let _ = tx.send((result, from_menu));
+                unsafe {
+                    let _ = PostMessageW(
+                        HWND(hwnd_raw),
+                        WM_UPDATE_CHECK_RESULT,
+                        WPARAM(0),
+                        LPARAM(0),
+                    );
+                }
+            });
     }
 }

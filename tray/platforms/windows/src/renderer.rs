@@ -80,6 +80,7 @@ const GLYPH_GAMEPAD: &str = "\u{E7FC}";
 const GLYPH_HEADSET: &str = "\u{E7F6}";
 const GLYPH_PERIPHERAL: &str = "\u{E857}";
 const GLYPH_CHARGING_BOLT: &str = "\u{E945}";
+const GLYPH_INFO: &str = "\u{E946}";
 
 /// Active view inside the single-popover experience.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +117,18 @@ pub enum HitTarget {
     ToggleLowBatteryNotify,
     ToggleLowBatterySilent,
     ToggleAutostart,
+    CheckUpdates,
+}
+
+/// UI state of the manual update check button inside the Settings view.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum UpdateUiStatus {
+    #[default]
+    Idle,
+    Checking,
+    UpToDate,
+    Available { latest_version: String, url: String },
+    Failed,
 }
 
 #[derive(Debug, Clone)]
@@ -204,6 +217,7 @@ pub struct UiState {
     pub hovered: Option<HitTarget>,
     pub pressed: Option<HitTarget>,
     pub feedback_banner: Option<String>,
+    pub update_status: UpdateUiStatus,
     // On-demand WinUI 3 micro-animations (VSync-paced)
     toggle_notify_anim: ScalarAnim,
     toggle_silent_anim: ScalarAnim,
@@ -225,6 +239,7 @@ impl Default for UiState {
             hovered: None,
             pressed: None,
             feedback_banner: None,
+            update_status: UpdateUiStatus::Idle,
             toggle_notify_anim: ScalarAnim::settled(1.0),
             toggle_silent_anim: ScalarAnim::settled(0.0),
             toggle_autostart_anim: ScalarAnim::settled(0.0),
@@ -541,8 +556,8 @@ impl PopoverRenderer {
                 };
                 HEADER_HEIGHT
                     + OUTER_PADDING * 2.0
-                    + SETTINGS_CARD_H * 5.0
-                    + SETTINGS_CARD_GAP * 4.0
+                    + SETTINGS_CARD_H * 6.0
+                    + SETTINGS_CARD_GAP * 5.0
                     + subrow_extra
             }
             PopoverView::Main => {
@@ -1017,9 +1032,13 @@ impl PopoverRenderer {
                 );
 
                 let footer_status = if snapshot.refreshing {
-                    lang.reading_peripherals().to_owned()
+                    format!("{} · {}", snapshot.app_version, lang.reading_peripherals())
                 } else {
-                    lang.footer_summary(snapshot.last_sync_at, snapshot.config.poll_interval_secs)
+                    lang.footer_summary(
+                        &snapshot.app_version,
+                        snapshot.last_sync_at,
+                        snapshot.config.poll_interval_secs,
+                    )
                 };
                 draw_text(
                     rt,
@@ -1970,6 +1989,63 @@ impl PopoverRenderer {
                 palette,
             )?;
             self.register_hit(auto_card, auto_target);
+            y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+
+            // Card 6: Version & Check for Updates
+            let ver_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
+            let ver_desc = match &ui.update_status {
+                UpdateUiStatus::Idle => lang.setting_version_desc(&snapshot.app_version),
+                UpdateUiStatus::Checking => lang.setting_version_checking().to_owned(),
+                UpdateUiStatus::UpToDate => lang.setting_version_up_to_date(&snapshot.app_version),
+                UpdateUiStatus::Available { latest_version, .. } => {
+                    lang.setting_version_available(latest_version)
+                }
+                UpdateUiStatus::Failed => lang.setting_version_failed().to_owned(),
+            };
+            let btn_label = match &ui.update_status {
+                UpdateUiStatus::Checking => lang.btn_checking_updates(),
+                UpdateUiStatus::Available { .. } => lang.btn_download_update(),
+                UpdateUiStatus::Idle | UpdateUiStatus::UpToDate | UpdateUiStatus::Failed => {
+                    lang.btn_check_updates()
+                }
+            };
+            let btn_w = if lang.is_zh() { 76.0 } else { 78.0 };
+            draw_settings_card_base(
+                rt,
+                ver_card,
+                GLYPH_INFO,
+                lang.setting_version_title(),
+                &ver_desc,
+                btn_w + 22.0,
+                &self.formats,
+                &icon_brush,
+                &text_primary,
+                &text_secondary,
+                palette,
+                false,
+                false,
+            )?;
+            let btn_rect = rect_xywh(
+                ver_card.right - 14.0 - btn_w,
+                ver_card.top + (SETTINGS_CARD_H - 28.0) * 0.5,
+                btn_w,
+                28.0,
+            );
+            let btn_alpha = if matches!(ui.update_status, UpdateUiStatus::Checking) {
+                0.55
+            } else {
+                1.0
+            };
+            self.draw_standard_button(
+                rt,
+                btn_rect,
+                None,
+                btn_label,
+                HitTarget::CheckUpdates,
+                palette,
+                ui,
+                btn_alpha,
+            )?;
 
             // --- WinUI 3 ComboBox Dropdown Flyout Overlay (if open) ---
             if let Some(open) = ui.open_dropdown {
