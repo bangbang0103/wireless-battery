@@ -110,72 +110,89 @@ final class FloatingPinController: ObservableObject {
 private struct MenuBarLogoIcon: View {
     let state: String
     let tooltip: String
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Canvas { context, size in
-            let s = min(size.width, size.height) / 24.0
-            let ox = (size.width - 24.0 * s) * 0.5
-            let oy = (size.height - 24.0 * s) * 0.5
-            let frameOpacity = state == "idle" ? 0.48 : 1.0
-            let frameColor = Color.primary.opacity(frameOpacity)
-            let signalColor: Color = {
+        Image(nsImage: Self.renderNSImage(state: state, isDark: colorScheme == .dark))
+            .help(tooltip)
+    }
+
+    private static func renderNSImage(state: String, isDark: Bool) -> NSImage {
+        let size = NSSize(width: 20, height: 20)
+        let isIdle = state == "idle"
+        let image = NSImage(size: size, flipped: true) { rect in
+            let s = min(rect.width, rect.height) / 24.0
+            let ox = (rect.width - 24.0 * s) * 0.5
+            let oy = (rect.height - 24.0 * s) * 0.5
+            let frameOpacity: CGFloat = isIdle ? 0.48 : 1.0
+            let baseColor: NSColor = isIdle ? .black : (isDark ? .white : .black)
+            let frameColor = baseColor.withAlphaComponent(frameOpacity)
+            let signalColor: NSColor = {
                 switch state {
                 case "idle":
                     return frameColor
                 case "low_battery":
-                    return Color(red: 244 / 255, green: 63 / 255, blue: 94 / 255)
+                    return NSColor(srgbRed: 244.0 / 255.0, green: 63.0 / 255.0, blue: 94.0 / 255.0, alpha: 1.0)
                 default:
-                    return Color(red: 16 / 255, green: 185 / 255, blue: 129 / 255)
+                    return NSColor(srgbRed: 16.0 / 255.0, green: 185.0 / 255.0, blue: 129.0 / 255.0, alpha: 1.0)
                 }
             }()
 
             // Minimalist horizontal battery outline (1.5, 5.5, 18 x 13, rx 2.8)
-            let bodyRect = CGRect(x: ox + 1.5 * s, y: oy + 5.5 * s, width: 18.0 * s, height: 13.0 * s)
-            let bodyPath = Path(roundedRect: bodyRect, cornerRadius: 2.8 * s)
-            context.stroke(
-                bodyPath,
-                with: .color(frameColor),
-                style: StrokeStyle(lineWidth: max(1.25, 1.8 * s), lineCap: .round, lineJoin: .round)
-            )
+            let bodyRect = NSRect(x: ox + 1.5 * s, y: oy + 5.5 * s, width: 18.0 * s, height: 13.0 * s)
+            let bodyPath = NSBezierPath(roundedRect: bodyRect, xRadius: 2.8 * s, yRadius: 2.8 * s)
+            bodyPath.lineWidth = max(1.25, 1.8 * s)
+            bodyPath.lineCapStyle = .round
+            bodyPath.lineJoinStyle = .round
+            frameColor.setStroke()
+            bodyPath.stroke()
 
             // Positive terminal pill (21.0, 9.2, 2.0 x 5.6, rx 1.0)
-            let capRect = CGRect(x: ox + 21.0 * s, y: oy + 9.2 * s, width: 2.0 * s, height: 5.6 * s)
-            context.fill(Path(roundedRect: capRect, cornerRadius: 1.0 * s), with: .color(frameColor))
+            let capRect = NSRect(x: ox + 21.0 * s, y: oy + 9.2 * s, width: 2.0 * s, height: 5.6 * s)
+            frameColor.setFill()
+            NSBezierPath(roundedRect: capRect, xRadius: 1.0 * s, yRadius: 1.0 * s).fill()
 
             // Concentric wireless Wi-Fi arcs centered at (10.5, 14.6)
-            let center = CGPoint(x: ox + 10.5 * s, y: oy + 14.6 * s)
-            let waveStyle = StrokeStyle(lineWidth: max(1.15, 1.7 * s), lineCap: .round, lineJoin: .round)
+            let center = NSPoint(x: ox + 10.5 * s, y: oy + 14.6 * s)
+            signalColor.setStroke()
             for radius in [5.6 * s, 3.2 * s] {
-                var arc = Path()
-                arc.addArc(
-                    center: center,
+                let arc = NSBezierPath()
+                arc.appendArc(
+                    withCenter: center,
                     radius: radius,
-                    startAngle: .degrees(-132),
-                    endAngle: .degrees(-48),
+                    startAngle: -132,
+                    endAngle: -48,
                     clockwise: false
                 )
-                context.stroke(arc, with: .color(signalColor), style: waveStyle)
+                arc.lineWidth = max(1.15, 1.7 * s)
+                arc.lineCapStyle = .round
+                arc.lineJoinStyle = .round
+                arc.stroke()
             }
 
             // Wi-Fi base dot
             let dotR = max(0.85, 1.15 * s)
-            let dotRect = CGRect(x: center.x - dotR, y: center.y - dotR, width: dotR * 2, height: dotR * 2)
-            context.fill(Path(ellipseIn: dotRect), with: .color(signalColor))
+            let dotRect = NSRect(x: center.x - dotR, y: center.y - dotR, width: dotR * 2, height: dotR * 2)
+            signalColor.setFill()
+            NSBezierPath(ovalIn: dotRect).fill()
 
             // Low-battery top-right badge dot
             if state == "low_battery" {
                 let badgeR = max(1.8, 2.4 * s)
-                let badgeRect = CGRect(
+                let badgeRect = NSRect(
                     x: ox + 20.2 * s - badgeR,
                     y: oy + 4.2 * s - badgeR,
                     width: badgeR * 2,
                     height: badgeR * 2
                 )
-                context.fill(Path(ellipseIn: badgeRect), with: .color(signalColor))
+                signalColor.setFill()
+                NSBezierPath(ovalIn: badgeRect).fill()
             }
+
+            return true
         }
-        .frame(width: 20, height: 20)
-        .help(tooltip)
+        image.isTemplate = isIdle
+        return image
     }
 }
 
