@@ -188,13 +188,9 @@ pub unsafe extern "C" fn wb_tray_update_config_json(
         let Ok(config) = serde_json::from_str::<TrayConfig>(&raw) else {
             return false;
         };
-        let prev = handle.poller.service().config();
         let next = config.normalized();
-        let enabling_experimental = !prev.allow_experimental && next.allow_experimental;
         let _ = handle.poller.update_config_async(next);
-        if !enabling_experimental {
-            handle.poller.request_snapshot_emit();
-        }
+        handle.poller.request_snapshot_emit();
         true
     })
 }
@@ -485,7 +481,6 @@ mod tests {
         let client = BatteryClient::with_transport(
             ClientConfig {
                 default_timeout: Duration::from_secs(1),
-                allow_experimental: false,
                 enable_cache: true,
             },
             Arc::new(EmptyTransport),

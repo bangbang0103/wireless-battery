@@ -95,7 +95,6 @@ impl BatteryClient {
             ReadOptions {
                 timeout: self.config.default_timeout,
                 allow_stale: false,
-                allow_experimental: self.config.allow_experimental,
             },
         )
     }
@@ -113,8 +112,7 @@ impl BatteryClient {
         let id = DeviceId(device_id.to_owned());
         let device = self.find_device(&id)?;
         deadline.check("battery read")?;
-        let allow_experimental = self.config.allow_experimental || options.allow_experimental;
-        let result = self.perform_read(&device, deadline, allow_experimental);
+        let result = self.perform_read(&device, deadline);
         match result {
             Ok(reading) => {
                 if self.config.enable_cache {
@@ -182,7 +180,6 @@ impl BatteryClient {
         &self,
         device: &Device,
         deadline: Deadline,
-        allow_experimental: bool,
     ) -> Result<BatteryReading, BatteryError> {
         if device.match_status != MatchStatus::Exact {
             return Err(BatteryError::Unsupported {
@@ -207,13 +204,7 @@ impl BatteryClient {
                 message: "selected provider disappeared from the immutable registry".to_owned(),
             })?;
         match device.support_status {
-            SupportStatus::Verified => {}
-            SupportStatus::Experimental if allow_experimental => {}
-            SupportStatus::Experimental => {
-                return Err(BatteryError::Unsupported {
-                    reason: "experimental provider requires explicit opt-in".to_owned(),
-                });
-            }
+            SupportStatus::Verified | SupportStatus::Experimental => {}
             SupportStatus::Unknown => {
                 return Err(BatteryError::Unsupported {
                     reason: "provider is not enabled for reads".to_owned(),
@@ -308,11 +299,8 @@ impl BatteryClient {
             .map_or(DeviceKind::Peripheral, |provider| {
                 provider.device_kind(endpoint)
             });
-        let readable = (match_status == MatchStatus::Exact
-            && support_status == SupportStatus::Verified)
-            || (match_status == MatchStatus::Exact
-                && support_status == SupportStatus::Experimental
-                && self.config.allow_experimental);
+        let readable =
+            match_status == MatchStatus::Exact && support_status != SupportStatus::Unknown;
         let default_name = match endpoint.transport {
             TransportKind::BluetoothLe => "Unknown Bluetooth LE device",
             TransportKind::XInput => "XInput controller",

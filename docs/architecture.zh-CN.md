@@ -29,7 +29,7 @@ HID Provider 仅依赖 `HidSession`，不直接耦合 HIDAPI 类型。Report ID 
 
 ## Provider 体系
 
-`Provider::matches()` 是静态且零 I/O 的，返回 `Exact`、`Family` 或 `NoMatch`；`Exact` 自动优先于 `Family`，同优先级存在多个命中时报告 `MatchStatus::Conflict`，绝不随意择一。`ClientConfig::default()` 默认启用实验性 Provider，而 `ReadOptions::default().allow_experimental` 默认为 `false`。
+`Provider::matches()` 是静态且零 I/O 的，返回 `Exact`、`Family` 或 `NoMatch`；`Exact` 自动优先于 `Family`，同优先级存在多个命中时报告 `MatchStatus::Conflict`，绝不随意择一。所有已注册 Provider 均可直接读取，无需额外开关。
 
 HID Provider 实现 `Provider::read(&DeviceContext, &mut dyn HidSession, Deadline)`，非 HID Provider（`bluetooth.bas`、`os.xinput`）直接覆写 `Provider::execute(&DeviceContext, &dyn Transport, Deadline)`。
 

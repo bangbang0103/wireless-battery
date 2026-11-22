@@ -7,8 +7,8 @@ use super::anim::{
 use super::widgets::{
     draw_elevated_card, draw_standard_button, draw_subtle_icon_button, draw_text,
     draw_win11_toggle_switch, rect_xywh, rounded_rect, PaintBrush, TextFormats, GLYPH_BACK,
-    GLYPH_CHEVRON_DOWN, GLYPH_CHEVRON_UP, GLYPH_CLOCK, GLYPH_COLOR_THEME, GLYPH_EXPERIMENTAL,
-    GLYPH_INFO, GLYPH_LANGUAGE, GLYPH_POWER, GLYPH_RINGER, GLYPH_RINGER_SILENT,
+    GLYPH_CHEVRON_DOWN, GLYPH_CHEVRON_UP, GLYPH_CLOCK, GLYPH_COLOR_THEME, GLYPH_INFO,
+    GLYPH_LANGUAGE, GLYPH_POWER, GLYPH_RINGER, GLYPH_RINGER_SILENT,
 };
 use crate::i18n::Lang;
 use crate::theme::{with_alpha, Palette, SystemTheme};
@@ -199,41 +199,7 @@ pub(super) unsafe fn draw_settings_view(
     );
     y += notify_card_h + SETTINGS_CARD_GAP;
 
-    // Card 5: Experimental Protocol Devices (ToggleSwitch)
-    let exp_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    let exp_target = HitTarget::ToggleAllowExperimental;
-    let exp_hovered = ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(&exp_target);
-    let exp_pressed = ui.open_dropdown.is_none() && ui.pressed.as_ref() == Some(&exp_target);
-    draw_settings_card_base(
-        rt,
-        formats,
-        brush,
-        exp_card,
-        GLYPH_EXPERIMENTAL,
-        lang.setting_experimental_title(),
-        lang.setting_experimental_desc(),
-        64.0,
-        palette,
-        exp_hovered,
-        exp_pressed,
-    );
-    draw_win11_toggle_switch(
-        rt,
-        brush,
-        exp_card.right - 14.0 - 40.0,
-        exp_card.top + (SETTINGS_CARD_H - 20.0) * 0.5,
-        ui.toggle_experimental_anim.value(now),
-        exp_hovered,
-        exp_pressed,
-        palette,
-    );
-    hit_regions.push(HitRegion {
-        rect: exp_card,
-        target: exp_target,
-    });
-    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
-
-    // Card 6: Launch at Startup (ToggleSwitch)
+    // Card 5: Launch at Startup (ToggleSwitch)
     let auto_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
     let auto_target = HitTarget::ToggleAutostart;
     let auto_hovered = ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(&auto_target);

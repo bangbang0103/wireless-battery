@@ -39,7 +39,6 @@ fn stale_preserves_original_observation_and_is_opt_in() {
     });
     let client = BatteryClient::with_transport(
         ClientConfig {
-            allow_experimental: true,
             ..ClientConfig::default()
         },
         sequence,
@@ -55,7 +54,6 @@ fn stale_preserves_original_observation_and_is_opt_in() {
             &device.id.0,
             ReadOptions {
                 allow_stale: true,
-                allow_experimental: true,
                 ..ReadOptions::default()
             },
         )
@@ -99,7 +97,6 @@ fn discovery_lists_unknown_without_any_session_io() {
     });
     let client = BatteryClient::with_transport(
         ClientConfig {
-            allow_experimental: true,
             ..ClientConfig::default()
         },
         transport.clone(),
@@ -128,7 +125,6 @@ fn record_transport_reproduces_exact_provider_session() {
     let recorder = Arc::new(RecordTransport::new(replay));
     let client = BatteryClient::with_transport(
         ClientConfig {
-            allow_experimental: true,
             ..ClientConfig::default()
         },
         recorder.clone(),
@@ -196,7 +192,6 @@ fn disabled_cache_cannot_return_stale() {
     });
     let client = BatteryClient::with_transport(
         ClientConfig {
-            allow_experimental: true,
             enable_cache: false,
             ..ClientConfig::default()
         },
@@ -211,7 +206,6 @@ fn disabled_cache_cannot_return_stale() {
             &device.id.0,
             ReadOptions {
                 allow_stale: true,
-                allow_experimental: true,
                 ..ReadOptions::default()
             },
         )
@@ -249,7 +243,6 @@ fn zero_timeout_fails_before_enumerating_and_known_device_avoids_re_enumeration(
     });
     let client = BatteryClient::with_transport(
         ClientConfig {
-            allow_experimental: true,
             ..ClientConfig::default()
         },
         transport.clone(),
@@ -264,7 +257,6 @@ fn zero_timeout_fails_before_enumerating_and_known_device_avoids_re_enumeration(
             ReadOptions {
                 timeout: std::time::Duration::ZERO,
                 allow_stale: false,
-                allow_experimental: true,
             },
         )
         .unwrap_err();
@@ -302,7 +294,6 @@ fn record_transport_delegates_read_xinput() {
     let recorder = Arc::new(RecordTransport::new(replay.clone()));
     let client = BatteryClient::with_transport(
         ClientConfig {
-            allow_experimental: true,
             ..ClientConfig::default()
         },
         recorder.clone(),
@@ -323,7 +314,6 @@ fn record_transport_records_read_bas() {
     let recorder = Arc::new(RecordTransport::new(replay.clone()));
     let client = BatteryClient::with_transport(
         ClientConfig {
-            allow_experimental: true,
             ..ClientConfig::default()
         },
         recorder.clone(),
@@ -338,22 +328,19 @@ fn record_transport_records_read_bas() {
 }
 
 #[test]
-fn read_options_default_respects_allow_experimental_false_and_exact_beats_family() {
+fn experimental_providers_read_by_default_and_exact_beats_family() {
     let replay = Arc::new(ReplayTransport::new(&fixture("feature_normal.json")));
     let client = BatteryClient::with_transport(
-        ClientConfig {
-            allow_experimental: false,
-            ..ClientConfig::default()
-        },
+        ClientConfig::default(),
         replay,
         Registry::with_synthetic().unwrap(),
     )
     .unwrap();
     let device = client.list_devices().unwrap().remove(0);
-    let err = client
+    let reading = client
         .read_battery_with_options(&device.id.0, ReadOptions::default())
-        .unwrap_err();
-    assert_eq!(err.kind(), ErrorKind::Unsupported);
+        .unwrap();
+    assert_eq!(reading.percentage, Some(72));
 
     struct FamilyProvider;
     struct ExactProvider;

@@ -29,7 +29,7 @@ Classic Bluetooth, arbitrary GATT access, event subscriptions, and arbitrary HID
 
 ## Providers
 
-`Provider::matches()` is static and I/O-free, returning `Exact`, `Family`, or `NoMatch`. `Exact` outranks `Family`, while multiple matches at the same priority become `MatchStatus::Conflict` rather than choosing arbitrarily. `ClientConfig::default()` enables built-in experimental providers by default while `ReadOptions::default().allow_experimental` defaults to `false`.
+`Provider::matches()` is static and I/O-free, returning `Exact`, `Family`, or `NoMatch`. `Exact` outranks `Family`, while multiple matches at the same priority become `MatchStatus::Conflict` rather than choosing arbitrarily. All registered providers can be read without an additional opt-in.
 
 HID providers implement `Provider::read(&DeviceContext, &mut dyn HidSession, Deadline)`, while non-HID providers (`bluetooth.bas`, `os.xinput`) override `Provider::execute(&DeviceContext, &dyn Transport, Deadline)` directly.
 

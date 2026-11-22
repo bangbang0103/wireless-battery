@@ -71,7 +71,6 @@ pub enum PopoverAction {
     SetPollInterval(u64),
     ToggleLowBatteryNotify,
     ToggleLowBatterySilent,
-    ToggleAllowExperimental,
     ToggleAutostart,
     CheckUpdates,
     OpenUpdateUrl(String),
@@ -1055,7 +1054,7 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) -> ClickOutcome {
             out.repaint = true;
         }
         HitTarget::RefreshAll => out.action = Some(PopoverAction::RefreshAll),
-        HitTarget::OpenSettings | HitTarget::OpenSettingsFromEmpty => {
+        HitTarget::OpenSettings => {
             inner.ui.view = PopoverView::Settings;
             inner.ui.close_dropdown_menu();
             inner.ui.hovered = None;
@@ -1120,9 +1119,6 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) -> ClickOutcome {
         }
         HitTarget::ToggleLowBatterySilent => {
             out.action = Some(PopoverAction::ToggleLowBatterySilent);
-        }
-        HitTarget::ToggleAllowExperimental => {
-            out.action = Some(PopoverAction::ToggleAllowExperimental);
         }
         HitTarget::ToggleAutostart => out.action = Some(PopoverAction::ToggleAutostart),
         HitTarget::CheckUpdates => match &inner.ui.update_status {

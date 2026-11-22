@@ -153,24 +153,8 @@ struct SettingsView: View {
                     }
                 }
 
-                // Group 3: Experimental Devices & Launch at Login
+                // Group 3: Launch at Login
                 MacSettingsGroup {
-                    MacToggleRow(
-                        icon: "flask",
-                        title: lang.settingExperimentalTitle,
-                        subtitle: lang.settingExperimentalDesc,
-                        isOn: Binding(
-                            get: { cfg.allowExperimental },
-                            set: { v in
-                                var u = cfg
-                                u.allowExperimental = v
-                                store.updateConfig(u)
-                            }
-                        )
-                    )
-
-                    Divider().padding(.leading, 38)
-
                     MacToggleRow(
                         icon: "power",
                         title: lang.settingAutostartTitle,

@@ -176,7 +176,6 @@ pub(super) unsafe fn draw_main_view(
             },
             palette,
             lang,
-            snapshot,
             ui,
         );
     } else {
@@ -417,7 +416,6 @@ unsafe fn draw_empty_state(
     bounds: D2D_RECT_F,
     palette: &Palette,
     lang: Lang,
-    snapshot: &TraySnapshot,
     ui: &UiState,
 ) {
     let width = bounds.right - bounds.left;
@@ -445,7 +443,7 @@ unsafe fn draw_empty_state(
         brush,
     );
 
-    let hint = lang.empty_hint(snapshot.hidden_experimental_count);
+    let hint = lang.empty_hint();
     draw_text(
         rt,
         &hint,
@@ -455,14 +453,7 @@ unsafe fn draw_empty_state(
         brush,
     );
 
-    let has_hidden = snapshot.hidden_experimental_count > 0;
-    let btn_w = if has_hidden { 132.0 } else { 112.0 };
-    let btn_rect = rect_xywh((width - btn_w) * 0.5, center_y + 54.0, btn_w, 30.0);
-    let target = if has_hidden {
-        HitTarget::OpenSettingsFromEmpty
-    } else {
-        HitTarget::RefreshAll
-    };
+    let btn_rect = rect_xywh((width - 112.0) * 0.5, center_y + 54.0, 112.0, 30.0);
     draw_standard_button(
         rt,
         formats,
@@ -470,8 +461,8 @@ unsafe fn draw_empty_state(
         hit_regions,
         btn_rect,
         None,
-        lang.empty_action(has_hidden),
-        target,
+        lang.empty_action(),
+        HitTarget::RefreshAll,
         palette,
         ui,
         1.0,

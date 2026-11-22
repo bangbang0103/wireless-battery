@@ -608,19 +608,6 @@ mod win_app {
                 let snap = host.poller.service().update_config_async(cfg);
                 host.popover.set_snapshot(snap);
             }
-            PopoverAction::ToggleAllowExperimental => {
-                let mut cfg = host.poller.service().config();
-                cfg.allow_experimental = !cfg.allow_experimental;
-                let snap = host.poller.update_config_async(cfg);
-                if let Ok(mut tray) = host.tray.try_borrow_mut() {
-                    tray.update(
-                        snap.icon_state,
-                        host.theme.get().taskbar_dark,
-                        &snap.tooltip,
-                    );
-                }
-                host.popover.set_snapshot(snap);
-            }
             PopoverAction::ToggleAutostart => {
                 let mut cfg = host.poller.service().config();
                 cfg.autostart = !cfg.autostart;

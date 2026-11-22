@@ -14,15 +14,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install Linux HID/BlueZ build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libudev-dev libusb-1.0-0-dev libdbus-1-dev
       - name: Verify Cargo and Info.plist versions match tag
         shell: bash
         run: |
@@ -53,7 +48,6 @@ jobs:
             target
           key: ${{ runner.os }}-release-cargo-1.76-${{ hashFiles('Cargo.lock') }}
       - name: Cache Tray Cargo
-        if: runner.os != 'Linux'
         uses: actions/cache@v4
         with:
           path: |
@@ -63,12 +57,6 @@ jobs:
           key: ${{ runner.os }}-release-tray-cargo-1.76-${{ hashFiles('tray/Cargo.lock') }}
       - name: Build CLI release
         run: cargo build --locked --release --bin wireless-battery
-      - name: Package Linux CLI archive
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          mkdir -p dist
-          tar -czf dist/wireless-battery-cli-linux-x86_64.tar.gz -C target/release wireless-battery -C "${GITHUB_WORKSPACE}" LICENSE NOTICE
       - name: Build Windows tray release
         if: runner.os == 'Windows'
         working-directory: tray

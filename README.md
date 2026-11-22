@@ -16,7 +16,7 @@ The project prioritizes protocol safety and reproducibility over device count:
 
 > **Supported Product Matrix**: See [**Support Matrix (`docs/support-matrix.md`)**](docs/support-matrix.md) for the full table organized by **Vendor**, **Type**, **Device / Model**, and **Provider ID**.
 
-**153 built-in providers** (**151** vendor HID providers + `os.xinput` + `bluetooth.bas`; 2 hardware-verified and 151 experimental) are included, covering Logitech / Astro, Razer, SteelSeries, Corsair, HyperX, ASUS ROG, Sony, Nintendo, Valve, GameSir, Flydigi, 8BitDo, Beitong, Keychron, Cherry, Akko, NuPhy, AULA, MCHOSE, ATK / VXE / VGN, DAREU, EWEADN, Rapoo, WOB, Glorious, Lamzu, WLmouse, Pulsar, VAXEE, Ninjutso, Endgame Gear, Finalmouse, ZOWIE, Audeze, JBL, Jabra, Turtle Beach, AKG, Fractal, Alienware, Moondrop, Maono, XInput, and others listed in the [support matrix](docs/support-matrix.md). Experimental providers are enabled by default in `ClientConfig::default()`; see [provenance and verification status](provenance/builtin-providers.md) for details, and open an Issue if you encounter problems on specific hardware or firmware.
+**153 built-in providers** (**151** vendor HID providers + `os.xinput` + `bluetooth.bas`) are included, covering Logitech / Astro, Razer, SteelSeries, Corsair, HyperX, ASUS ROG, Sony, Nintendo, Valve, GameSir, Flydigi, 8BitDo, Beitong, Keychron, Cherry, Akko, NuPhy, AULA, MCHOSE, ATK / VXE / VGN, DAREU, EWEADN, Rapoo, WOB, Glorious, Lamzu, WLmouse, Pulsar, VAXEE, Ninjutso, Endgame Gear, Finalmouse, ZOWIE, Audeze, JBL, Jabra, Turtle Beach, AKG, Fractal, Alienware, Moondrop, Maono, XInput, and others listed in the [support matrix](docs/support-matrix.md). All providers are enabled by default; open an Issue if you encounter problems on specific hardware or firmware.
 
 Built-in vendor protocol definitions reference [Wireless-Device-Battery-Monitor / BatteryHub](NOTICE) (GPL-3.0-or-later) and [Voltide](NOTICE) (MIT); see [NOTICE](NOTICE) for full attribution.
 
@@ -53,7 +53,7 @@ if let Some(device) = devices.iter().find(|device| device.readable) {
 # Ok::<(), wireless_battery::BatteryError>(())
 ```
 
-`ClientConfig::default()` enables experimental providers by default (`allow_experimental: true`), while `ReadOptions::default().allow_experimental` is `false`; setting `ClientConfig::allow_experimental = false` restricts reads to `Verified` providers unless explicitly overridden via `ReadOptions::allow_experimental = true`. A stale value is returned only when caching is enabled and the caller explicitly sets `ReadOptions::allow_stale`; its original `observed_at` is preserved and `freshness` becomes `stale`.
+All registered providers can be read by default. A stale value is returned only when caching is enabled and the caller explicitly sets `ReadOptions::allow_stale`; its original `observed_at` is preserved and `freshness` becomes `stale`.
 
 `ReadOptions::timeout` is the total call budget. A provider's `io_timeout` is a separate per-I/O preference, capped by the remaining total budget. Some platform feature operations cannot be forcibly cancelled.
 
@@ -104,7 +104,7 @@ If your device shows up as `unmatched` or reports `null` / `unknown` battery rea
 
 3. **Open an Issue or PR**
    - **Issue**: Share your device model, connection mode, `wireless-battery list --json` output, and paired request/response `probe` packets for discharging/charging states (verified with the vendor app closed).
-   - **PR**: Add a `FixedSpec` or `Provider` under `src/providers/vendors/{protocols,brands}/` with `DeviceKind` set accurately, add replay tests, update `docs/support-matrix*.md` and `provenance/builtin-providers.md`, and verify with `cargo test --locked --all-features`.
+   - **PR**: Add a `FixedSpec` or `Provider` under `src/providers/vendors/{protocols,brands}/` with `DeviceKind` set accurately, add replay tests, update `docs/support-matrix*.md`, and verify with `cargo test --locked --all-features`.
 
 ### Copy-Paste Prompt for an AI Agent
 
@@ -131,14 +131,13 @@ Follow these steps in order:
 
 3. **Next Steps**:
    - If only the prebuilt binary is available (no source repo): format a clean summary with device model, connection mode, `list --json` endpoint metadata, and paired discharging/charging `probe` request/response hex (verified with the vendor app closed) plus ground-truth percentage/state so I can open a GitHub Issue.
-   - If we are inside the cloned source repository: read `docs/contributing-device.md` and `docs/capture-and-replay.md` first, implement a `FixedSpec` or `Provider` under `src/providers/vendors/{protocols,brands}/`, add replay fixtures under `tests/fixtures/vendors/` and `tests/extended_vendor/`, update `docs/support-matrix.md`, `docs/support-matrix.zh-CN.md`, and `provenance/builtin-providers.md`, and verify everything passes with `cargo test --locked --all-features`.
+   - If we are inside the cloned source repository: read `docs/contributing-device.md` and `docs/capture-and-replay.md` first, implement a `FixedSpec` or `Provider` under `src/providers/vendors/{protocols,brands}/`, add replay fixtures under `tests/fixtures/vendors/` and `tests/extended_vendor/`, update `docs/support-matrix.md` and `docs/support-matrix.zh-CN.md`, and verify everything passes with `cargo test --locked --all-features`.
 ```
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Support matrix](docs/support-matrix.md)
-- [Provider provenance](provenance/builtin-providers.md)
 - [Platform support](docs/platform-support.md)
 - [Capture and replay](docs/capture-and-replay.md)
 - [Contributing a device](docs/contributing-device.md)

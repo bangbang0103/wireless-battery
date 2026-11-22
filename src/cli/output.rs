@@ -39,7 +39,6 @@ pub(super) fn read_device_list(
                 ReadOptions {
                     timeout: Duration::from_millis(timeout_ms),
                     allow_stale: false,
-                    allow_experimental: true,
                 },
             ) {
                 Ok(reading) => ListEntry {
@@ -306,7 +305,6 @@ mod tests {
         });
         let client = BatteryClient::with_transport(
             ClientConfig {
-                allow_experimental: true,
                 enable_cache: false,
                 ..ClientConfig::default()
             },

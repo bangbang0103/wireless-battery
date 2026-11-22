@@ -150,7 +150,7 @@ pub enum MatchStatus {
 pub enum SupportStatus {
     /// Unknown because no provider is selected.
     Unknown,
-    /// Opt-in provider with inferred/unverified protocol evidence.
+    /// Provider with inferred/unverified protocol evidence.
     Experimental,
     /// Provider with real-hardware evidence.
     Verified,
@@ -351,8 +351,6 @@ impl Default for ProviderReading {
 pub struct ClientConfig {
     /// Default total read budget.
     pub default_timeout: Duration,
-    /// Whether experimental providers may read without a per-call override.
-    pub allow_experimental: bool,
     /// Whether the last successful value is cached.
     pub enable_cache: bool,
 }
@@ -361,7 +359,6 @@ impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             default_timeout: Duration::from_millis(1_000),
-            allow_experimental: true,
             enable_cache: true,
         }
     }
@@ -374,8 +371,6 @@ pub struct ReadOptions {
     pub timeout: Duration,
     /// Whether a failed refresh may return the last successful reading.
     pub allow_stale: bool,
-    /// Whether an experimental provider may perform I/O.
-    pub allow_experimental: bool,
 }
 
 impl Default for ReadOptions {
@@ -383,7 +378,6 @@ impl Default for ReadOptions {
         Self {
             timeout: Duration::from_millis(1_000),
             allow_stale: false,
-            allow_experimental: false,
         }
     }
 }

@@ -7,7 +7,7 @@
 1. 对于未知 HID 端点，可使用 `wireless-battery probe <device-id> --listen` 或 `--send` / `--get-feature`（必要时配合 Wireshark/USBPcap）收集请求与响应报文。
 2. 在 `src/providers/vendors/protocols/`（CompX、DriverCore、EVision、Bolutek 等共享芯片/协议族）或 `src/providers/vendors/brands/`（按品牌划分）下新增 `FixedSpec`（适合简单固定请求-响应）或聚焦的 `Provider` 实现，并在对应子模块的 `mod.rs` 中注册（经 `src/providers/vendors/mod.rs` 汇总）。
 3. 在 `ProviderMetadata::device_kind` 设置对应的 `DeviceKind`（`Mouse`、`Keyboard`、`Headset`、`Gamepad` 或 `Peripheral`）；若单个 Provider 同时服务接收器与多品类设备（如 Logitech HID++、Razer），请同步覆写 `Provider::device_kind(&self, endpoint: &Endpoint)`——托盘端直接读取核心库输出的 `device.device_kind`，无需再单独维护映射表。
-4. 在 `tests/fixtures/vendors/` 或 `tests/extended_vendor/` 下补充回放测试（正常、截断/错包、非法字段以及超时/回退用例），并更新 `docs/support-matrix.zh-CN.md`、`docs/support-matrix.md` 与 `provenance/builtin-providers.md`。
+4. 在 `tests/fixtures/vendors/` 或 `tests/extended_vendor/` 下补充回放测试（正常、截断/错包、非法字段以及超时/回退用例），并更新 `docs/support-matrix.zh-CN.md` 与 `docs/support-matrix.md`。
 5. 运行 `cargo test --locked --all-features` 与 `cargo clippy --locked --all-targets --all-features -- -D warnings` 验证（`extended_vendor_replay_tests` 会强制检查 `Registry::builtin()` 中全部 Provider 的回放覆盖率）。
 
 ## 匹配安全性
@@ -29,9 +29,9 @@
 
 ## 验证标签规范
 
-Provider 状态（`unknown`、`experimental`、`verified`）与 `provenance/builtin-providers.md` 中记录的实机证据相互独立。合成 Fixture（`source: "synthetic"`）永远不能标为 `verified`，也不能代替真实硬件验证。
+Provider 状态（`unknown`、`experimental`、`verified`）用于记录验证证据，不影响 Provider 是否启用。合成 Fixture（`source: "synthetic"`）永远不能标为 `verified`，也不能代替真实硬件验证。
 
-参考其他实现时必须在 `NOTICE` 与 `provenance/builtin-providers.md` 中保留对应许可证与署名说明。协议参考来源、借鉴代码与实机抓包验证属于不同类别的证据，必须分开记录。
+参考其他实现时必须在 `NOTICE` 中保留对应许可证与署名说明。协议参考来源、借鉴代码与实机抓包验证属于不同类别的证据，必须分开记录。
 
 ---
 

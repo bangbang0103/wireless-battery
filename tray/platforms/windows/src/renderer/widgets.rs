@@ -35,7 +35,6 @@ pub(super) const GLYPH_LANGUAGE: &str = "\u{E774}";
 pub(super) const GLYPH_CLOCK: &str = "\u{E823}";
 pub(super) const GLYPH_RINGER: &str = "\u{EA8F}";
 pub(super) const GLYPH_RINGER_SILENT: &str = "\u{E7ED}";
-pub(super) const GLYPH_EXPERIMENTAL: &str = "\u{E9D9}";
 pub(super) const GLYPH_POWER: &str = "\u{E7E8}";
 pub(super) const GLYPH_MOUSE: &str = "\u{E962}";
 pub(super) const GLYPH_KEYBOARD: &str = "\u{E765}";

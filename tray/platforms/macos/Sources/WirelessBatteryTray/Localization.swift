@@ -34,23 +34,13 @@ enum AppLanguage: Equatable {
 
     var emptyTitle: String { isZh ? "未发现可读取的无线外设" : "No readable wireless peripherals" }
 
-    func emptyHint(hiddenExperimentalCount: Int) -> String {
-        if hiddenExperimentalCount > 0 {
-            return isZh
-                ? "检测到 \(hiddenExperimentalCount) 台实验性协议设备，当前已隐藏，可在设置中开启。"
-                : "\(hiddenExperimentalCount) experimental device(s) detected while disabled. Enable in Settings."
-        }
-        return isZh
+    var emptyHint: String {
+        isZh
             ? "被动枚举未匹配到已知接收器或外设，请确认接收器已接入并处于唤醒状态。"
             : "No known receiver or peripheral matched. Make sure the receiver is connected and awake."
     }
 
-    func emptyAction(hasHiddenExperimental: Bool) -> String {
-        if hasHiddenExperimental {
-            return isZh ? "前往设置" : "Open Settings"
-        }
-        return isZh ? "重新扫描" : "Rescan"
-    }
+    var emptyAction: String { isZh ? "重新扫描" : "Rescan" }
 
     // MARK: - Expanded Device Drawer (no "Evidence" field)
 
@@ -81,11 +71,6 @@ enum AppLanguage: Equatable {
     var settingAutostartDesc: String { isZh ? "仅驻留菜单栏，不弹出窗口" : "Start minimized in menu bar" }
     var settingAutostartHelpBundled: String { isZh ? "登录 macOS 时仅驻留菜单栏" : "Stay in the menu bar when logging in" }
     var settingAutostartHelpUnbundled: String { isZh ? "打包为 .app 后可用" : "Available when packaged as a .app bundle" }
-
-    var settingExperimentalTitle: String { isZh ? "实验性协议设备" : "Experimental devices" }
-    var settingExperimentalDesc: String {
-        isZh ? "包含社区推导但未实机验证的设备" : "Include inferred protocols pending verification"
-    }
 
     var settingVersionTitle: String { isZh ? "版本与更新" : "Version & Updates" }
     var settingVersionChecking: String { isZh ? "正在检查更新…" : "Checking for updates…" }

@@ -58,8 +58,6 @@ pub enum LanguageMode {
 pub struct TrayConfig {
     /// Background polling interval in seconds. `0` disables automatic polling (manual only).
     pub poll_interval_secs: u64,
-    /// Opt-in flag matching `ClientConfig::allow_experimental`.
-    pub allow_experimental: bool,
     /// Return the last successful reading marked as `Stale` when a refresh fails.
     pub allow_stale: bool,
     /// Enable low-battery warnings (tray badge & tiered OS notifications at 15%, 10%, 5%, 1%).
@@ -83,7 +81,6 @@ impl Default for TrayConfig {
     fn default() -> Self {
         Self {
             poll_interval_secs: DEFAULT_POLL_INTERVAL_SECS,
-            allow_experimental: true,
             allow_stale: true,
             low_battery_notify: true,
             low_battery_silent: false,
@@ -231,7 +228,6 @@ mod tests {
 
         let custom = TrayConfig {
             poll_interval_secs: 3600,
-            allow_experimental: true,
             allow_stale: false,
             low_battery_notify: true,
             low_battery_silent: true,
@@ -251,7 +247,6 @@ mod tests {
     fn legacy_config_without_new_fields_uses_safe_defaults() {
         let legacy_json = r#"{
             "poll_interval_secs": 300,
-            "allow_experimental": true,
             "allow_stale": true,
             "low_battery_notify": true,
             "low_battery_threshold": 15,
