@@ -635,7 +635,12 @@ pub(super) unsafe fn draw_hover_tooltip(
     rt.FillRoundedRectangle(&rr, brush.color(&palette.toast_bg));
     rt.DrawRoundedRectangle(&rr, brush.color(&palette.toast_border), 1.0, None);
 
-    let icon_rect = rect_xywh(rect.left + 11.0, rect.top + (pill_h - 11.0) * 0.5, 11.0, 11.0);
+    let icon_rect = rect_xywh(
+        rect.left + 11.0,
+        rect.top + (pill_h - 11.0) * 0.5,
+        11.0,
+        11.0,
+    );
     draw_community_icon(
         d2d,
         rt,

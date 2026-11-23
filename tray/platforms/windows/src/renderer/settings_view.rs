@@ -463,9 +463,7 @@ pub(super) unsafe fn draw_settings_view(
                 CommunityLinkKind::BugReport => {
                     (feedback_card.top, lang.link_feedback_hover().to_owned())
                 }
-                CommunityLinkKind::Qq => {
-                    (community_card.top, lang.link_qq_hover(links.qq_group))
-                }
+                CommunityLinkKind::Qq => (community_card.top, lang.link_qq_hover(links.qq_group)),
                 CommunityLinkKind::Discord => {
                     (community_card.top, lang.link_discord_hover().to_owned())
                 }

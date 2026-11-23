@@ -648,7 +648,8 @@ mod win_app {
                             updater::open_url(links.qq_url);
                         } else if !links.qq_group.is_empty() {
                             if copy_text_to_clipboard(host.popover.hwnd(), links.qq_group) {
-                                host.popover.show_feedback(&lang.toast_qq_copied(links.qq_group));
+                                host.popover
+                                    .show_feedback(&lang.toast_qq_copied(links.qq_group));
                             } else {
                                 host.popover.show_feedback(lang.toast_copy_failed());
                             }
