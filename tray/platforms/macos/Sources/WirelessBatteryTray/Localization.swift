@@ -62,6 +62,48 @@ enum AppLanguage: Equatable {
     var btnCopyError: String { isZh ? "复制报错" : "Copy Error" }
     var toastErrorCopied: String { isZh ? "已复制报错信息" : "Error details copied" }
 
+    // MARK: - Community & Support Links
+
+    var settingSourceTitle: String { isZh ? "源码" : "Source Code" }
+    var settingSourceDesc: String { "bangbang0103/wireless-battery" }
+
+    var settingFeedbackTitle: String { isZh ? "反馈" : "Feedback" }
+    var settingFeedbackDesc: String { "GitHub Issues" }
+
+    var settingCommunityTitle: String { isZh ? "社区交流" : "Community" }
+    var settingCommunityDesc: String { "QQ · Discord" }
+
+    var linkFeedbackHover: String {
+        isZh ? "提交反馈" : "Submit Feedback"
+    }
+
+    var linkRepoHover: String {
+        isZh ? "查看源码" : "View Source"
+    }
+
+    func linkQqHover(group: String) -> String {
+        if !group.isEmpty {
+            return isZh ? "QQ 群：\(group)" : "QQ Group: \(group)"
+        }
+        return isZh ? "QQ 交流群" : "QQ Group"
+    }
+
+    var linkDiscordHover: String {
+        isZh ? "Discord 社区" : "Discord"
+    }
+
+    func toastQqCopied(_ group: String) -> String {
+        isZh ? "已复制 QQ 群号 \(group)" : "Copied QQ group \(group)"
+    }
+
+    var toastQqComingSoon: String {
+        isZh ? "QQ 交流群链接待补充" : "QQ group link coming soon"
+    }
+
+    var toastDiscordComingSoon: String {
+        isZh ? "Discord 邀请链接待补充" : "Discord invite link coming soon"
+    }
+
     // MARK: - Settings
 
     var settingThemeTitle: String { isZh ? "外观主题" : "Appearance" }

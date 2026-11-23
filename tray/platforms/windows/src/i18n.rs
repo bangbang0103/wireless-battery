@@ -631,4 +631,94 @@ impl Lang {
 
         parts.join(" · ")
     }
+
+    // --- Community & support links ---
+
+    pub const fn setting_source_title(self) -> &'static str {
+        match self {
+            Self::ZhCn => "源码",
+            Self::En => "Source Code",
+        }
+    }
+
+    pub const fn setting_source_desc(self) -> &'static str {
+        "bangbang0103/wireless-battery"
+    }
+
+    pub const fn setting_feedback_title(self) -> &'static str {
+        match self {
+            Self::ZhCn => "反馈",
+            Self::En => "Feedback",
+        }
+    }
+
+    pub const fn setting_feedback_desc(self) -> &'static str {
+        "GitHub Issues"
+    }
+
+    pub const fn setting_community_title(self) -> &'static str {
+        match self {
+            Self::ZhCn => "社区交流",
+            Self::En => "Community",
+        }
+    }
+
+    pub const fn setting_community_desc(self) -> &'static str {
+        "QQ · Discord"
+    }
+
+    pub const fn link_feedback_hover(self) -> &'static str {
+        match self {
+            Self::ZhCn => "提交反馈",
+            Self::En => "Submit Feedback",
+        }
+    }
+
+    pub const fn link_repo_hover(self) -> &'static str {
+        match self {
+            Self::ZhCn => "查看源码",
+            Self::En => "View Source",
+        }
+    }
+
+    pub fn link_qq_hover(self, group: &str) -> String {
+        if !group.is_empty() {
+            return match self {
+                Self::ZhCn => format!("QQ 群：{group}"),
+                Self::En => format!("QQ Group: {group}"),
+            };
+        }
+        match self {
+            Self::ZhCn => "QQ 交流群".to_owned(),
+            Self::En => "QQ Group".to_owned(),
+        }
+    }
+
+    pub const fn link_discord_hover(self) -> &'static str {
+        match self {
+            Self::ZhCn => "Discord 社区",
+            Self::En => "Discord",
+        }
+    }
+
+    pub fn toast_qq_copied(self, group: &str) -> String {
+        match self {
+            Self::ZhCn => format!("已复制 QQ 群号 {group}"),
+            Self::En => format!("Copied QQ group {group}"),
+        }
+    }
+
+    pub const fn toast_qq_coming_soon(self) -> &'static str {
+        match self {
+            Self::ZhCn => "QQ 交流群链接待补充",
+            Self::En => "QQ group link coming soon",
+        }
+    }
+
+    pub const fn toast_discord_coming_soon(self) -> &'static str {
+        match self {
+            Self::ZhCn => "Discord 邀请链接待补充",
+            Self::En => "Discord invite link coming soon",
+        }
+    }
 }

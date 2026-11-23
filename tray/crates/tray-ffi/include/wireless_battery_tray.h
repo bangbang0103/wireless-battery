@@ -81,6 +81,13 @@ char *wb_tray_latest_release_api_url(void);
 char *wb_tray_releases_url(void);
 
 /**
+ * Return project and community links as a newly allocated UTF-8 JSON string:
+ * `{ "repoUrl": ..., "issuesUrl": ..., "qqGroup": ..., "qqUrl": ..., "discordUrl": ... }`.
+ * Caller must release the returned pointer with `wb_tray_string_free`.
+ */
+char *wb_tray_community_links_json(void);
+
+/**
  * Evaluate a GitHub Releases latest JSON response against `current_version_utf8`.
  * Returns a JSON string `{ "status": "available"|"up_to_date"|"failed", ... }`.
  * Caller must release the returned pointer with `wb_tray_string_free`.

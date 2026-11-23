@@ -164,7 +164,7 @@ struct PopoverRootView: View {
                     }
                     .padding(.vertical, 6)
                 }
-                .frame(maxHeight: 360)
+                .frame(maxHeight: 540)
             }
 
             if copiedBanner {

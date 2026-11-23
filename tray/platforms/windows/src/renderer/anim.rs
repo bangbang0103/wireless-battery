@@ -6,7 +6,7 @@ use wireless_battery_tray_core::{LanguageMode, ThemeMode, TraySnapshot};
 
 /// Logical popover width in DIPs (matches Windows 11 Quick Settings / Bluetooth flyout width).
 pub const POPOVER_WIDTH_DIP: f32 = 360.0;
-pub const POPOVER_MAX_HEIGHT_DIP: f32 = 560.0;
+pub const POPOVER_MAX_HEIGHT_DIP: f32 = 680.0;
 pub const HEADER_HEIGHT: f32 = 52.0;
 
 pub(super) const FOOTER_HEIGHT: f32 = 48.0;
@@ -36,6 +36,15 @@ pub enum OpenDropdown {
     PollInterval,
 }
 
+/// Footer community / support link icon targets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommunityLinkKind {
+    BugReport,
+    SourceRepo,
+    Qq,
+    Discord,
+}
+
 /// Interactive targets registered during every paint pass for pixel-accurate hit-testing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HitTarget {
@@ -47,6 +56,7 @@ pub enum HitTarget {
     CloseDropdown,
     SetThemeMode(ThemeMode),
     SetLanguageMode(LanguageMode),
+    OpenCommunityLink(CommunityLinkKind),
     Quit,
     ToggleDevice(String),
     RefreshDevice(String),

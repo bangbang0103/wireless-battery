@@ -170,6 +170,36 @@ enum UpdateCheckStatus: Equatable {
     case failed
 }
 
+struct CommunityLinksModel: Codable, Equatable {
+    let repoUrl: String
+    let issuesUrl: String
+    let qqGroup: String
+    let qqUrl: String
+    let discordUrl: String
+
+    static let fallback = CommunityLinksModel(
+        repoUrl: "https://github.com/bangbang0103/wireless-battery",
+        issuesUrl: "https://github.com/bangbang0103/wireless-battery/issues",
+        qqGroup: "",
+        qqUrl: "",
+        discordUrl: ""
+    )
+
+    static func loadFromCore() -> CommunityLinksModel {
+        guard let ptr = wb_tray_community_links_json() else {
+            return .fallback
+        }
+        defer { wb_tray_string_free(ptr) }
+        let json = String(cString: ptr)
+        guard let data = json.data(using: .utf8),
+              let parsed = try? JSONDecoder().decode(CommunityLinksModel.self, from: data)
+        else {
+            return .fallback
+        }
+        return parsed
+    }
+}
+
 struct LowBatteryAlertModel: Codable {
     let deviceId: String
     let deviceName: String
@@ -234,6 +264,7 @@ private final class NotificationDelegate: NSObject, UNUserNotificationCenterDele
 final class TrayStore: ObservableObject {
     @Published var snapshot: TraySnapshotModel = .empty
     @Published var updateStatus: UpdateCheckStatus = .idle
+    let communityLinks: CommunityLinksModel = CommunityLinksModel.loadFromCore()
     var handle: OpaquePointer?
     private let notificationDelegate = NotificationDelegate()
     private var callbackBox: CallbackBox?

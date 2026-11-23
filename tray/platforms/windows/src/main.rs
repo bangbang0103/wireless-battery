@@ -626,6 +626,45 @@ mod win_app {
             PopoverAction::OpenUpdateUrl(url) => {
                 updater::open_url(&url);
             }
+            PopoverAction::OpenCommunityLink(kind) => {
+                use crate::renderer::CommunityLinkKind;
+                use wireless_battery_tray_core::{community_links, is_valid_http_url};
+
+                let lang = Lang::resolve(host.poller.service().config().language);
+                let links = community_links();
+                match kind {
+                    CommunityLinkKind::BugReport => {
+                        if is_valid_http_url(links.issues_url) {
+                            updater::open_url(links.issues_url);
+                        }
+                    }
+                    CommunityLinkKind::SourceRepo => {
+                        if is_valid_http_url(links.repo_url) {
+                            updater::open_url(links.repo_url);
+                        }
+                    }
+                    CommunityLinkKind::Qq => {
+                        if !links.qq_url.is_empty() && is_valid_http_url(links.qq_url) {
+                            updater::open_url(links.qq_url);
+                        } else if !links.qq_group.is_empty() {
+                            if copy_text_to_clipboard(host.popover.hwnd(), links.qq_group) {
+                                host.popover.show_feedback(&lang.toast_qq_copied(links.qq_group));
+                            } else {
+                                host.popover.show_feedback(lang.toast_copy_failed());
+                            }
+                        } else {
+                            host.popover.show_feedback(lang.toast_qq_coming_soon());
+                        }
+                    }
+                    CommunityLinkKind::Discord => {
+                        if !links.discord_url.is_empty() && is_valid_http_url(links.discord_url) {
+                            updater::open_url(links.discord_url);
+                        } else {
+                            host.popover.show_feedback(lang.toast_discord_coming_soon());
+                        }
+                    }
+                }
+            }
             PopoverAction::Quit => unsafe {
                 PostQuitMessage(0);
             },
