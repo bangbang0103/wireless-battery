@@ -33,17 +33,29 @@ See [platform support](docs/platform-support.md) for system dependencies and per
 
 An independent Cargo workspace under [`tray/`](tray/README.md) provides a native desktop system tray application built on a shared Rust core (`tray-core`) with thin OS-native shells (Win32 + DWM Acrylic + Direct2D on Windows; AppKit `NSStatusItem` with a SwiftUI popover via `tray-ffi` on macOS). Keeping it in a separate workspace prevents GUI dependencies from polluting the core library or CLI.
 
-<p align="center"><strong>Windows</strong></p>
-<p align="center">
-  <img src="docs/assests/windows_devices.png" alt="Windows Tray device list" width="360">
-  <img src="docs/assests/windows_settings.png" alt="Windows Tray settings" width="360">
-</p>
+<p align="center"><strong>Devices</strong></p>
+<table align="center" border="0" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center" valign="top" width="380"><img src="docs/assests/windows_devices.png" alt="Windows Tray device list" width="360"></td>
+    <td align="center" valign="top" width="380"><img src="docs/assests/macos_devices.png" alt="macOS Tray device list" width="360"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Windows</strong></td>
+    <td align="center"><strong>macOS</strong></td>
+  </tr>
+</table>
 
-<p align="center"><strong>macOS</strong></p>
-<p align="center">
-  <img src="docs/assests/macos_devices.png" alt="macOS Tray device list" width="360">
-  <img src="docs/assests/macos_settings.png" alt="macOS Tray settings" width="360">
-</p>
+<p align="center"><strong>Settings</strong></p>
+<table align="center" border="0" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center" valign="top" width="380"><img src="docs/assests/windows_settings.png" alt="Windows Tray settings" width="360"></td>
+    <td align="center" valign="top" width="380"><img src="docs/assests/macos_settings.png" alt="macOS Tray settings" width="360"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Windows</strong></td>
+    <td align="center"><strong>macOS</strong></td>
+  </tr>
+</table>
 
 ```bash
 cd tray
@@ -118,6 +130,9 @@ You can paste the following prompt directly into an AI coding agent (such as Ant
 
 ```text
 Help me inspect my connected wireless peripherals and reverse-engineer unsupported devices using the wireless-battery CLI.
+
+Project repository: https://github.com/bangbang0103/wireless-battery
+Use this repository for source code, documentation, and Releases; do not search the web to identify the project.
 
 Follow these steps in order:
 0. **Prepare the CLI Binary**:

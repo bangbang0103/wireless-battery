@@ -33,17 +33,29 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 
 [`tray/`](tray/README.zh-CN.md) 是一个独立于根库与 CLI 的 Cargo 工作区，采用 **共享 Rust 核心（`tray-core`） + 各平台极薄原生 UI 壳** 架构（Windows 为 Win32 + DWM Acrylic + Direct2D；macOS 为 AppKit `NSStatusItem` + SwiftUI 弹层 + `tray-ffi` 静态库），避免 GUI 依赖污染核心库与 CLI。
 
-<p align="center"><strong>Windows</strong></p>
-<p align="center">
-  <img src="docs/assests/windows_devices.png" alt="Windows Tray 设备列表" width="360">
-  <img src="docs/assests/windows_settings.png" alt="Windows Tray 设置页" width="360">
-</p>
+<p align="center"><strong>Devices</strong></p>
+<table align="center" border="0" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center" valign="top" width="380"><img src="docs/assests/windows_devices.png" alt="Windows Tray 设备列表" width="360"></td>
+    <td align="center" valign="top" width="380"><img src="docs/assests/macos_devices.png" alt="macOS Tray 设备列表" width="360"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Windows</strong></td>
+    <td align="center"><strong>macOS</strong></td>
+  </tr>
+</table>
 
-<p align="center"><strong>macOS</strong></p>
-<p align="center">
-  <img src="docs/assests/macos_devices.png" alt="macOS Tray 设备列表" width="360">
-  <img src="docs/assests/macos_settings.png" alt="macOS Tray 设置页" width="360">
-</p>
+<p align="center"><strong>Settings</strong></p>
+<table align="center" border="0" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center" valign="top" width="380"><img src="docs/assests/windows_settings.png" alt="Windows Tray 设置页" width="360"></td>
+    <td align="center" valign="top" width="380"><img src="docs/assests/macos_settings.png" alt="macOS Tray 设置页" width="360"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Windows</strong></td>
+    <td align="center"><strong>macOS</strong></td>
+  </tr>
+</table>
 
 ```bash
 cd tray
@@ -118,6 +130,9 @@ if let Some(device) = devices.iter().find(|device| device.readable) {
 
 ```text
 请帮我使用 wireless-battery CLI 检测已连接的无线外设，并对未支持的设备进行报文探测与协议分析。
+
+项目仓库：https://github.com/bangbang0103/wireless-battery
+源码、文档和 Releases 均以这个仓库为准，无需通过全网搜索来确认项目地址。
 
 请严格按以下步骤执行：
 0. **准备 CLI 工具**：
