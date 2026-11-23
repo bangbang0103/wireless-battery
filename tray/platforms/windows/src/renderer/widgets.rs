@@ -1,13 +1,18 @@
 //! Reusable Direct2D / DirectWrite UI primitives and cached brush helper.
 
-use super::anim::{HitRegion, HitTarget, UiState, CARD_RADIUS, CONTROL_RADIUS, FOOTER_HEIGHT};
+use super::anim::{
+    CommunityLinkKind, HitRegion, HitTarget, UiState, CARD_RADIUS, CONTROL_RADIUS, FOOTER_HEIGHT,
+};
 use crate::icon::resolve_icon_font_family;
 use crate::theme::{lerp_color, with_alpha, Palette};
 use windows::core::{w, HSTRING, PCWSTR};
 use windows::Win32::Foundation::BOOL;
-use windows::Win32::Graphics::Direct2D::Common::{D2D1_COLOR_F, D2D_POINT_2F, D2D_RECT_F};
+use windows::Win32::Graphics::Direct2D::Common::{
+    D2D1_COLOR_F, D2D1_FIGURE_BEGIN_FILLED, D2D1_FIGURE_END_CLOSED, D2D_POINT_2F, D2D_RECT_F,
+};
 use windows::Win32::Graphics::Direct2D::{
-    ID2D1HwndRenderTarget, ID2D1SolidColorBrush, D2D1_DRAW_TEXT_OPTIONS_CLIP, D2D1_ROUNDED_RECT,
+    ID2D1Factory, ID2D1HwndRenderTarget, ID2D1SolidColorBrush, D2D1_BEZIER_SEGMENT,
+    D2D1_DRAW_TEXT_OPTIONS_CLIP, D2D1_ROUNDED_RECT,
 };
 use windows::Win32::Graphics::DirectWrite::{
     IDWriteFactory, IDWriteTextFormat, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
@@ -43,6 +48,9 @@ pub(super) const GLYPH_HEADSET: &str = "\u{E7F6}";
 pub(super) const GLYPH_PERIPHERAL: &str = "\u{E857}";
 pub(super) const GLYPH_CHARGING_BOLT: &str = "\u{E945}";
 pub(super) const GLYPH_INFO: &str = "\u{E946}";
+pub(super) const GLYPH_CODE: &str = "\u{E943}";
+pub(super) const GLYPH_FEEDBACK: &str = "\u{ED15}";
+pub(super) const GLYPH_PEOPLE: &str = "\u{E716}";
 
 /// Single cached Direct2D solid color brush reused across draw calls on a render target.
 #[derive(Clone)]
@@ -560,6 +568,434 @@ pub(super) unsafe fn draw_toast(
         &palette.toast_text,
         brush,
     );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) unsafe fn draw_community_link_button(
+    d2d: &ID2D1Factory,
+    rt: &ID2D1HwndRenderTarget,
+    formats: &TextFormats,
+    brush: &PaintBrush,
+    hit_regions: &mut Vec<HitRegion>,
+    rect: D2D_RECT_F,
+    kind: CommunityLinkKind,
+    palette: &Palette,
+    ui: &UiState,
+) {
+    let target = HitTarget::OpenCommunityLink(kind);
+    let hovered = ui.hovered.as_ref() == Some(&target);
+    let pressed = ui.pressed.as_ref() == Some(&target);
+    let rr = rounded_rect(rect, CONTROL_RADIUS);
+    if pressed || hovered {
+        let fill = if pressed {
+            &palette.subtle_pressed
+        } else {
+            &palette.subtle_hover
+        };
+        rt.FillRoundedRectangle(&rr, brush.color(fill));
+    }
+
+    let icon_color = if hovered || pressed {
+        palette.text_primary
+    } else {
+        palette.text_secondary
+    };
+    let icon_size = 12.0;
+    let icon_rect = rect_xywh(
+        rect.left + (rect.right - rect.left - icon_size) * 0.5,
+        rect.top + (rect.bottom - rect.top - icon_size) * 0.5,
+        icon_size,
+        icon_size,
+    );
+    draw_community_icon(d2d, rt, formats, brush, kind, icon_rect, &icon_color);
+    hit_regions.push(HitRegion { rect, target });
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) unsafe fn draw_hover_tooltip(
+    d2d: &ID2D1Factory,
+    rt: &ID2D1HwndRenderTarget,
+    formats: &TextFormats,
+    brush: &PaintBrush,
+    width: f32,
+    list_bottom: f32,
+    palette: &Palette,
+    kind: CommunityLinkKind,
+    text: &str,
+) {
+    let est_w = (estimate_text_width(text) + 46.0).clamp(132.0, width - 24.0);
+    let pill_h = 30.0;
+    let rect = D2D_RECT_F {
+        left: (width - est_w - 12.0).max(12.0),
+        top: list_bottom - pill_h - 8.0,
+        right: width - 12.0,
+        bottom: list_bottom - 8.0,
+    };
+    let rr = rounded_rect(rect, CARD_RADIUS);
+    rt.FillRoundedRectangle(&rr, brush.color(&palette.toast_bg));
+    rt.DrawRoundedRectangle(&rr, brush.color(&palette.toast_border), 1.0, None);
+
+    let icon_rect = rect_xywh(rect.left + 11.0, rect.top + (pill_h - 11.0) * 0.5, 11.0, 11.0);
+    draw_community_icon(
+        d2d,
+        rt,
+        formats,
+        brush,
+        kind,
+        icon_rect,
+        &palette.text_secondary,
+    );
+    draw_text(
+        rt,
+        text,
+        &formats.caption,
+        rect_xywh(rect.left + 28.0, rect.top, est_w - 36.0, pill_h),
+        &palette.toast_text,
+        brush,
+    );
+}
+
+unsafe fn draw_community_icon(
+    d2d: &ID2D1Factory,
+    rt: &ID2D1HwndRenderTarget,
+    formats: &TextFormats,
+    brush: &PaintBrush,
+    kind: CommunityLinkKind,
+    rect: D2D_RECT_F,
+    color: &D2D1_COLOR_F,
+) {
+    match kind {
+        CommunityLinkKind::BugReport => {
+            draw_text(
+                rt,
+                GLYPH_FEEDBACK,
+                &formats.icon_small,
+                rect_xywh(rect.left - 1.0, rect.top - 1.0, 14.0, 14.0),
+                color,
+                brush,
+            );
+        }
+        CommunityLinkKind::SourceRepo => {
+            let sx = (rect.right - rect.left) / 24.0;
+            let sy = (rect.bottom - rect.top) / 24.0;
+            let ox = rect.left;
+            let oy = rect.top;
+            let pt = |x: f32, y: f32| D2D_POINT_2F {
+                x: ox + x * sx,
+                y: oy + y * sy,
+            };
+            if let Ok(geo) = d2d.CreatePathGeometry() {
+                if let Ok(sink) = geo.Open() {
+                    sink.BeginFigure(pt(12.0, 1.5), D2D1_FIGURE_BEGIN_FILLED);
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(6.2, 1.5),
+                        point2: pt(1.5, 6.2),
+                        point3: pt(1.5, 12.0),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(1.5, 16.64),
+                        point2: pt(4.51, 20.57),
+                        point3: pt(8.68, 21.96),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(9.21, 22.06),
+                        point2: pt(9.38, 21.74),
+                        point3: pt(9.38, 21.31),
+                    });
+                    sink.AddLine(pt(9.38, 19.01));
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(6.46, 19.64),
+                        point2: pt(5.84, 17.6),
+                        point3: pt(6.13, 17.79),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(5.65, 16.58),
+                        point2: pt(4.96, 16.26),
+                        point3: pt(4.97, 16.32),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(4.02, 15.67),
+                        point2: pt(5.04, 15.68),
+                        point3: pt(5.05, 16.1),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(6.1, 16.17),
+                        point2: pt(6.66, 17.18),
+                        point3: pt(6.66, 17.18),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(7.6, 18.78),
+                        point2: pt(9.12, 18.32),
+                        point3: pt(9.43, 18.08),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(9.52, 17.4),
+                        point2: pt(9.8, 16.94),
+                        point3: pt(10.17, 16.65),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(7.84, 16.39),
+                        point2: pt(5.39, 15.49),
+                        point3: pt(5.39, 11.46),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(5.39, 10.31),
+                        point2: pt(5.8, 9.37),
+                        point3: pt(6.46, 8.63),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(6.35, 8.37),
+                        point2: pt(6.0, 7.31),
+                        point3: pt(6.56, 5.84),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(6.56, 5.84),
+                        point2: pt(7.43, 5.56),
+                        point3: pt(9.45, 6.94),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(11.12, 6.48),
+                        point2: pt(12.88, 6.48),
+                        point3: pt(14.55, 6.94),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(16.57, 5.56),
+                        point2: pt(17.44, 5.84),
+                        point3: pt(17.44, 5.84),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(18.0, 7.31),
+                        point2: pt(17.65, 8.37),
+                        point3: pt(17.54, 8.63),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(18.2, 9.37),
+                        point2: pt(18.61, 10.31),
+                        point3: pt(18.61, 11.46),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(18.61, 15.5),
+                        point2: pt(16.15, 16.38),
+                        point3: pt(13.82, 16.64),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(14.29, 17.04),
+                        point2: pt(14.62, 17.78),
+                        point3: pt(14.62, 18.61),
+                    });
+                    sink.AddLine(pt(14.62, 21.31));
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(14.62, 21.75),
+                        point2: pt(14.79, 22.06),
+                        point3: pt(15.32, 21.96),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(19.49, 20.57),
+                        point2: pt(22.5, 16.64),
+                        point3: pt(22.5, 12.0),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(22.5, 6.2),
+                        point2: pt(17.8, 1.5),
+                        point3: pt(12.0, 1.5),
+                    });
+                    sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+                    let _ = sink.Close();
+                    rt.FillGeometry(&geo, brush.color(color), None);
+                }
+            }
+        }
+        CommunityLinkKind::Qq => {
+            let sx = (rect.right - rect.left) / 24.0;
+            let sy = (rect.bottom - rect.top) / 24.0;
+            let ox = rect.left;
+            let oy = rect.top;
+            let pt = |x: f32, y: f32| D2D_POINT_2F {
+                x: ox + x * sx,
+                y: oy + y * sy,
+            };
+            if let Ok(geo) = d2d.CreatePathGeometry() {
+                if let Ok(sink) = geo.Open() {
+                    sink.BeginFigure(pt(12.0, 2.0), D2D1_FIGURE_BEGIN_FILLED);
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(8.4, 2.0),
+                        point2: pt(6.4, 5.0),
+                        point3: pt(6.4, 8.9),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(5.1, 10.6),
+                        point2: pt(4.0, 12.9),
+                        point3: pt(4.1, 14.6),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(4.2, 16.0),
+                        point2: pt(5.2, 16.5),
+                        point3: pt(5.9, 16.0),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(6.3, 17.2),
+                        point2: pt(6.8, 18.1),
+                        point3: pt(7.4, 18.8),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(6.3, 19.3),
+                        point2: pt(5.6, 20.0),
+                        point3: pt(5.8, 20.6),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(6.1, 21.5),
+                        point2: pt(8.9, 21.6),
+                        point3: pt(10.8, 21.0),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(11.6, 21.1),
+                        point2: pt(12.4, 21.1),
+                        point3: pt(13.2, 21.0),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(15.1, 21.6),
+                        point2: pt(17.9, 21.5),
+                        point3: pt(18.2, 20.6),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(18.4, 20.0),
+                        point2: pt(17.7, 19.3),
+                        point3: pt(16.6, 18.8),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(17.2, 18.1),
+                        point2: pt(17.7, 17.2),
+                        point3: pt(18.1, 16.0),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(18.8, 16.5),
+                        point2: pt(19.8, 16.0),
+                        point3: pt(19.9, 14.6),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(20.0, 12.9),
+                        point2: pt(18.9, 10.6),
+                        point3: pt(17.6, 8.9),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(17.6, 5.0),
+                        point2: pt(15.6, 2.0),
+                        point3: pt(12.0, 2.0),
+                    });
+                    sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+                    let _ = sink.Close();
+                    rt.FillGeometry(&geo, brush.color(color), None);
+                }
+            }
+        }
+        CommunityLinkKind::Discord => {
+            let w = rect.right - rect.left;
+            let h = w * 0.78;
+            let sx = w / 24.0;
+            let sy = h / 18.0;
+            let ox = rect.left;
+            let oy = rect.top + (rect.bottom - rect.top - h) * 0.5;
+            let pt = |x: f32, y: f32| D2D_POINT_2F {
+                x: ox + x * sx,
+                y: oy + y * sy,
+            };
+            if let Ok(geo) = d2d.CreatePathGeometry() {
+                if let Ok(sink) = geo.Open() {
+                    sink.BeginFigure(pt(20.32, 1.5), D2D1_FIGURE_BEGIN_FILLED);
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(18.82, 0.81),
+                        point2: pt(17.24, 0.32),
+                        point3: pt(15.63, 0.05),
+                    });
+                    sink.AddLine(pt(15.0, 1.32));
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(13.02, 1.02),
+                        point2: pt(10.98, 1.02),
+                        point3: pt(9.0, 1.32),
+                    });
+                    sink.AddLine(pt(8.37, 0.05));
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(6.76, 0.32),
+                        point2: pt(5.18, 0.81),
+                        point3: pt(3.68, 1.5),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(0.72, 5.91),
+                        point2: pt(-0.09, 10.22),
+                        point3: pt(0.56, 14.37),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(2.26, 15.63),
+                        point2: pt(4.18, 16.61),
+                        point3: pt(6.32, 17.28),
+                    });
+                    sink.AddLine(pt(7.55, 15.27));
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(6.88, 15.02),
+                        point2: pt(6.23, 14.71),
+                        point3: pt(5.61, 14.33),
+                    });
+                    sink.AddLine(pt(6.09, 13.96));
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(9.85, 15.69),
+                        point2: pt(14.15, 15.69),
+                        point3: pt(17.91, 13.96),
+                    });
+                    sink.AddLine(pt(18.39, 14.33));
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(17.77, 14.71),
+                        point2: pt(17.12, 15.02),
+                        point3: pt(16.45, 15.27),
+                    });
+                    sink.AddLine(pt(17.68, 17.28));
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(19.82, 16.61),
+                        point2: pt(21.74, 15.63),
+                        point3: pt(23.44, 14.37),
+                    });
+                    sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                        point1: pt(24.2, 9.57),
+                        point2: pt(22.74, 5.3),
+                        point3: pt(20.32, 1.5),
+                    });
+                    sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+
+                    // Eye cutouts (even-odd fill)
+                    for cx in [8.1_f32, 15.9_f32] {
+                        let cy = 9.3_f32;
+                        let rx = 1.7_f32;
+                        let ry = 1.9_f32;
+                        let kx = rx * 0.552;
+                        let ky = ry * 0.552;
+                        sink.BeginFigure(pt(cx, cy - ry), D2D1_FIGURE_BEGIN_FILLED);
+                        sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                            point1: pt(cx + kx, cy - ry),
+                            point2: pt(cx + rx, cy - ky),
+                            point3: pt(cx + rx, cy),
+                        });
+                        sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                            point1: pt(cx + rx, cy + ky),
+                            point2: pt(cx + kx, cy + ry),
+                            point3: pt(cx, cy + ry),
+                        });
+                        sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                            point1: pt(cx - kx, cy + ry),
+                            point2: pt(cx - rx, cy + ky),
+                            point3: pt(cx - rx, cy),
+                        });
+                        sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                            point1: pt(cx - rx, cy - ky),
+                            point2: pt(cx - kx, cy - ry),
+                            point3: pt(cx, cy - ry),
+                        });
+                        sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+                    }
+                    let _ = sink.Close();
+                    rt.FillGeometry(&geo, brush.color(color), None);
+                }
+            }
+        }
+    }
 }
 
 fn resolve_font_family(dwrite: &IDWriteFactory, preferred: PCWSTR, fallback: PCWSTR) -> PCWSTR {

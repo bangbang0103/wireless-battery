@@ -1,37 +1,42 @@
 //! Settings view cards, WinUI 3 ComboBox dropdowns, ToggleSwitches, and updater card.
 
 use super::anim::{
-    HitRegion, HitTarget, OpenDropdown, UiState, UpdateUiStatus, CARD_RADIUS, CONTROL_RADIUS,
-    HEADER_HEIGHT, OUTER_PADDING, SETTINGS_CARD_GAP, SETTINGS_CARD_H, SETTINGS_SUBROW_H,
+    CommunityLinkKind, HitRegion, HitTarget, OpenDropdown, UiState, UpdateUiStatus, CARD_RADIUS,
+    CONTROL_RADIUS, HEADER_HEIGHT, OUTER_PADDING, SETTINGS_CARD_GAP, SETTINGS_CARD_H,
+    SETTINGS_SUBROW_H,
 };
 use super::widgets::{
-    draw_elevated_card, draw_standard_button, draw_subtle_icon_button, draw_text,
-    draw_win11_toggle_switch, rect_xywh, rounded_rect, PaintBrush, TextFormats, GLYPH_BACK,
-    GLYPH_CHEVRON_DOWN, GLYPH_CHEVRON_UP, GLYPH_CLOCK, GLYPH_COLOR_THEME, GLYPH_INFO,
-    GLYPH_LANGUAGE, GLYPH_POWER, GLYPH_RINGER, GLYPH_RINGER_SILENT,
+    draw_community_link_button, draw_elevated_card, draw_hover_tooltip, draw_standard_button,
+    draw_subtle_icon_button, draw_text, draw_win11_toggle_switch, rect_xywh, rounded_rect,
+    PaintBrush, TextFormats, GLYPH_BACK, GLYPH_CHEVRON_DOWN, GLYPH_CHEVRON_UP, GLYPH_CLOCK,
+    GLYPH_CODE, GLYPH_COLOR_THEME, GLYPH_FEEDBACK, GLYPH_INFO, GLYPH_LANGUAGE, GLYPH_PEOPLE,
+    GLYPH_POWER, GLYPH_RINGER, GLYPH_RINGER_SILENT,
 };
 use crate::i18n::Lang;
 use crate::theme::{with_alpha, Palette, SystemTheme};
 use std::time::Instant;
 use windows::Win32::Graphics::Direct2D::Common::{D2D_POINT_2F, D2D_RECT_F};
 use windows::Win32::Graphics::Direct2D::{
-    ID2D1HwndRenderTarget, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+    ID2D1Factory, ID2D1HwndRenderTarget, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
 };
-use wireless_battery_tray_core::{LanguageMode, ThemeMode, TraySnapshot};
+use wireless_battery_tray_core::{community_links, LanguageMode, ThemeMode, TraySnapshot};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) unsafe fn draw_settings_view(
+    d2d: &ID2D1Factory,
     rt: &ID2D1HwndRenderTarget,
     formats: &TextFormats,
     brush: &PaintBrush,
     hit_regions: &mut Vec<HitRegion>,
+    content_height: &mut f32,
+    viewport_height: &mut f32,
     width: f32,
     height: f32,
     palette: &Palette,
     lang: Lang,
     system_theme: SystemTheme,
     snapshot: &TraySnapshot,
-    ui: &UiState,
+    ui: &mut UiState,
     now: Instant,
 ) {
     // --- Win11 Settings Header (52 DIPs) ---
@@ -73,9 +78,30 @@ pub(super) unsafe fn draw_settings_view(
     );
 
     // --- Flat Independent WinUI 3 SettingsCards (4px gap) ---
+    let subrow_extra = if snapshot.config.low_battery_notify {
+        SETTINGS_SUBROW_H
+    } else {
+        0.0
+    };
+    *viewport_height = (height - HEADER_HEIGHT).max(1.0);
+    *content_height =
+        OUTER_PADDING * 2.0 + SETTINGS_CARD_H * 9.0 + SETTINGS_CARD_GAP * 8.0 + subrow_extra;
+    let max_scroll = (*content_height - *viewport_height).max(0.0);
+    ui.scroll_offset = ui.scroll_offset.clamp(0.0, max_scroll);
+
+    rt.PushAxisAlignedClip(
+        &D2D_RECT_F {
+            left: 0.0,
+            top: HEADER_HEIGHT,
+            right: width,
+            bottom: height,
+        },
+        D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+    );
+
     let pad_x = OUTER_PADDING;
     let inner_w = width - pad_x * 2.0;
-    let mut y = HEADER_HEIGHT + OUTER_PADDING;
+    let mut y = HEADER_HEIGHT + OUTER_PADDING - ui.scroll_offset;
     let combo_w = 104.0;
     let combo_h = 32.0;
 
@@ -289,6 +315,175 @@ pub(super) unsafe fn draw_settings_view(
         ui,
         btn_alpha,
     );
+    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+
+    // Card 8: Source Code
+    let source_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
+    let icon_btn_size = 26.0;
+    let icon_gap = 3.0;
+    draw_settings_card_base(
+        rt,
+        formats,
+        brush,
+        source_card,
+        GLYPH_CODE,
+        lang.setting_source_title(),
+        lang.setting_source_desc(),
+        icon_btn_size + 22.0,
+        palette,
+        false,
+        false,
+    );
+    let source_btn_rect = rect_xywh(
+        source_card.right - 14.0 - icon_btn_size,
+        source_card.top + (SETTINGS_CARD_H - icon_btn_size) * 0.5,
+        icon_btn_size,
+        icon_btn_size,
+    );
+    draw_community_link_button(
+        d2d,
+        rt,
+        formats,
+        brush,
+        hit_regions,
+        source_btn_rect,
+        CommunityLinkKind::SourceRepo,
+        palette,
+        ui,
+    );
+    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+
+    // Card 9: Feedback
+    let feedback_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
+    draw_settings_card_base(
+        rt,
+        formats,
+        brush,
+        feedback_card,
+        GLYPH_FEEDBACK,
+        lang.setting_feedback_title(),
+        lang.setting_feedback_desc(),
+        icon_btn_size + 22.0,
+        palette,
+        false,
+        false,
+    );
+    let feedback_btn_rect = rect_xywh(
+        feedback_card.right - 14.0 - icon_btn_size,
+        feedback_card.top + (SETTINGS_CARD_H - icon_btn_size) * 0.5,
+        icon_btn_size,
+        icon_btn_size,
+    );
+    draw_community_link_button(
+        d2d,
+        rt,
+        formats,
+        brush,
+        hit_regions,
+        feedback_btn_rect,
+        CommunityLinkKind::BugReport,
+        palette,
+        ui,
+    );
+    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+
+    // Card 10: Community (QQ & Discord)
+    let community_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
+    let community_icons_w = icon_btn_size * 2.0 + icon_gap;
+    draw_settings_card_base(
+        rt,
+        formats,
+        brush,
+        community_card,
+        GLYPH_PEOPLE,
+        lang.setting_community_title(),
+        lang.setting_community_desc(),
+        community_icons_w + 22.0,
+        palette,
+        false,
+        false,
+    );
+    let community_icon_y = community_card.top + (SETTINGS_CARD_H - icon_btn_size) * 0.5;
+    let discord_rect = rect_xywh(
+        community_card.right - 14.0 - icon_btn_size,
+        community_icon_y,
+        icon_btn_size,
+        icon_btn_size,
+    );
+    let qq_rect = rect_xywh(
+        discord_rect.left - icon_gap - icon_btn_size,
+        community_icon_y,
+        icon_btn_size,
+        icon_btn_size,
+    );
+    draw_community_link_button(
+        d2d,
+        rt,
+        formats,
+        brush,
+        hit_regions,
+        qq_rect,
+        CommunityLinkKind::Qq,
+        palette,
+        ui,
+    );
+    draw_community_link_button(
+        d2d,
+        rt,
+        formats,
+        brush,
+        hit_regions,
+        discord_rect,
+        CommunityLinkKind::Discord,
+        palette,
+        ui,
+    );
+
+    if max_scroll > 0.5 {
+        let track_top = HEADER_HEIGHT + 10.0;
+        let track_h = (height - HEADER_HEIGHT - 20.0).max(20.0);
+        let thumb_h = ((*viewport_height / *content_height) * track_h).clamp(28.0, track_h);
+        let scroll_ratio = ui.scroll_offset / max_scroll;
+        let thumb_y = track_top + scroll_ratio * (track_h - thumb_h);
+        rt.FillRoundedRectangle(
+            &rounded_rect(rect_xywh(width - 6.0, thumb_y, 3.0, thumb_h), 1.5),
+            brush.color(&palette.scrollbar_thumb),
+        );
+    }
+
+    rt.PopAxisAlignedClip();
+
+    if ui.open_dropdown.is_none() && ui.feedback_banner.is_none() {
+        if let Some(HitTarget::OpenCommunityLink(kind)) = ui.hovered {
+            let links = community_links();
+            let (anchor_top, hover_text) = match kind {
+                CommunityLinkKind::SourceRepo => {
+                    (source_card.top, lang.link_repo_hover().to_owned())
+                }
+                CommunityLinkKind::BugReport => {
+                    (feedback_card.top, lang.link_feedback_hover().to_owned())
+                }
+                CommunityLinkKind::Qq => {
+                    (community_card.top, lang.link_qq_hover(links.qq_group))
+                }
+                CommunityLinkKind::Discord => {
+                    (community_card.top, lang.link_discord_hover().to_owned())
+                }
+            };
+            let clamped_anchor = anchor_top.clamp(HEADER_HEIGHT + 40.0, height - 8.0);
+            draw_hover_tooltip(
+                d2d,
+                rt,
+                formats,
+                brush,
+                width,
+                clamped_anchor,
+                palette,
+                kind,
+                &hover_text,
+            );
+        }
+    }
 
     // --- WinUI 3 ComboBox Dropdown Flyout Overlay (if open) ---
     if let Some(open) = ui.open_dropdown {

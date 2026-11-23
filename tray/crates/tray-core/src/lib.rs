@@ -4,6 +4,7 @@ pub mod config;
 #[cfg(feature = "dev-tools")]
 pub mod dev_tools;
 pub mod device_kind;
+pub mod links;
 pub mod notify;
 pub mod service;
 pub mod state;
@@ -13,6 +14,10 @@ pub use config::{
     default_config_path, load_config, save_config, LanguageMode, ThemeMode, TrayConfig,
 };
 pub use device_kind::{classify_device, DeviceKind};
+pub use links::{
+    community_links, is_valid_http_url, CommunityLinks, DISCORD_INVITE_URL, ISSUES_URL,
+    QQ_GROUP_NUMBER, QQ_GROUP_URL, REPO_URL,
+};
 pub use notify::LowBatteryTracker;
 pub use service::{PollerHandle, TrayService, TrayUpdate};
 pub use state::{

@@ -40,7 +40,8 @@ use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use wireless_battery_tray_core::TraySnapshot;
 
 pub use self::anim::{
-    HitTarget, PopoverView, UiState, UpdateUiStatus, HEADER_HEIGHT, POPOVER_WIDTH_DIP,
+    CommunityLinkKind, HitTarget, PopoverView, UiState, UpdateUiStatus, HEADER_HEIGHT,
+    POPOVER_WIDTH_DIP,
 };
 
 /// Target surface parameters passed to `PopoverRenderer::paint`.
@@ -92,11 +93,12 @@ impl PopoverRenderer {
                 } else {
                     0.0
                 };
-                HEADER_HEIGHT
+                (HEADER_HEIGHT
                     + OUTER_PADDING * 2.0
-                    + SETTINGS_CARD_H * 6.0
-                    + SETTINGS_CARD_GAP * 5.0
-                    + subrow_extra
+                    + SETTINGS_CARD_H * 9.0
+                    + SETTINGS_CARD_GAP * 8.0
+                    + subrow_extra)
+                    .min(POPOVER_MAX_HEIGHT_DIP)
             }
             PopoverView::Main => {
                 if snapshot.devices.is_empty() {
@@ -207,10 +209,13 @@ impl PopoverRenderer {
                 }
                 PopoverView::Settings => {
                     settings_view::draw_settings_view(
+                        &self.d2d,
                         &rt,
                         &self.formats,
                         &brush,
                         &mut self.hit_regions,
+                        &mut self.content_height,
+                        &mut self.viewport_height,
                         width,
                         height,
                         &palette,

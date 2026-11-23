@@ -9,8 +9,8 @@
 use crate::i18n::Lang;
 use crate::icon::load_app_icon;
 use crate::renderer::{
-    HitTarget, PaintSurface, PopoverRenderer, PopoverView, UiState, UpdateUiStatus, HEADER_HEIGHT,
-    POPOVER_WIDTH_DIP,
+    CommunityLinkKind, HitTarget, PaintSurface, PopoverRenderer, PopoverView, UiState,
+    UpdateUiStatus, HEADER_HEIGHT, POPOVER_WIDTH_DIP,
 };
 use crate::theme::SystemTheme;
 use std::cell::RefCell;
@@ -74,6 +74,7 @@ pub enum PopoverAction {
     ToggleAutostart,
     CheckUpdates,
     OpenUpdateUrl(String),
+    OpenCommunityLink(CommunityLinkKind),
     Quit,
 }
 
@@ -1056,6 +1057,7 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) -> ClickOutcome {
         HitTarget::RefreshAll => out.action = Some(PopoverAction::RefreshAll),
         HitTarget::OpenSettings => {
             inner.ui.view = PopoverView::Settings;
+            inner.ui.scroll_offset = 0.0;
             inner.ui.close_dropdown_menu();
             inner.ui.hovered = None;
             inner.ui.pressed = None;
@@ -1066,6 +1068,7 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) -> ClickOutcome {
         }
         HitTarget::BackToMain => {
             inner.ui.view = PopoverView::Main;
+            inner.ui.scroll_offset = 0.0;
             inner.ui.close_dropdown_menu();
             inner.ui.hovered = None;
             inner.ui.pressed = None;
@@ -1132,6 +1135,9 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) -> ClickOutcome {
                 out.action = Some(PopoverAction::CheckUpdates);
             }
         },
+        HitTarget::OpenCommunityLink(kind) => {
+            out.action = Some(PopoverAction::OpenCommunityLink(kind));
+        }
         HitTarget::Quit => out.action = Some(PopoverAction::Quit),
     }
     out

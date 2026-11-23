@@ -8,7 +8,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr;
 use std::sync::Arc;
 use wireless_battery_tray_core::{
-    evaluate_release_json, format_footer_summary_rfc3339, format_poll_label,
+    community_links, evaluate_release_json, format_footer_summary_rfc3339, format_poll_label,
     format_relative_time_rfc3339, is_valid_update_url, PollerHandle, TrayConfig, TrayService,
     TrayUpdate, UpdateCheckResult, LATEST_RELEASE_API_URL, RELEASES_URL,
 };
@@ -305,6 +305,15 @@ pub extern "C" fn wb_tray_releases_url() -> *mut c_char {
     })
 }
 
+/// Return project and community links (`repoUrl`, `issuesUrl`, `qqGroup`, `qqUrl`, `discordUrl`)
+/// as a newly allocated UTF-8 JSON string.
+#[no_mangle]
+pub extern "C" fn wb_tray_community_links_json() -> *mut c_char {
+    ffi_catch(ptr::null_mut(), || {
+        to_c_string(serde_json::to_string(&community_links()).ok())
+    })
+}
+
 /// Format an optional RFC3339 timestamp relative to now.
 ///
 /// # Safety
@@ -441,6 +450,19 @@ mod tests {
             let rel_url_ptr = wb_tray_releases_url();
             assert_eq!(CStr::from_ptr(rel_url_ptr).to_str().unwrap(), RELEASES_URL);
             wb_tray_string_free(rel_url_ptr);
+
+            let links_ptr = wb_tray_community_links_json();
+            let links_str = CStr::from_ptr(links_ptr).to_str().unwrap().to_owned();
+            wb_tray_string_free(links_ptr);
+            let links_json: serde_json::Value = serde_json::from_str(&links_str).unwrap();
+            assert_eq!(
+                links_json["repoUrl"],
+                "https://github.com/bangbang0103/wireless-battery"
+            );
+            assert_eq!(
+                links_json["issuesUrl"],
+                "https://github.com/bangbang0103/wireless-battery/issues"
+            );
 
             let poll_ptr = wb_tray_format_poll_label(120, true);
             assert_eq!(CStr::from_ptr(poll_ptr).to_str().unwrap(), "2 分钟");
