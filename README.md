@@ -36,8 +36,8 @@ An independent Cargo workspace under [`tray/`](tray/README.md) provides a native
 <p align="center"><strong>Devices</strong></p>
 <table align="center" border="0" cellpadding="0" cellspacing="0">
   <tr>
-    <td align="center" valign="top" width="380"><img src="docs/assests/windows_devices.png" alt="Windows Tray device list" width="360"></td>
-    <td align="center" valign="top" width="380"><img src="docs/assests/macos_devices.png" alt="macOS Tray device list" width="360"></td>
+    <td align="center" valign="top" width="380"><img src="docs/assets/windows_devices.png" alt="Windows Tray device list" width="360"></td>
+    <td align="center" valign="top" width="380"><img src="docs/assets/macos_devices.png" alt="macOS Tray device list" width="360"></td>
   </tr>
   <tr>
     <td align="center"><strong>Windows</strong></td>
@@ -48,8 +48,8 @@ An independent Cargo workspace under [`tray/`](tray/README.md) provides a native
 <p align="center"><strong>Settings</strong></p>
 <table align="center" border="0" cellpadding="0" cellspacing="0">
   <tr>
-    <td align="center" valign="top" width="380"><img src="docs/assests/windows_settings.png" alt="Windows Tray settings" width="360"></td>
-    <td align="center" valign="top" width="380"><img src="docs/assests/macos_settings.png" alt="macOS Tray settings" width="360"></td>
+    <td align="center" valign="top" width="380"><img src="docs/assets/windows_settings.png" alt="Windows Tray settings" width="360"></td>
+    <td align="center" valign="top" width="380"><img src="docs/assets/macos_settings.png" alt="macOS Tray settings" width="360"></td>
   </tr>
   <tr>
     <td align="center"><strong>Windows</strong></td>

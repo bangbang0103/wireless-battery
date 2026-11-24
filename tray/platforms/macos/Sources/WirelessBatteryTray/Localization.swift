@@ -26,15 +26,15 @@ enum AppLanguage: Equatable {
     var backLabel: String { isZh ? "返回" : "Back" }
     var quitLabel: String { isZh ? "退出" : "Quit" }
     var openPanelLabel: String { isZh ? "打开面板" : "Open Panel" }
-    var menuThemeLightLabel: String { isZh ? "明亮模式" : "Light" }
-    var menuThemeDarkLabel: String { isZh ? "暗黑模式" : "Dark" }
+    var menuThemeLightLabel: String { isZh ? "浅色模式" : "Light" }
+    var menuThemeDarkLabel: String { isZh ? "深色模式" : "Dark" }
     var menuLanguageLabel: String { isZh ? "语言" : "Language" }
-    var menuAutostartLabel: String { isZh ? "开机自启" : "Launch at startup" }
-    var menuCheckUpdatesLabel: String { isZh ? "检查更新" : "Check for updates" }
+    var menuAutostartLabel: String { isZh ? "登录时启动" : "Launch at Login" }
+    var menuCheckUpdatesLabel: String { isZh ? "检查更新" : "Check for Updates" }
     var readingPeripherals: String { isZh ? "正在读取外设电量…" : "Reading peripherals…" }
 
     var pinHelpPinned: String { isZh ? "取消置顶" : "Unpin" }
-    var pinHelpUnpinned: String { isZh ? "固定在屏幕最上层（移出鼠标隐藏背景）" : "Pin floating panel (transparent when unfocused)" }
+    var pinHelpUnpinned: String { isZh ? "固定在屏幕最上层（鼠标移开后背景透明）" : "Pin floating panel (transparent when unfocused)" }
     var refreshAllHelp: String { isZh ? "立即刷新全部可读设备" : "Refresh all readable devices" }
     var settingsHelp: String { isZh ? "设置" : "Settings" }
 
@@ -42,8 +42,8 @@ enum AppLanguage: Equatable {
 
     var emptyHint: String {
         isZh
-            ? "被动枚举未匹配到已知接收器或外设，请确认接收器已接入并处于唤醒状态。"
-            : "No known receiver or peripheral matched. Make sure the receiver is connected and awake."
+            ? "未检测到已匹配的无线外设，请确认接收器已连接且设备处于唤醒状态。"
+            : "No matched wireless peripherals found. Make sure the receiver is connected and the device is awake."
     }
 
     var emptyAction: String { isZh ? "重新扫描" : "Rescan" }
@@ -55,7 +55,7 @@ enum AppLanguage: Equatable {
     var labelStatus: String { isZh ? "状态" : "Status" }
 
     var statusLive: String { isZh ? "实时" : "Live" }
-    var statusStale: String { isZh ? "缓存（Stale）" : "Stale (cached)" }
+    var statusStale: String { isZh ? "缓存（非实时）" : "Stale (cached)" }
     var statusUnread: String { isZh ? "未读取" : "Not read" }
 
     var btnRefreshDevice: String { isZh ? "重新读取" : "Refresh" }
@@ -74,7 +74,7 @@ enum AppLanguage: Equatable {
     var settingCommunityDesc: String { "QQ · Discord" }
 
     var submitFeedbackLabel: String {
-        isZh ? "反馈" : "Submit Feedback"
+        isZh ? "提交反馈" : "Submit Feedback"
     }
 
     var openRepositoryLabel: String {
@@ -108,7 +108,7 @@ enum AppLanguage: Equatable {
     var settingSilentTitle: String { isZh ? "静默通知" : "Silent Notifications" }
     var settingSilentDesc: String { isZh ? "开启后不发送系统通知" : "Suppress macOS notifications" }
 
-    var settingAutostartTitle: String { isZh ? "登录时静默自启" : "Launch at Login" }
+    var settingAutostartTitle: String { isZh ? "登录时启动" : "Launch at Login" }
     var settingAutostartDesc: String { isZh ? "仅驻留菜单栏，不弹出窗口" : "Start minimized in menu bar" }
     var settingAutostartHelpBundled: String { isZh ? "登录 macOS 时仅驻留菜单栏" : "Stay in the menu bar when logging in" }
     var settingAutostartHelpUnbundled: String { isZh ? "打包为 .app 后可用" : "Available when packaged as a .app bundle" }
@@ -146,8 +146,8 @@ enum AppLanguage: Equatable {
 
     func themeLabel(_ mode: String) -> String {
         switch mode {
-        case "light": return isZh ? "明亮" : "Light"
-        case "dark": return isZh ? "暗黑" : "Dark"
+        case "light": return isZh ? "浅色" : "Light"
+        case "dark": return isZh ? "深色" : "Dark"
         default: return isZh ? "跟随系统" : "System"
         }
     }
@@ -244,7 +244,7 @@ enum AppLanguage: Equatable {
         case "permission_denied": return isZh ? "权限不足" : "Permission denied"
         case "device_disconnected": return isZh ? "连接已断开" : "Disconnected"
         case "invalid_response", "checksum_failed": return isZh ? "响应校验失败" : "Invalid response"
-        case "unsupported": return isZh ? "策略未启用" : "Unsupported"
+        case "unsupported": return isZh ? "暂不支持" : "Unsupported"
         case .some: return isZh ? "读取失败" : "Read failed"
         case .none: return statusUnread
         }

@@ -5,18 +5,18 @@
 
 > **Language / 语言**: [English](README.md) | **简体中文**
 
-一个同步 Rust 库与命令行工具，用于通过 HID 保守地读取外设电量，并默认支持只读 Bluetooth LE Battery Service（BAS）。
+一个同步 Rust 库与命令行工具，用于通过 HID 稳妥、非侵入式地读取外设电量，并默认支持只读 Bluetooth LE Battery Service（BAS）。
 
 ## 功能特性
 
 - **广泛的设备支持**：目前内置 **153 个 Provider**（151 个厂商 HID Provider，以及 `os.xinput` 和 `bluetooth.bas`），覆盖鼠标、键盘、耳机、手柄等无线外设。完整设备与型号列表见[设备支持矩阵](docs/support-matrix.zh-CN.md)。
 - **多种交付形态**：提供 **Tray、CLI 与 Rust API**，分别满足桌面交互、脚本自动化与第三方应用集成需求。
 - **原生托盘体验**：Tray 支持 **macOS 与 Windows**，分别采用 SwiftUI 与 Win32 / Direct2D，界面风格与系统原生 UI 保持一致。
-- **可靠的设备适配**：设备支持主要来自真实设备逆向，并参考其他开源仓库的设备适配；相关说明与署名见 [NOTICE](NOTICE)。
+- **有据可依的设备支持**：设备支持主要来自真实设备逆向，并参考了其他开源项目的实现；相关说明与署名见 [NOTICE](NOTICE)。
 
 ## 构建
 
-支持 Rust 1.76 及以上版本。`Cargo.lock` 锁定依赖版本以维持 MSRV（`--locked`）。`cli` 与 `bluetooth` feature 默认均已开启；纯库消费者可通过 `--no-default-features` 关闭默认特性，避免编译 CLI（`clap`）与 BLE（`btleplug`、`tokio`、`uuid`）依赖，也可按需单独开启 `--features cli` 或 `--features bluetooth`。
+支持 Rust 1.76 及以上版本。`Cargo.lock` 锁定依赖版本以维持 MSRV（`--locked`）。`cli` 与 `bluetooth` feature 默认均已开启；仅作为库引入的项目可通过 `--no-default-features` 关闭默认特性，避免编译 CLI（`clap`）与 BLE（`btleplug`、`tokio`、`uuid`）依赖，也可按需单独开启 `--features cli` 或 `--features bluetooth`。
 
 ```bash
 cargo build --locked
@@ -33,11 +33,11 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 
 [`tray/`](tray/README.zh-CN.md) 是一个独立于根库与 CLI 的 Cargo 工作区，采用 **共享 Rust 核心（`tray-core`） + 各平台极薄原生 UI 壳** 架构（Windows 为 Win32 + DWM Acrylic + Direct2D；macOS 为 AppKit `NSStatusItem` + SwiftUI 弹层 + `tray-ffi` 静态库），避免 GUI 依赖污染核心库与 CLI。
 
-<p align="center"><strong>Devices</strong></p>
+<p align="center"><strong>设备列表</strong></p>
 <table align="center" border="0" cellpadding="0" cellspacing="0">
   <tr>
-    <td align="center" valign="top" width="380"><img src="docs/assests/windows_devices.png" alt="Windows Tray 设备列表" width="360"></td>
-    <td align="center" valign="top" width="380"><img src="docs/assests/macos_devices.png" alt="macOS Tray 设备列表" width="360"></td>
+    <td align="center" valign="top" width="380"><img src="docs/assets/windows_devices.png" alt="Windows Tray 设备列表" width="360"></td>
+    <td align="center" valign="top" width="380"><img src="docs/assets/macos_devices.png" alt="macOS Tray 设备列表" width="360"></td>
   </tr>
   <tr>
     <td align="center"><strong>Windows</strong></td>
@@ -45,11 +45,11 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
   </tr>
 </table>
 
-<p align="center"><strong>Settings</strong></p>
+<p align="center"><strong>设置页</strong></p>
 <table align="center" border="0" cellpadding="0" cellspacing="0">
   <tr>
-    <td align="center" valign="top" width="380"><img src="docs/assests/windows_settings.png" alt="Windows Tray 设置页" width="360"></td>
-    <td align="center" valign="top" width="380"><img src="docs/assests/macos_settings.png" alt="macOS Tray 设置页" width="360"></td>
+    <td align="center" valign="top" width="380"><img src="docs/assets/windows_settings.png" alt="Windows Tray 设置页" width="360"></td>
+    <td align="center" valign="top" width="380"><img src="docs/assets/macos_settings.png" alt="macOS Tray 设置页" width="360"></td>
   </tr>
   <tr>
     <td align="center"><strong>Windows</strong></td>
@@ -113,7 +113,7 @@ if let Some(device) = devices.iter().find(|device| device.readable) {
 
 1. **先确认连接模式与端点**
    - 运行 `wireless-battery list --json` 查看所有端点。
-   - 不少多模外设或手柄（如飞智、八爪鱼等）在纯 **XInput 模式**（`045E:028E`）下会被 Windows 保留，且多数第三方手柄不通过 XInput 上报电量；尝试切换至 **2.4G 接收器、有线、DInput / 厂商模式** 或 **BLE 模式**（支持标准 BAS `0x2A19` 可直接读取），再重新 `list` 确认是否出现厂商自定义 HID 端点（通常 `usage_page >= 0xFF00`）。
+   - 不少多模外设或手柄（如飞智、八位堂等）在纯 **XInput 模式**（`045E:028E`）下会被 Windows 保留，且多数第三方手柄不通过 XInput 上报电量；尝试切换至 **2.4G 接收器、有线、DInput / 厂商模式** 或 **BLE 模式**（支持标准 BAS `0x2A19` 可直接读取），再重新 `list` 确认是否出现厂商自定义 HID 端点（通常 `usage_page >= 0xFF00`）。
 
 2. **用 `probe` 探测报文（必要时结合双向抓包）**
    - 监听设备主动上报（或在官方软件运行时通过共享 HID 句柄监听回复）：`wireless-battery probe <device-id> --listen 5000`（插拔充电线或操作设备观察变化）。
