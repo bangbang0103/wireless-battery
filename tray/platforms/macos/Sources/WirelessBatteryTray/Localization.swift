@@ -78,7 +78,7 @@ enum AppLanguage: Equatable {
     }
 
     var openRepositoryLabel: String {
-        isZh ? "查看" : "Open Repository"
+        isZh ? "打开仓库" : "Open Repository"
     }
 
     func toastQqCopied(_ group: String) -> String {

@@ -676,7 +676,7 @@ impl Lang {
 
     pub const fn open_repository_label(self) -> &'static str {
         match self {
-            Self::ZhCn => "查看",
+            Self::ZhCn => "打开仓库",
             Self::En => "Open Repository",
         }
     }
