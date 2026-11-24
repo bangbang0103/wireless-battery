@@ -644,12 +644,10 @@ mod win_app {
                         }
                     }
                     CommunityLinkKind::Qq => {
-                        if !links.qq_url.is_empty() && is_valid_http_url(links.qq_url) {
-                            updater::open_url(links.qq_url);
-                        } else if !links.qq_group.is_empty() {
+                        if !links.qq_group.is_empty() {
                             if copy_text_to_clipboard(host.popover.hwnd(), links.qq_group) {
                                 host.popover
-                                    .show_feedback(&lang.toast_qq_copied(links.qq_group));
+                                    .show_feedback(lang.toast_qq_copied(links.qq_group));
                             } else {
                                 host.popover.show_feedback(lang.toast_copy_failed());
                             }
@@ -658,8 +656,12 @@ mod win_app {
                         }
                     }
                     CommunityLinkKind::Discord => {
-                        if !links.discord_url.is_empty() && is_valid_http_url(links.discord_url) {
-                            updater::open_url(links.discord_url);
+                        if !links.discord_url.is_empty() {
+                            if copy_text_to_clipboard(host.popover.hwnd(), links.discord_url) {
+                                host.popover.show_feedback(lang.toast_discord_copied());
+                            } else {
+                                host.popover.show_feedback(lang.toast_copy_failed());
+                            }
                         } else {
                             host.popover.show_feedback(lang.toast_discord_coming_soon());
                         }

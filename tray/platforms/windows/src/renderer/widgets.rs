@@ -8,11 +8,12 @@ use crate::theme::{lerp_color, with_alpha, Palette};
 use windows::core::{w, HSTRING, PCWSTR};
 use windows::Win32::Foundation::BOOL;
 use windows::Win32::Graphics::Direct2D::Common::{
-    D2D1_COLOR_F, D2D1_FIGURE_BEGIN_FILLED, D2D1_FIGURE_END_CLOSED, D2D_POINT_2F, D2D_RECT_F,
+    D2D1_BEZIER_SEGMENT, D2D1_COLOR_F, D2D1_FIGURE_BEGIN_FILLED, D2D1_FIGURE_END_CLOSED,
+    D2D_POINT_2F, D2D_RECT_F,
 };
 use windows::Win32::Graphics::Direct2D::{
-    ID2D1Factory, ID2D1HwndRenderTarget, ID2D1SolidColorBrush, D2D1_BEZIER_SEGMENT,
-    D2D1_DRAW_TEXT_OPTIONS_CLIP, D2D1_ROUNDED_RECT,
+    ID2D1Factory, ID2D1HwndRenderTarget, ID2D1SolidColorBrush, D2D1_DRAW_TEXT_OPTIONS_CLIP,
+    D2D1_ELLIPSE, D2D1_ROUNDED_RECT,
 };
 use windows::Win32::Graphics::DirectWrite::{
     IDWriteFactory, IDWriteTextFormat, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
@@ -48,8 +49,6 @@ pub(super) const GLYPH_HEADSET: &str = "\u{E7F6}";
 pub(super) const GLYPH_PERIPHERAL: &str = "\u{E857}";
 pub(super) const GLYPH_CHARGING_BOLT: &str = "\u{E945}";
 pub(super) const GLYPH_INFO: &str = "\u{E946}";
-pub(super) const GLYPH_CODE: &str = "\u{E943}";
-pub(super) const GLYPH_FEEDBACK: &str = "\u{ED15}";
 pub(super) const GLYPH_PEOPLE: &str = "\u{E716}";
 
 /// Single cached Direct2D solid color brush reused across draw calls on a render target.
@@ -571,7 +570,7 @@ pub(super) unsafe fn draw_toast(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) unsafe fn draw_community_link_button(
+pub(super) unsafe fn draw_community_icon_button(
     d2d: &ID2D1Factory,
     rt: &ID2D1HwndRenderTarget,
     formats: &TextFormats,
@@ -585,17 +584,16 @@ pub(super) unsafe fn draw_community_link_button(
     let target = HitTarget::OpenCommunityLink(kind);
     let hovered = ui.hovered.as_ref() == Some(&target);
     let pressed = ui.pressed.as_ref() == Some(&target);
-    let rr = rounded_rect(rect, CONTROL_RADIUS);
     if pressed || hovered {
         let fill = if pressed {
             &palette.subtle_pressed
         } else {
             &palette.subtle_hover
         };
-        rt.FillRoundedRectangle(&rr, brush.color(fill));
+        rt.FillRoundedRectangle(&rounded_rect(rect, CONTROL_RADIUS), brush.color(fill));
     }
 
-    let icon_color = if hovered || pressed {
+    let color = if hovered || pressed {
         palette.text_primary
     } else {
         palette.text_secondary
@@ -607,63 +605,14 @@ pub(super) unsafe fn draw_community_link_button(
         icon_size,
         icon_size,
     );
-    draw_community_icon(d2d, rt, formats, brush, kind, icon_rect, &icon_color);
+    draw_community_icon(d2d, rt, formats, brush, kind, icon_rect, &color);
     hit_regions.push(HitRegion { rect, target });
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(super) unsafe fn draw_hover_tooltip(
+pub(super) unsafe fn draw_community_icon(
     d2d: &ID2D1Factory,
     rt: &ID2D1HwndRenderTarget,
-    formats: &TextFormats,
-    brush: &PaintBrush,
-    width: f32,
-    list_bottom: f32,
-    palette: &Palette,
-    kind: CommunityLinkKind,
-    text: &str,
-) {
-    let est_w = (estimate_text_width(text) + 46.0).clamp(132.0, width - 24.0);
-    let pill_h = 30.0;
-    let rect = D2D_RECT_F {
-        left: (width - est_w - 12.0).max(12.0),
-        top: list_bottom - pill_h - 8.0,
-        right: width - 12.0,
-        bottom: list_bottom - 8.0,
-    };
-    let rr = rounded_rect(rect, CARD_RADIUS);
-    rt.FillRoundedRectangle(&rr, brush.color(&palette.toast_bg));
-    rt.DrawRoundedRectangle(&rr, brush.color(&palette.toast_border), 1.0, None);
-
-    let icon_rect = rect_xywh(
-        rect.left + 11.0,
-        rect.top + (pill_h - 11.0) * 0.5,
-        11.0,
-        11.0,
-    );
-    draw_community_icon(
-        d2d,
-        rt,
-        formats,
-        brush,
-        kind,
-        icon_rect,
-        &palette.text_secondary,
-    );
-    draw_text(
-        rt,
-        text,
-        &formats.caption,
-        rect_xywh(rect.left + 28.0, rect.top, est_w - 36.0, pill_h),
-        &palette.toast_text,
-        brush,
-    );
-}
-
-unsafe fn draw_community_icon(
-    d2d: &ID2D1Factory,
-    rt: &ID2D1HwndRenderTarget,
-    formats: &TextFormats,
+    _formats: &TextFormats,
     brush: &PaintBrush,
     kind: CommunityLinkKind,
     rect: D2D_RECT_F,
@@ -671,13 +620,31 @@ unsafe fn draw_community_icon(
 ) {
     match kind {
         CommunityLinkKind::BugReport => {
-            draw_text(
-                rt,
-                GLYPH_FEEDBACK,
-                &formats.icon_small,
-                rect_xywh(rect.left - 1.0, rect.top - 1.0, 14.0, 14.0),
-                color,
-                brush,
+            let w = rect.right - rect.left;
+            let h = rect.bottom - rect.top;
+            let point = D2D_POINT_2F {
+                x: (rect.left + rect.right) * 0.5,
+                y: (rect.top + rect.bottom) * 0.5,
+            };
+            let radius = w.min(h) * 0.5 - 0.75;
+            rt.DrawEllipse(
+                &D2D1_ELLIPSE {
+                    point,
+                    radiusX: radius,
+                    radiusY: radius,
+                },
+                brush.color(color),
+                1.2,
+                None,
+            );
+            let dot_radius = (w.min(h) * 0.13).max(1.0);
+            rt.FillEllipse(
+                &D2D1_ELLIPSE {
+                    point,
+                    radiusX: dot_radius,
+                    radiusY: dot_radius,
+                },
+                brush.color(color),
             );
         }
         CommunityLinkKind::SourceRepo => {
