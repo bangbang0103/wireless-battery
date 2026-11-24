@@ -12,13 +12,13 @@ pub const REPO_URL: &str = "https://github.com/bangbang0103/wireless-battery";
 pub const ISSUES_URL: &str = "https://github.com/bangbang0103/wireless-battery/issues";
 
 /// QQ group number displayed on hover (empty until configured).
-pub const QQ_GROUP_NUMBER: &str = "";
+pub const QQ_GROUP_NUMBER: &str = "1137618759";
 
 /// QQ group share / invite URL opened on click (empty until configured).
 pub const QQ_GROUP_URL: &str = "";
 
 /// Discord server invite URL (empty until configured).
-pub const DISCORD_INVITE_URL: &str = "";
+pub const DISCORD_INVITE_URL: &str = "https://discord.gg/Dd4vJeaD3g";
 
 /// Serializable bundle of project and community links exposed over FFI.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
