@@ -20,6 +20,11 @@ pub(super) const ROW_EXPANDED_EXTRA_H: f32 = 106.0;
 pub(super) const SETTINGS_CARD_H: f32 = 56.0;
 pub(super) const SETTINGS_SUBROW_H: f32 = 48.0;
 pub(super) const SETTINGS_CARD_GAP: f32 = 4.0;
+pub(super) const SETTINGS_ACTION_BUTTON_W_ZH: f32 = 88.0;
+pub(super) const SETTINGS_ACTION_BUTTON_W_EN: f32 = 112.0;
+pub(super) const SETTINGS_ACTION_BUTTON_H: f32 = 28.0;
+pub(super) const SETTINGS_ICON_BUTTON_SIZE: f32 = 26.0;
+pub(super) const SETTINGS_ICON_BUTTON_GAP: f32 = 3.0;
 
 /// Active view inside the single-popover experience.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

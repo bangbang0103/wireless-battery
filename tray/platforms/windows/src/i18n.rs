@@ -667,37 +667,17 @@ impl Lang {
         "QQ · Discord"
     }
 
-    pub const fn link_feedback_hover(self) -> &'static str {
+    pub const fn submit_feedback_label(self) -> &'static str {
         match self {
-            Self::ZhCn => "提交反馈",
+            Self::ZhCn => "反馈",
             Self::En => "Submit Feedback",
         }
     }
 
-    pub const fn link_repo_hover(self) -> &'static str {
+    pub const fn open_repository_label(self) -> &'static str {
         match self {
-            Self::ZhCn => "查看源码",
-            Self::En => "View Source",
-        }
-    }
-
-    pub fn link_qq_hover(self, group: &str) -> String {
-        if !group.is_empty() {
-            return match self {
-                Self::ZhCn => format!("QQ 群：{group}"),
-                Self::En => format!("QQ Group: {group}"),
-            };
-        }
-        match self {
-            Self::ZhCn => "QQ 交流群".to_owned(),
-            Self::En => "QQ Group".to_owned(),
-        }
-    }
-
-    pub const fn link_discord_hover(self) -> &'static str {
-        match self {
-            Self::ZhCn => "Discord 社区",
-            Self::En => "Discord",
+            Self::ZhCn => "查看",
+            Self::En => "Open Repository",
         }
     }
 
@@ -710,8 +690,15 @@ impl Lang {
 
     pub const fn toast_qq_coming_soon(self) -> &'static str {
         match self {
-            Self::ZhCn => "QQ 交流群链接待补充",
-            Self::En => "QQ group link coming soon",
+            Self::ZhCn => "QQ 群号待补充",
+            Self::En => "QQ group number coming soon",
+        }
+    }
+
+    pub const fn toast_discord_copied(self) -> &'static str {
+        match self {
+            Self::ZhCn => "已复制 Discord 邀请链接",
+            Self::En => "Discord invite link copied",
         }
     }
 

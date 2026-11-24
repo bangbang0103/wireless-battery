@@ -17,7 +17,7 @@ pub const QQ_GROUP_NUMBER: &str = "";
 /// QQ group share / invite URL opened on click (empty until configured).
 pub const QQ_GROUP_URL: &str = "";
 
-/// Discord server invite URL opened on click (empty until configured).
+/// Discord server invite URL (empty until configured).
 pub const DISCORD_INVITE_URL: &str = "";
 
 /// Serializable bundle of project and community links exposed over FFI.

@@ -73,23 +73,12 @@ enum AppLanguage: Equatable {
     var settingCommunityTitle: String { isZh ? "社区交流" : "Community" }
     var settingCommunityDesc: String { "QQ · Discord" }
 
-    var linkFeedbackHover: String {
-        isZh ? "提交反馈" : "Submit Feedback"
+    var submitFeedbackLabel: String {
+        isZh ? "反馈" : "Submit Feedback"
     }
 
-    var linkRepoHover: String {
-        isZh ? "查看源码" : "View Source"
-    }
-
-    func linkQqHover(group: String) -> String {
-        if !group.isEmpty {
-            return isZh ? "QQ 群：\(group)" : "QQ Group: \(group)"
-        }
-        return isZh ? "QQ 交流群" : "QQ Group"
-    }
-
-    var linkDiscordHover: String {
-        isZh ? "Discord 社区" : "Discord"
+    var openRepositoryLabel: String {
+        isZh ? "查看" : "Open Repository"
     }
 
     func toastQqCopied(_ group: String) -> String {
@@ -97,7 +86,11 @@ enum AppLanguage: Equatable {
     }
 
     var toastQqComingSoon: String {
-        isZh ? "QQ 交流群链接待补充" : "QQ group link coming soon"
+        isZh ? "QQ 群号待补充" : "QQ group number coming soon"
+    }
+
+    var toastDiscordCopied: String {
+        isZh ? "已复制 Discord 邀请链接" : "Discord invite link copied"
     }
 
     var toastDiscordComingSoon: String {

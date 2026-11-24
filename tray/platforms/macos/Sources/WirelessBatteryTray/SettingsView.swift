@@ -11,7 +11,6 @@ enum CommunityLinkKind: Equatable {
 struct SettingsView: View {
     @ObservedObject var store: TrayStore
     let onBack: () -> Void
-    @State private var hoveredLink: CommunityLinkKind?
     @State private var toastMessage: String?
     @State private var toastIsSuccess = true
 
@@ -207,35 +206,31 @@ struct SettingsView: View {
 
                 // Group 5: Source Repository
                 MacSettingsGroup {
-                    MacPickerRow(
-                        icon: "chevron.left.forwardslash.chevron.right",
+                    MacCommunityRow(
+                        kind: .sourceRepo,
                         title: lang.settingSourceTitle,
                         subtitle: lang.settingSourceDesc
                     ) {
-                        CommunityIconButton(
-                            kind: .sourceRepo,
-                            help: lang.linkRepoHover,
-                            hoveredLink: $hoveredLink
-                        ) {
+                        Button(lang.openRepositoryLabel) {
                             handleCommunityLinkTap(.sourceRepo)
                         }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                     }
                 }
 
                 // Group 6: Feedback
                 MacSettingsGroup {
-                    MacPickerRow(
-                        icon: "exclamationmark.bubble",
+                    MacCommunityRow(
+                        kind: .bugReport,
                         title: lang.settingFeedbackTitle,
                         subtitle: lang.settingFeedbackDesc
                     ) {
-                        CommunityIconButton(
-                            kind: .bugReport,
-                            help: lang.linkFeedbackHover,
-                            hoveredLink: $hoveredLink
-                        ) {
+                        Button(lang.submitFeedbackLabel) {
                             handleCommunityLinkTap(.bugReport)
                         }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                     }
                 }
 
@@ -247,18 +242,10 @@ struct SettingsView: View {
                         subtitle: lang.settingCommunityDesc
                     ) {
                         HStack(spacing: 3) {
-                            CommunityIconButton(
-                                kind: .qq,
-                                help: lang.linkQqHover(group: store.communityLinks.qqGroup),
-                                hoveredLink: $hoveredLink
-                            ) {
+                            CommunityIconButton(kind: .qq, accessibilityLabel: "QQ") {
                                 handleCommunityLinkTap(.qq)
                             }
-                            CommunityIconButton(
-                                kind: .discord,
-                                help: lang.linkDiscordHover,
-                                hoveredLink: $hoveredLink
-                            ) {
+                            CommunityIconButton(kind: .discord, accessibilityLabel: "Discord") {
                                 handleCommunityLinkTap(.discord)
                             }
                         }
@@ -286,22 +273,6 @@ struct SettingsView: View {
                 .padding(.bottom, 64)
                 .allowsHitTesting(false)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            } else if let hovered = hoveredLink {
-                HStack(spacing: 5) {
-                    CommunityLinkIcon(kind: hovered, size: 11)
-                        .foregroundStyle(.secondary)
-                    Text(hoverLabel(for: hovered))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.primary)
-                }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 5)
-                .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
-                .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
-                .padding(.bottom, 64)
-                .allowsHitTesting(false)
-                .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
         }
     }
@@ -320,19 +291,6 @@ struct SettingsView: View {
         }
     }
 
-    private func hoverLabel(for kind: CommunityLinkKind) -> String {
-        switch kind {
-        case .bugReport:
-            return lang.linkFeedbackHover
-        case .sourceRepo:
-            return lang.linkRepoHover
-        case .qq:
-            return lang.linkQqHover(group: store.communityLinks.qqGroup)
-        case .discord:
-            return lang.linkDiscordHover
-        }
-    }
-
     private func handleCommunityLinkTap(_ kind: CommunityLinkKind) {
         let links = store.communityLinks
         switch kind {
@@ -345,12 +303,7 @@ struct SettingsView: View {
                 NSWorkspace.shared.open(url)
             }
         case .qq:
-            if !links.qqUrl.isEmpty,
-               let url = URL(string: links.qqUrl),
-               url.scheme == "https" || url.scheme == "http"
-            {
-                NSWorkspace.shared.open(url)
-            } else if !links.qqGroup.isEmpty {
+            if !links.qqGroup.isEmpty {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(links.qqGroup, forType: .string)
                 showToast(lang.toastQqCopied(links.qqGroup), success: true)
@@ -358,11 +311,10 @@ struct SettingsView: View {
                 showToast(lang.toastQqComingSoon, success: false)
             }
         case .discord:
-            if !links.discordUrl.isEmpty,
-               let url = URL(string: links.discordUrl),
-               url.scheme == "https" || url.scheme == "http"
-            {
-                NSWorkspace.shared.open(url)
+            if !links.discordUrl.isEmpty {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(links.discordUrl, forType: .string)
+                showToast(lang.toastDiscordCopied, success: true)
             } else {
                 showToast(lang.toastDiscordComingSoon, success: false)
             }
@@ -408,6 +360,37 @@ private struct MacSettingsGroup<Content: View>: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
         )
+    }
+}
+
+private struct MacCommunityRow<Control: View>: View {
+    let kind: CommunityLinkKind
+    let title: String
+    var subtitle: String? = nil
+    @ViewBuilder let control: () -> Control
+
+    var body: some View {
+        HStack(spacing: 10) {
+            CommunityLinkIcon(kind: kind, size: 13)
+                .foregroundStyle(.secondary)
+                .frame(width: 18, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+            control()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
     }
 }
 
@@ -483,13 +466,9 @@ private struct MacToggleRow: View {
 
 private struct CommunityIconButton: View {
     let kind: CommunityLinkKind
-    let help: String
-    @Binding var hoveredLink: CommunityLinkKind?
+    let accessibilityLabel: String
     let action: () -> Void
-
-    private var isHovered: Bool {
-        hoveredLink == kind
-    }
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
@@ -504,14 +483,10 @@ private struct CommunityIconButton: View {
         .buttonStyle(.plain)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.12)) {
-                if hovering {
-                    hoveredLink = kind
-                } else if hoveredLink == kind {
-                    hoveredLink = nil
-                }
+                isHovered = hovering
             }
         }
-        .help(help)
+        .accessibilityLabel(Text(accessibilityLabel))
     }
 }
 
@@ -522,8 +497,15 @@ private struct CommunityLinkIcon: View {
     var body: some View {
         switch kind {
         case .bugReport:
-            Image(systemName: "exclamationmark.bubble")
-                .font(.system(size: size - 0.5, weight: .medium))
+            ZStack {
+                Circle()
+                    .stroke(lineWidth: 1.1)
+                    .padding(0.5)
+                Circle()
+                    .fill()
+                    .frame(width: size * 0.22, height: size * 0.22)
+            }
+            .frame(width: size, height: size)
         case .sourceRepo:
             GitHubIconShape()
                 .fill(style: FillStyle(eoFill: true))

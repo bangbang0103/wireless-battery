@@ -2,15 +2,16 @@
 
 use super::anim::{
     CommunityLinkKind, HitRegion, HitTarget, OpenDropdown, UiState, UpdateUiStatus, CARD_RADIUS,
-    CONTROL_RADIUS, HEADER_HEIGHT, OUTER_PADDING, SETTINGS_CARD_GAP, SETTINGS_CARD_H,
-    SETTINGS_SUBROW_H,
+    CONTROL_RADIUS, HEADER_HEIGHT, OUTER_PADDING, SETTINGS_ACTION_BUTTON_H,
+    SETTINGS_ACTION_BUTTON_W_EN, SETTINGS_ACTION_BUTTON_W_ZH, SETTINGS_CARD_GAP, SETTINGS_CARD_H,
+    SETTINGS_ICON_BUTTON_GAP, SETTINGS_ICON_BUTTON_SIZE, SETTINGS_SUBROW_H,
 };
 use super::widgets::{
-    draw_community_link_button, draw_elevated_card, draw_hover_tooltip, draw_standard_button,
+    draw_community_icon, draw_community_icon_button, draw_elevated_card, draw_standard_button,
     draw_subtle_icon_button, draw_text, draw_win11_toggle_switch, rect_xywh, rounded_rect,
     PaintBrush, TextFormats, GLYPH_BACK, GLYPH_CHEVRON_DOWN, GLYPH_CHEVRON_UP, GLYPH_CLOCK,
-    GLYPH_CODE, GLYPH_COLOR_THEME, GLYPH_FEEDBACK, GLYPH_INFO, GLYPH_LANGUAGE, GLYPH_PEOPLE,
-    GLYPH_POWER, GLYPH_RINGER, GLYPH_RINGER_SILENT,
+    GLYPH_COLOR_THEME, GLYPH_INFO, GLYPH_LANGUAGE, GLYPH_PEOPLE, GLYPH_POWER, GLYPH_RINGER,
+    GLYPH_RINGER_SILENT,
 };
 use crate::i18n::Lang;
 use crate::theme::{with_alpha, Palette, SystemTheme};
@@ -19,7 +20,7 @@ use windows::Win32::Graphics::Direct2D::Common::{D2D_POINT_2F, D2D_RECT_F};
 use windows::Win32::Graphics::Direct2D::{
     ID2D1Factory, ID2D1HwndRenderTarget, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
 };
-use wireless_battery_tray_core::{community_links, LanguageMode, ThemeMode, TraySnapshot};
+use wireless_battery_tray_core::{LanguageMode, ThemeMode, TraySnapshot};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) unsafe fn draw_settings_view(
@@ -259,6 +260,13 @@ pub(super) unsafe fn draw_settings_view(
     });
     y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
 
+    let action_btn_w = if lang.is_zh() {
+        SETTINGS_ACTION_BUTTON_W_ZH
+    } else {
+        SETTINGS_ACTION_BUTTON_W_EN
+    };
+    let action_btn_h = SETTINGS_ACTION_BUTTON_H;
+
     // Card 7: Version & Check for Updates
     let ver_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
     let ver_desc = match &ui.update_status {
@@ -277,7 +285,6 @@ pub(super) unsafe fn draw_settings_view(
             lang.btn_check_updates()
         }
     };
-    let btn_w = if lang.is_zh() { 76.0 } else { 78.0 };
     draw_settings_card_base(
         rt,
         formats,
@@ -286,16 +293,16 @@ pub(super) unsafe fn draw_settings_view(
         GLYPH_INFO,
         lang.setting_version_title(),
         &ver_desc,
-        btn_w + 22.0,
+        action_btn_w + 22.0,
         palette,
         false,
         false,
     );
     let btn_rect = rect_xywh(
-        ver_card.right - 14.0 - btn_w,
-        ver_card.top + (SETTINGS_CARD_H - 28.0) * 0.5,
-        btn_w,
-        28.0,
+        ver_card.right - 14.0 - action_btn_w,
+        ver_card.top + (SETTINGS_CARD_H - action_btn_h) * 0.5,
+        action_btn_w,
+        action_btn_h,
     );
     let btn_alpha = if matches!(ui.update_status, UpdateUiStatus::Checking) {
         0.55
@@ -319,37 +326,46 @@ pub(super) unsafe fn draw_settings_view(
 
     // Card 8: Source Code
     let source_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    let icon_btn_size = 26.0;
-    let icon_gap = 3.0;
     draw_settings_card_base(
         rt,
         formats,
         brush,
         source_card,
-        GLYPH_CODE,
+        "",
         lang.setting_source_title(),
         lang.setting_source_desc(),
-        icon_btn_size + 22.0,
+        action_btn_w + 22.0,
         palette,
         false,
         false,
     );
-    let source_btn_rect = rect_xywh(
-        source_card.right - 14.0 - icon_btn_size,
-        source_card.top + (SETTINGS_CARD_H - icon_btn_size) * 0.5,
-        icon_btn_size,
-        icon_btn_size,
-    );
-    draw_community_link_button(
+    draw_community_icon(
         d2d,
+        rt,
+        formats,
+        brush,
+        CommunityLinkKind::SourceRepo,
+        rect_xywh(source_card.left + 17.0, source_card.top + 20.0, 16.0, 16.0),
+        &palette.icon_stroke,
+    );
+    let source_btn_rect = rect_xywh(
+        source_card.right - 14.0 - action_btn_w,
+        source_card.top + (SETTINGS_CARD_H - action_btn_h) * 0.5,
+        action_btn_w,
+        action_btn_h,
+    );
+    draw_standard_button(
         rt,
         formats,
         brush,
         hit_regions,
         source_btn_rect,
-        CommunityLinkKind::SourceRepo,
+        None,
+        lang.open_repository_label(),
+        HitTarget::OpenCommunityLink(CommunityLinkKind::SourceRepo),
         palette,
         ui,
+        1.0,
     );
     y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
 
@@ -360,36 +376,54 @@ pub(super) unsafe fn draw_settings_view(
         formats,
         brush,
         feedback_card,
-        GLYPH_FEEDBACK,
+        "",
         lang.setting_feedback_title(),
         lang.setting_feedback_desc(),
-        icon_btn_size + 22.0,
+        action_btn_w + 22.0,
         palette,
         false,
         false,
     );
-    let feedback_btn_rect = rect_xywh(
-        feedback_card.right - 14.0 - icon_btn_size,
-        feedback_card.top + (SETTINGS_CARD_H - icon_btn_size) * 0.5,
-        icon_btn_size,
-        icon_btn_size,
-    );
-    draw_community_link_button(
+    draw_community_icon(
         d2d,
+        rt,
+        formats,
+        brush,
+        CommunityLinkKind::BugReport,
+        rect_xywh(
+            feedback_card.left + 17.0,
+            feedback_card.top + 20.0,
+            16.0,
+            16.0,
+        ),
+        &palette.icon_stroke,
+    );
+    let feedback_btn_rect = rect_xywh(
+        feedback_card.right - 14.0 - action_btn_w,
+        feedback_card.top + (SETTINGS_CARD_H - action_btn_h) * 0.5,
+        action_btn_w,
+        action_btn_h,
+    );
+    draw_standard_button(
         rt,
         formats,
         brush,
         hit_regions,
         feedback_btn_rect,
-        CommunityLinkKind::BugReport,
+        None,
+        lang.submit_feedback_label(),
+        HitTarget::OpenCommunityLink(CommunityLinkKind::BugReport),
         palette,
         ui,
+        1.0,
     );
     y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
 
     // Card 10: Community (QQ & Discord)
     let community_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    let community_icons_w = icon_btn_size * 2.0 + icon_gap;
+    let icon_btn_size = SETTINGS_ICON_BUTTON_SIZE;
+    let icon_gap = SETTINGS_ICON_BUTTON_GAP;
+    let community_buttons_w = icon_btn_size * 2.0 + icon_gap;
     draw_settings_card_base(
         rt,
         formats,
@@ -398,25 +432,25 @@ pub(super) unsafe fn draw_settings_view(
         GLYPH_PEOPLE,
         lang.setting_community_title(),
         lang.setting_community_desc(),
-        community_icons_w + 22.0,
+        community_buttons_w + 22.0,
         palette,
         false,
         false,
     );
-    let community_icon_y = community_card.top + (SETTINGS_CARD_H - icon_btn_size) * 0.5;
+    let community_btn_y = community_card.top + (SETTINGS_CARD_H - icon_btn_size) * 0.5;
     let discord_rect = rect_xywh(
         community_card.right - 14.0 - icon_btn_size,
-        community_icon_y,
+        community_btn_y,
         icon_btn_size,
         icon_btn_size,
     );
     let qq_rect = rect_xywh(
         discord_rect.left - icon_gap - icon_btn_size,
-        community_icon_y,
+        community_btn_y,
         icon_btn_size,
         icon_btn_size,
     );
-    draw_community_link_button(
+    draw_community_icon_button(
         d2d,
         rt,
         formats,
@@ -427,7 +461,7 @@ pub(super) unsafe fn draw_settings_view(
         palette,
         ui,
     );
-    draw_community_link_button(
+    draw_community_icon_button(
         d2d,
         rt,
         formats,
@@ -452,36 +486,6 @@ pub(super) unsafe fn draw_settings_view(
     }
 
     rt.PopAxisAlignedClip();
-
-    if ui.open_dropdown.is_none() && ui.feedback_banner.is_none() {
-        if let Some(HitTarget::OpenCommunityLink(kind)) = ui.hovered {
-            let links = community_links();
-            let (anchor_top, hover_text) = match kind {
-                CommunityLinkKind::SourceRepo => {
-                    (source_card.top, lang.link_repo_hover().to_owned())
-                }
-                CommunityLinkKind::BugReport => {
-                    (feedback_card.top, lang.link_feedback_hover().to_owned())
-                }
-                CommunityLinkKind::Qq => (community_card.top, lang.link_qq_hover(links.qq_group)),
-                CommunityLinkKind::Discord => {
-                    (community_card.top, lang.link_discord_hover().to_owned())
-                }
-            };
-            let clamped_anchor = anchor_top.clamp(HEADER_HEIGHT + 40.0, height - 8.0);
-            draw_hover_tooltip(
-                d2d,
-                rt,
-                formats,
-                brush,
-                width,
-                clamped_anchor,
-                palette,
-                kind,
-                &hover_text,
-            );
-        }
-    }
 
     // --- WinUI 3 ComboBox Dropdown Flyout Overlay (if open) ---
     if let Some(open) = ui.open_dropdown {
