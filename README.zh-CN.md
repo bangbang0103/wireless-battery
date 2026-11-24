@@ -168,4 +168,9 @@ if let Some(device) = devices.iter().find(|device| device.readable) {
 
 请从[设备贡献指南](docs/contributing-device.zh-CN.md)开始。简单的固定协议优先使用 `FixedSpec`，需要动态协商的逻辑使用聚焦的 `Provider` 在 `src/providers/vendors/{protocols,brands}/` 下实现。
 
+## 社区交流
+
+- **QQ 群**：`1137618759`
+- **Discord**：[加入 Discord](https://discord.gg/Dd4vJeaD3g)
+
 本项目基于 [GNU GPL-3.0 或更高版本](LICENSE)开源。

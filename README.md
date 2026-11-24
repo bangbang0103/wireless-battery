@@ -168,4 +168,9 @@ Follow these steps in order:
 
 Start with [device contributions](docs/contributing-device.md). Simple fixed protocols should use `FixedSpec`; dynamic negotiation belongs in a focused `Provider` under `src/providers/vendors/{protocols,brands}/`.
 
+## Community
+
+- **QQ Group**: `1137618759`
+- **Discord**: [Join Discord](https://discord.gg/Dd4vJeaD3g)
+
 Licensed under the [GNU General Public License v3.0 or later](LICENSE).
