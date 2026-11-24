@@ -73,10 +73,10 @@ impl Lang {
     pub fn empty_hint(self) -> String {
         match self {
             Self::ZhCn => {
-                "被动枚举未匹配到已知接收器或外设，请确认接收器已接入并处于唤醒状态。".to_owned()
+                "未检测到已匹配的无线外设，请确认接收器已连接且设备处于唤醒状态。".to_owned()
             }
             Self::En => {
-                "No known receiver or peripheral matched. Make sure the receiver is plugged in and awake."
+                "No matched wireless peripherals found. Make sure the receiver is plugged in and the device is awake."
                     .to_owned()
             }
         }
@@ -121,7 +121,7 @@ impl Lang {
 
     pub const fn status_stale(self) -> &'static str {
         match self {
-            Self::ZhCn => "缓存（Stale）",
+            Self::ZhCn => "缓存（非实时）",
             Self::En => "Stale (cached)",
         }
     }
@@ -143,7 +143,7 @@ impl Lang {
     pub const fn btn_copy_error(self) -> &'static str {
         match self {
             Self::ZhCn => "复制报错",
-            Self::En => "Copy error",
+            Self::En => "Copy Error",
         }
     }
 
@@ -158,10 +158,10 @@ impl Lang {
 
     pub const fn setting_theme_desc(self, mode: ThemeMode, system_dark: bool) -> &'static str {
         match (self, mode, system_dark) {
-            (Self::ZhCn, ThemeMode::System, true) => "当前跟随系统（暗黑）",
-            (Self::ZhCn, ThemeMode::System, false) => "当前跟随系统（明亮）",
-            (Self::ZhCn, ThemeMode::Light, _) => "始终使用明亮外观",
-            (Self::ZhCn, ThemeMode::Dark, _) => "始终使用暗黑外观",
+            (Self::ZhCn, ThemeMode::System, true) => "当前跟随系统（深色）",
+            (Self::ZhCn, ThemeMode::System, false) => "当前跟随系统（浅色）",
+            (Self::ZhCn, ThemeMode::Light, _) => "始终使用浅色外观",
+            (Self::ZhCn, ThemeMode::Dark, _) => "始终使用深色外观",
             (Self::En, ThemeMode::System, true) => "Following system (Dark)",
             (Self::En, ThemeMode::System, false) => "Following system (Light)",
             (Self::En, ThemeMode::Light, _) => "Always use light theme",
@@ -172,8 +172,8 @@ impl Lang {
     pub const fn theme_mode_label(self, mode: ThemeMode) -> &'static str {
         match (self, mode) {
             (Self::ZhCn, ThemeMode::System) => "跟随系统",
-            (Self::ZhCn, ThemeMode::Light) => "明亮",
-            (Self::ZhCn, ThemeMode::Dark) => "暗黑",
+            (Self::ZhCn, ThemeMode::Light) => "浅色",
+            (Self::ZhCn, ThemeMode::Dark) => "深色",
             (Self::En, ThemeMode::System) => "System",
             (Self::En, ThemeMode::Light) => "Light",
             (Self::En, ThemeMode::Dark) => "Dark",
@@ -210,7 +210,7 @@ impl Lang {
     pub const fn setting_poll_title(self) -> &'static str {
         match self {
             Self::ZhCn => "轮询频率",
-            Self::En => "Poll interval",
+            Self::En => "Poll Interval",
         }
     }
 
@@ -228,7 +228,7 @@ impl Lang {
     pub const fn setting_low_battery_title(self) -> &'static str {
         match self {
             Self::ZhCn => "低电量警告",
-            Self::En => "Low battery alert",
+            Self::En => "Low Battery Alert",
         }
     }
 
@@ -246,7 +246,7 @@ impl Lang {
     pub const fn setting_silent_title(self) -> &'static str {
         match self {
             Self::ZhCn => "静默通知",
-            Self::En => "Silent notifications",
+            Self::En => "Silent Notifications",
         }
     }
 
@@ -259,8 +259,8 @@ impl Lang {
 
     pub const fn setting_autostart_title(self) -> &'static str {
         match self {
-            Self::ZhCn => "开机静默自启",
-            Self::En => "Launch at startup",
+            Self::ZhCn => "开机自启",
+            Self::En => "Launch at Startup",
         }
     }
 
@@ -274,7 +274,7 @@ impl Lang {
     pub const fn setting_version_title(self) -> &'static str {
         match self {
             Self::ZhCn => "版本与更新",
-            Self::En => "Version & updates",
+            Self::En => "Version & Updates",
         }
     }
 
@@ -338,7 +338,7 @@ impl Lang {
 
     pub const fn toast_pinned(self) -> &'static str {
         match self {
-            Self::ZhCn => "已置顶（移出鼠标隐藏背景）",
+            Self::ZhCn => "已置顶（鼠标移开后背景透明）",
             Self::En => "Pinned (transparent when unfocused)",
         }
     }
@@ -389,14 +389,14 @@ impl Lang {
 
     pub const fn menu_theme_light(self) -> &'static str {
         match self {
-            Self::ZhCn => "明亮模式",
+            Self::ZhCn => "浅色模式",
             Self::En => "Light",
         }
     }
 
     pub const fn menu_theme_dark(self) -> &'static str {
         match self {
-            Self::ZhCn => "暗黑模式",
+            Self::ZhCn => "深色模式",
             Self::En => "Dark",
         }
     }
@@ -411,28 +411,28 @@ impl Lang {
     pub const fn menu_low_battery(self) -> &'static str {
         match self {
             Self::ZhCn => "低电量警告",
-            Self::En => "Low battery alert",
+            Self::En => "Low Battery Alert",
         }
     }
 
     pub const fn menu_silent_notify(self) -> &'static str {
         match self {
             Self::ZhCn => "静默通知",
-            Self::En => "Silent notifications",
+            Self::En => "Silent Notifications",
         }
     }
 
     pub const fn menu_autostart(self) -> &'static str {
         match self {
             Self::ZhCn => "开机自启",
-            Self::En => "Launch at startup",
+            Self::En => "Launch at Startup",
         }
     }
 
     pub const fn menu_check_updates(self) -> &'static str {
         match self {
             Self::ZhCn => "检查更新",
-            Self::En => "Check for updates",
+            Self::En => "Check for Updates",
         }
     }
 
@@ -546,7 +546,7 @@ impl Lang {
             (Self::ZhCn, ErrorKind::PermissionDenied) => "权限不足",
             (Self::ZhCn, ErrorKind::DeviceDisconnected) => "连接已断开",
             (Self::ZhCn, ErrorKind::InvalidResponse | ErrorKind::ChecksumFailed) => "响应校验失败",
-            (Self::ZhCn, ErrorKind::Unsupported) => "策略未启用",
+            (Self::ZhCn, ErrorKind::Unsupported) => "暂不支持",
             (Self::ZhCn, _) => "读取失败",
             (Self::En, ErrorKind::Timeout) => "Timeout",
             (Self::En, ErrorKind::DeviceBusy) => "Device busy",
@@ -669,7 +669,7 @@ impl Lang {
 
     pub const fn submit_feedback_label(self) -> &'static str {
         match self {
-            Self::ZhCn => "反馈",
+            Self::ZhCn => "提交反馈",
             Self::En => "Submit Feedback",
         }
     }

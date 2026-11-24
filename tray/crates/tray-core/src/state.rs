@@ -147,7 +147,7 @@ pub fn format_tooltip_with_locale(devices: &[DeviceView], zh: bool) -> String {
     if devices.len() > 5 {
         let rem = devices.len() - 5;
         if zh {
-            lines.push(format!("+{rem} 台更多"));
+            lines.push(format!("还有 {rem} 台设备"));
         } else {
             lines.push(format!("+{rem} more"));
         }
