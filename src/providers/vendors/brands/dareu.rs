@@ -36,13 +36,17 @@ impl Provider for DareuProvider {
         )
     }
 
-    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
-        Some("DAREU A950 Air V2".to_owned())
+    fn display_name(&self, endpoint: &Endpoint) -> Option<String> {
+        Some(match endpoint.pid {
+            Some(0x1193) => "DAREU A950 Air".to_owned(),
+            Some(0x1154 | 0x1196) => "DAREU A950 Wing".to_owned(),
+            _ => "DAREU A950 Air V2".to_owned(),
+        })
     }
 
     fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
         if endpoint.vid == Some(0x260D)
-            && endpoint.pid == Some(0x1175)
+            && matches!(endpoint.pid, Some(0x1175 | 0x1193 | 0x1154 | 0x1196))
             && endpoint.usage_page == Some(0xFF02)
             && endpoint.usage == Some(2)
         {
@@ -58,15 +62,23 @@ impl Provider for DareuProvider {
         session: &mut dyn HidSession,
         deadline: Deadline,
     ) -> Result<ProviderReading, BatteryError> {
+        let wired = matches!(device.endpoint.pid, Some(0x1193 | 0x1196));
         let active = compx17_build(0x03);
-        query(
+        let link = query(
             session,
             device,
             deadline,
             active.clone(),
             Duration::from_millis(300),
-            |frame| Ok(compx17_validate(frame, 0x03, Some(&active))? && frame[6] == 1),
-        )?;
+            |frame| Ok(compx17_validate(frame, 0x03, Some(&active))? && (wired || frame[6] == 1)),
+        );
+        if !wired {
+            link?;
+        } else if let Err(error) = link {
+            if !matches!(error, BatteryError::Timeout { .. }) {
+                return Err(error);
+            }
+        }
         let req04 = compx17_build(0x04);
         let frame = query(
             session,

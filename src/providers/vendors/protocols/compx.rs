@@ -2,12 +2,11 @@
 
 use crate::error::BatteryError;
 use crate::model::{
-    DeviceKind, Endpoint, ProviderReading, Reachability, ReadingSource, SupportStatus,
+    ChargeState, DeviceKind, Endpoint, ProviderReading, Reachability, ReadingSource, SupportStatus,
 };
 use crate::providers::fixed::{
-    capabilities, charge_bool, checked_percentage, checksum_sum, drain_input,
-    experimental_metadata, reading, send_with_modes, wait_frame, FixedProvider, FixedSpec, OUTPUT,
-    OUTPUT_THEN_SET, SET_OUTPUT,
+    capabilities, checked_percentage, checksum_sum, drain_input, experimental_metadata, reading,
+    send_with_modes, wait_frame, FixedProvider, FixedSpec, OUTPUT, OUTPUT_THEN_SET, SET_OUTPUT,
 };
 use crate::providers::{Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata};
 use crate::transport::HidSession;
@@ -125,6 +124,15 @@ fn compx_query() -> Vec<u8> {
     compx17_build(0x04)
 }
 
+fn compx_charge_state(byte: u8) -> ChargeState {
+    match byte {
+        0 => ChargeState::Discharging,
+        1 => ChargeState::Charging,
+        2 => ChargeState::Full,
+        _ => ChargeState::Unknown,
+    }
+}
+
 fn parse_compx(frame: &[u8]) -> Result<Option<ProviderReading>, BatteryError> {
     if !compx17_validate(frame, 0x04, None)? {
         return Ok(None);
@@ -138,7 +146,7 @@ fn parse_compx(frame: &[u8]) -> Result<Option<ProviderReading>, BatteryError> {
     let voltage = u32::from(u16::from_be_bytes([frame[8], frame[9]]));
     Ok(Some(reading(
         Some(checked_percentage(frame[6])?),
-        charge_bool(frame[7]),
+        compx_charge_state(frame[7]),
         Some(voltage),
     )))
 }
@@ -334,7 +342,7 @@ impl Provider for Compx08Provider {
         let mv = u32::from(u16::from_be_bytes([bat[8], bat[9]]));
         Ok(reading(
             Some(pct),
-            charge_bool(bat[7]),
+            compx_charge_state(bat[7]),
             (mv > 0).then_some(mv),
         ))
     }

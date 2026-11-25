@@ -253,12 +253,12 @@ impl LogitechProvider {
         let feature_1000 = self.feature_index(session, device, deadline, index, 0x1000)?;
         if feature_1000 != 0 {
             let response = self.call(session, device, deadline, index, feature_1000, 0)?;
-            return parse_logitech_battery(&response, 0);
+            return parse_logitech_battery(&response);
         }
         let feature_1004 = self.feature_index(session, device, deadline, index, 0x1004)?;
         if feature_1004 != 0 {
             let response = self.call(session, device, deadline, index, feature_1004, 1)?;
-            return parse_logitech_battery(&response, 1);
+            return parse_logitech_battery(&response);
         }
         let feature_1001 = self.feature_index(session, device, deadline, index, 0x1001)?;
         if feature_1001 != 0 {
@@ -369,30 +369,18 @@ impl Provider for LogitechProvider {
     }
 }
 
-fn parse_logitech_battery(
-    response: &[u8],
-    battery_function: u8,
-) -> Result<ProviderReading, BatteryError> {
+fn parse_logitech_battery(response: &[u8]) -> Result<ProviderReading, BatteryError> {
     if response.len() < 7 {
         return Err(BatteryError::invalid_response(
             "truncated Logitech HID++ battery response",
         ));
     }
     let percentage = checked_percentage(response[4])?;
-    let charge = if battery_function == 1 {
-        match response[6] {
-            0 => ChargeState::Discharging,
-            1 | 2 => ChargeState::Charging,
-            3 => ChargeState::Full,
-            _ => ChargeState::Unknown,
-        }
-    } else {
-        match response[6] {
-            0 => ChargeState::Discharging,
-            1 | 2 | 4 => ChargeState::Charging,
-            3 => ChargeState::Full,
-            _ => ChargeState::Unknown,
-        }
+    let charge = match response[6] {
+        0 => ChargeState::Discharging,
+        1 | 2 | 4 => ChargeState::Charging,
+        3 => ChargeState::Full,
+        _ => ChargeState::Unknown,
     };
     Ok(reading(Some(percentage), charge, None))
 }

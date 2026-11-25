@@ -78,16 +78,30 @@ impl Provider for AtkZeroProvider {
                 Duration::from_millis(500),
                 12,
                 |r| {
-                    Ok(r.len() >= 8
+                    let is_sleeping = cmd == 0x07
+                        && r.len() >= 6
+                        && r[0] == 0x08
+                        && r[1] == 0x72
+                        && r[2] == 0x01
+                        && r[5] == 0x07;
+                    let is_ok = r.len() >= 8
                         && r[0] == 0x08
                         && r[1] == 0x72
                         && r[2] == 0x00
                         && r[5] == cmd
-                        && r[6] == 0x01)
+                        && r[6] == 0x01;
+                    Ok(is_sleeping || is_ok)
                 },
             )
         };
         let bat = ask(session, 0x07)?;
+        if bat[2] == 0x01 {
+            return Ok(ProviderReading {
+                reachability: Reachability::Sleeping,
+                source: ReadingSource::VendorHid,
+                ..ProviderReading::default()
+            });
+        }
         let pct = checked_percentage(bat[7])?;
         let charge = if cable {
             match ask(session, 0x08) {

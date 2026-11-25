@@ -2,7 +2,7 @@
 
 > **Language / 语言**: **English** | [简体中文](support-matrix.zh-CN.md)
 
-**162 built-in providers** (**160** vendor HID providers + `os.xinput` + `bluetooth.bas`) are included and enabled by default. If you encounter reading issues on a specific model or firmware, please open an Issue.
+**163 built-in providers** (**161** vendor HID providers + `os.xinput` + `bluetooth.bas`) are included and enabled by default. If you encounter reading issues on a specific model or firmware, please open an Issue.
 
 ## Built-in Vendor & OS Providers
 
@@ -16,6 +16,7 @@
 | AKG | Headset | AKG N9 Hybrid | `akg.n9_hybrid` |
 | Akko / MonsGeek | Keyboard | Akko / MonsGeek Dash | `akko.dash` |
 | Alienware | Headset | Alienware AW920H | `alienware.aw920h` |
+| Apple | Keyboard | Apple Magic Keyboard (HID `0x90`) | `apple.magic` |
 | Arbiter | Mouse | Arbiter Akitsu | `arbiter.akitsu` |
 | Astro | Headset | Astro A50 (Gen 4 / 5 / X) / A30 | `astro.a50_modern` |
 | | Headset | Astro A50 (Gen 3) / A20 | `astro.legacy` |
@@ -180,7 +181,7 @@
 
 The following source types are intentionally **not** ported into the single-session HID layer yet:
 
-- **Split-collection dual-handle HID devices** requiring two simultaneous HID handles (`Endgame Gear WE`, `Areson`, `DAREU EM901X / SGM50W`, `ZOWIE DW`, `Wraith W1`).
+- **Split-collection dual-handle HID devices** requiring two simultaneous HID handles (`Endgame Gear WE`, `Areson`, `DAREU EM901X / SGM50W`, `ZOWIE DW`, `Wraith W1`, `A4Tech Bloody 8K`).
 - **Non-HID / OS-specific / external-binary sources**: active BLE advertisement watchers (AirPods / Google Fast Pair), Classic Bluetooth RFCOMM (Samsung Galaxy Buds / Nothing Ear), Windows Phone Link local JSON cache, virtual COM serial ports (`atk_serial`), vendor BLE GATT (`gamesir_ble`), Windows PnP cached generic Bluetooth properties, and external `headsetcontrol.exe` delegation.
 
 ---

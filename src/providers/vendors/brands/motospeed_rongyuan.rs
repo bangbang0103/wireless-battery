@@ -252,7 +252,7 @@ impl Provider for XentaProvider {
         experimental_metadata(
             DeviceKind::Mouse,
             capabilities(true, true, false),
-            Duration::from_millis(1500),
+            Duration::from_millis(2500),
         )
     }
 
@@ -270,7 +270,7 @@ impl Provider for XentaProvider {
         if endpoint.vid == Some(0x1D57)
             && matches!(
                 endpoint.pid,
-                Some(0xFA60 | 0xFA61 | 0xFA65 | 0xFA55 | 0x2155)
+                Some(0xFA60 | 0xFA61 | 0xFA62 | 0xFA65 | 0xFA55 | 0x2155)
             )
             && endpoint.usage_page == Some(0x000A)
         {
@@ -291,7 +291,7 @@ impl Provider for XentaProvider {
             session,
             device,
             deadline,
-            Duration::from_millis(1500),
+            Duration::from_millis(2500),
             24,
             |r| Ok(r.len() >= 5 && r[0] == 0x03 && matches!(r[2], 0x40 | 0x41)),
         )?;
@@ -336,18 +336,20 @@ impl Provider for XentaProvider {
                 }),
             };
         }
-        if cable || matches!(state, 0x02 | 0x03) {
+        if cable || matches!(state, 0x02 | 0x03 | 0x80) {
             let (pct, charge) = if state == 0x02 && !cable {
                 (Some(100), ChargeState::Full)
             } else {
-                (
-                    (1..=100).contains(&level).then_some(level),
-                    ChargeState::Charging,
-                )
+                let pct = if matches!(model, 0x10 | 0x85) && (1..=10).contains(&level) {
+                    Some(level * 10)
+                } else {
+                    (1..=100).contains(&level).then_some(level)
+                };
+                (pct, ChargeState::Charging)
             };
             return Ok(reading(pct, charge, None));
         }
-        if model == 0x10 && (1..=10).contains(&level) {
+        if matches!(model, 0x10 | 0x85) && (1..=10).contains(&level) {
             return Ok(reading(Some(level * 10), ChargeState::Discharging, None));
         }
         if state == 0x01 && (1..=100).contains(&level) {

@@ -876,6 +876,25 @@ pub(super) fn keyboards_and_mchose_fixtures() -> Vec<Fixture> {
         expect_pct(75, ChargeState::Charging, None),
     ));
 
+    fixtures.push(make_fixture(
+        "apple.magic",
+        ep(
+            "apple_magic",
+            0x004C,
+            0x026C,
+            Some(0xFF00),
+            Some(1),
+            None,
+            None,
+        ),
+        vec![step_get_input(
+            0x90,
+            7,
+            &[0x00, 77, 0x00, 0x00, 0x00, 0x00, 0x00],
+        )],
+        expect_pct(77, ChargeState::Unknown, None),
+    ));
+
     fixtures
 }
 

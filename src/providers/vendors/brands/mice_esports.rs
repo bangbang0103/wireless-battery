@@ -99,14 +99,14 @@ impl Provider for Nordic05Provider {
             let r = feature_frame(session, device, 0x05, 31)?;
             if r.len() >= 13 && r[0] == 0x05 && r[1] == 0x15 && r[9] <= 100 {
                 let connected = cable || r[12] != 0;
-                if !connected {
-                    return Ok(ProviderReading {
-                        reachability: Reachability::Offline,
-                        source: ReadingSource::VendorHid,
-                        ..ProviderReading::default()
-                    });
-                }
                 if self.sprime {
+                    if !connected {
+                        return Ok(ProviderReading {
+                            reachability: Reachability::Offline,
+                            source: ReadingSource::VendorHid,
+                            ..ProviderReading::default()
+                        });
+                    }
                     let full = r[11] != 0;
                     let pct = if full { 100 } else { r[9] };
                     let charge = if full {
@@ -118,8 +118,25 @@ impl Provider for Nordic05Provider {
                     };
                     return Ok(reading(Some(pct), charge, None));
                 } else {
-                    let pct = if r[9] == 0 { 100 } else { r[9] };
-                    let charge = if r[10] != 0 {
+                    if !connected {
+                        return Ok(ProviderReading {
+                            reachability: Reachability::Sleeping,
+                            source: ReadingSource::VendorHid,
+                            ..ProviderReading::default()
+                        });
+                    }
+                    let full = r[11] != 0;
+                    if r[9] == 0 && !full {
+                        return Ok(ProviderReading {
+                            reachability: Reachability::Sleeping,
+                            source: ReadingSource::VendorHid,
+                            ..ProviderReading::default()
+                        });
+                    }
+                    let pct = if full { 100 } else { r[9] };
+                    let charge = if full {
+                        ChargeState::Full
+                    } else if r[10] != 0 {
                         ChargeState::Charging
                     } else {
                         ChargeState::Discharging

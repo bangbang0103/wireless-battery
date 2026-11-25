@@ -1045,3 +1045,144 @@ fn negative_new_headset_providers_reject_out_of_range_percentage() {
 
     verify_all(&registry, &[lenovo_oob, fifine_oob]);
 }
+
+#[test]
+fn apple_magic_ignores_generic_keyboard_and_rejects_out_of_range() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    // Generic desktop keyboard collection (0x0001) on 004C:026C must not match apple.magic.
+    let generic_kb = ep(
+        "apple_generic_kb",
+        0x004C,
+        0x026C,
+        Some(0x0001),
+        Some(0x0006),
+        None,
+        None,
+    );
+    assert!(match_providers(&registry, &generic_kb).is_empty());
+
+    // Out-of-range percentage (101) must be rejected as InvalidResponse.
+    let magic_oob = make_fixture(
+        "apple.magic",
+        ep(
+            "apple_magic_oob",
+            0x004C,
+            0x026C,
+            Some(0xFF00),
+            Some(1),
+            None,
+            None,
+        ),
+        vec![step_get_input(
+            0x90,
+            7,
+            &[0x00, 101, 0x00, 0x00, 0x00, 0x00, 0x00],
+        )],
+        Expectation::Error {
+            error: ErrorKind::InvalidResponse,
+        },
+    );
+    verify_fixture(&magic_oob, registry)
+        .expect("apple.magic must reject out-of-range percentage 101");
+}
+
+#[test]
+fn atk_zero_and_ninjutso_sora_v2_report_sleeping() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    let sleeping = Expectation::Reading {
+        percentage: None,
+        level: None,
+        voltage_mv: None,
+        charge_state: ChargeState::Unknown,
+        reachability: Reachability::Sleeping,
+        precision: Precision::None,
+    };
+
+    // atk.zero reports Reachability::Sleeping when r[2] == 0x01.
+    let atk_sleeping = make_fixture(
+        "atk.zero",
+        ep(
+            "atk_zero_sleep",
+            0x373B,
+            0x124F,
+            Some(0xFF05),
+            Some(0x0001),
+            None,
+            None,
+        ),
+        vec![
+            step_flush_timeout(),
+            step_write(
+                0x08,
+                &padded(&[0x7D, 0x72, 0x02, 0x00, 0x01, 0x07, 0x01], 63),
+            ),
+            step_read(0x08, &[0x72, 0x01, 0x00, 0x00, 0x07]),
+        ],
+        sleeping.clone(),
+    );
+
+    // ninjutso.sora_v2 reports Reachability::Sleeping when connected (r[12] == 1) and r[9] == 0 && r[11] == 0.
+    let mut sora_sleep_resp = vec![0_u8; 31];
+    sora_sleep_resp[0] = 0x15; // r[1]
+    sora_sleep_resp[8] = 0; // r[9] = 0%
+    sora_sleep_resp[10] = 0; // r[11] = not full
+    sora_sleep_resp[11] = 1; // r[12] = connected
+    let sora_sleeping = make_fixture(
+        "ninjutso.sora_v2",
+        ep(
+            "sora_v2_sleep",
+            0x1915,
+            0xAE1C,
+            Some(0xFFA0),
+            Some(0x0001),
+            None,
+            None,
+        ),
+        vec![
+            step_send_feature(0x05, &padded(&[0x15, 0x00, 0x00, 0x01], 31)),
+            step_get_feature(0x05, 31, &sora_sleep_resp),
+        ],
+        sleeping,
+    );
+
+    verify_all(&registry, &[atk_sleeping, sora_sleeping]);
+}
+
+#[test]
+fn attack_shark_x6_scaling_and_steelseries_new_pids() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    // xenta.mouse on 1D57:FA62 (model 0x85): level 8 scales to 80% when discharging and 0x80 is Charging.
+    let x6_discharging = make_fixture(
+        "xenta.mouse",
+        ep("x6_dis", 0x1D57, 0xFA62, Some(0x000A), None, None, None),
+        vec![step_read(0x03, &[0x85, 0x40, 0x01, 8])],
+        expect_pct(80, ChargeState::Discharging, None),
+    );
+    let x6_charging = make_fixture(
+        "xenta.mouse",
+        ep("x6_chg", 0x1D57, 0xFA62, Some(0x000A), None, None, None),
+        vec![step_read(0x03, &[0x85, 0x40, 0x80, 8])],
+        expect_pct(80, ChargeState::Charging, None),
+    );
+    verify_all(&registry, &[x6_discharging, x6_charging]);
+
+    // steelseries.aerox matches new Aerox 9 WoW (0x1874/0x1876) and Prime Mini Wireless (0x1848/0x184A) PIDs.
+    for pid in [0x1874_u16, 0x1876, 0x1848, 0x184A] {
+        let endpoint = ep(
+            &format!("ss_aerox_{pid:04x}"),
+            0x1038,
+            pid,
+            Some(0xFF00),
+            Some(1),
+            Some(3),
+            None,
+        );
+        let matches = match_providers(&registry, &endpoint);
+        assert_eq!(matches.len(), 1, "expected exact match for PID 0x{pid:04X}");
+        assert_eq!(matches[0].0.id(), "steelseries.aerox");
+        assert_eq!(matches[0].1, MatchDecision::Exact);
+    }
+}

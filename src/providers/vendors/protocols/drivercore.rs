@@ -49,7 +49,7 @@ const LAMZU_37B0_CABLE_PIDS: &[u16] = &[
 
 const WLMOUSE_PIDS: &[u16] = &[
     0xA856, 0xA860, 0xA861, 0xA866, 0xA867, 0xA868, 0xA870, 0xA871, 0xA874, 0xA878, 0xA879, 0xA880,
-    0xA883, 0xA884, 0xA885,
+    0xA883, 0xA884, 0xA885, 0xA887,
 ];
 const WLMOUSE_CABLE_PIDS: &[u16] = &[0xA861, 0xA866, 0xA867, 0xA871, 0xA879, 0xA884];
 
@@ -198,6 +198,7 @@ impl Provider for DriverCoreProvider {
                 0xA880 => "WLMouse Beast MAX",
                 0xA883 | 0xA884 => "WLMouse Beast X 8K",
                 0xA885 => "WLMouse Beast X Mini",
+                0xA887 => "WLMouse Beast X",
                 _ => "WLMouse wireless mouse",
             },
         };
@@ -293,10 +294,12 @@ impl Provider for DriverCoreProvider {
                         });
                     }
                     let pct = checked_percentage(level)?;
-                    let charge = if cable || chg == 0x01 {
-                        ChargeState::Charging
-                    } else {
-                        ChargeState::Discharging
+                    let charge = match chg {
+                        0x01 => ChargeState::Charging,
+                        0x02 => ChargeState::Full,
+                        _ if cable => ChargeState::Charging,
+                        0x00 => ChargeState::Discharging,
+                        _ => ChargeState::Unknown,
                     };
                     return Ok(reading(Some(pct), charge, None));
                 }

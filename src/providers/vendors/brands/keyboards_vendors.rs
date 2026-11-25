@@ -1,5 +1,6 @@
 //! Wireless keyboard vendor HID battery protocols:
-//! NuPhy WH80, AULA HERO 68 Air, SONiX 0xFF60:0x0061 dongles, PMO/VIA 36B0, and Semico 1A2C.
+//! Apple Magic Keyboard, NuPhy WH80, AULA HERO 68 Air, SONiX 0xFF60:0x0061 dongles, PMO/VIA 36B0,
+//! and Semico 1A2C.
 
 use crate::error::BatteryError;
 use crate::model::{
@@ -33,6 +34,7 @@ static WOB_RAINY75: FixedSpec = FixedSpec {
 pub(crate) fn providers() -> Vec<Arc<dyn Provider>> {
     vec![
         Arc::new(FixedProvider::new(&WOB_RAINY75)),
+        Arc::new(AppleMagicProvider),
         Arc::new(NuphyWh80Provider),
         Arc::new(AulaHero68Provider),
         Arc::new(SonixKeyboardProvider),
@@ -74,6 +76,85 @@ fn parse_wob(frame: &[u8]) -> Result<Option<ProviderReading>, BatteryError> {
         charge_bool(frame[9]),
         None,
     )))
+}
+
+const APPLE_MAGIC_KEYBOARD_PIDS: &[u16] = &[
+    0x0267, 0x026C, 0x029A, 0x029C, 0x029F, 0x0320, 0x0321, 0x0322,
+];
+
+struct AppleMagicProvider;
+
+impl Provider for AppleMagicProvider {
+    fn id(&self) -> &str {
+        "apple.magic"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(
+            DeviceKind::Keyboard,
+            capabilities(true, false, false),
+            Duration::from_millis(500),
+        )
+    }
+
+    fn display_name(&self, endpoint: &Endpoint) -> Option<String> {
+        Some(match endpoint.pid {
+            Some(0x0267) => "Apple Magic Keyboard 2".to_owned(),
+            Some(0x026C) => "Apple Magic Keyboard with Numeric Keypad".to_owned(),
+            Some(0x029A) => "Apple Magic Keyboard with Touch ID".to_owned(),
+            Some(0x029C) => "Apple Magic Keyboard (2021)".to_owned(),
+            Some(0x029F) => "Apple Magic Keyboard with Touch ID and Numeric Keypad".to_owned(),
+            Some(0x0320) => "Apple Magic Keyboard (USB-C)".to_owned(),
+            Some(0x0321) => "Apple Magic Keyboard with Touch ID (USB-C)".to_owned(),
+            Some(0x0322) => {
+                "Apple Magic Keyboard with Touch ID and Numeric Keypad (USB-C)".to_owned()
+            }
+            _ => endpoint
+                .product_name
+                .clone()
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| "Apple Magic Keyboard".to_owned()),
+        })
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        let collection_ok = endpoint
+            .usage_page
+            .is_some_and(|p| p >= 0xFF00 || p == 0x0006 || p == 0x000C)
+            || (endpoint.usage_page.is_none() && endpoint.interface_number == Some(1));
+        if matches!(endpoint.vid, Some(0x004C | 0x05AC))
+            && endpoint
+                .pid
+                .is_some_and(|p| APPLE_MAGIC_KEYBOARD_PIDS.contains(&p))
+            && collection_ok
+        {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        deadline.check("Apple Magic Keyboard")?;
+        let payload = session
+            .get_input_report(0x90, 7)
+            .map_err(|error| error.into_battery(&device.endpoint.id))?;
+        if payload.len() < 2 {
+            return Err(BatteryError::invalid_response(
+                "truncated Apple Magic Keyboard battery report",
+            ));
+        }
+        Ok(reading(
+            Some(checked_percentage(payload[1])?),
+            ChargeState::Unknown,
+            None,
+        ))
+    }
 }
 
 struct NuphyWh80Provider;

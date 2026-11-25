@@ -9,7 +9,7 @@ A synchronous Rust library and CLI for conservative peripheral battery readings 
 
 ## Features
 
-- **Broad device support**: **162 built-in providers** (160 vendor HID providers plus `os.xinput` and `bluetooth.bas`) cover mice, keyboards, headsets, gamepads, and other wireless peripherals. See the [support matrix](docs/support-matrix.md) for the complete device and model list.
+- **Broad device support**: **163 built-in providers** (161 vendor HID providers plus `os.xinput` and `bluetooth.bas`) cover mice, keyboards, headsets, gamepads, and other wireless peripherals. See the [support matrix](docs/support-matrix.md) for the complete device and model list.
 - **Multiple deliverables**: **Tray, CLI, and Rust API** deliverables support desktop use, script automation, and third-party application integration.
 - **Native tray experience**: Tray is available on **macOS and Windows**, using SwiftUI and Win32 / Direct2D respectively to follow each platform's native UI conventions.
 - **Evidence-based device support**: Device support is based primarily on real-device reverse engineering and device implementations from other open-source projects; see [NOTICE](NOTICE) for background and attribution.

@@ -2,7 +2,7 @@
 
 > **Language / 语言**: [English](support-matrix.md) | **简体中文**
 
-**当前内置 162 条 Provider**（160 条厂商 HID + `os.xinput` + `bluetooth.bas`），默认全部启用；如在特定型号或固件上遇到读数异常，欢迎直接提交 Issue 反馈。
+**当前内置 163 条 Provider**（161 条厂商 HID + `os.xinput` + `bluetooth.bas`），默认全部启用；如在特定型号或固件上遇到读数异常，欢迎直接提交 Issue 反馈。
 
 ## 内置厂商与系统支持列表
 
@@ -16,6 +16,7 @@
 | AKG | 耳机 | AKG N9 Hybrid | `akg.n9_hybrid` |
 | Akko / MonsGeek | 键盘 | Akko / MonsGeek Dash | `akko.dash` |
 | Alienware（外星人） | 耳机 | Alienware AW920H | `alienware.aw920h` |
+| Apple（苹果） | 键盘 | Apple Magic Keyboard（HID `0x90`） | `apple.magic` |
 | Arbiter | 鼠标 | Arbiter Akitsu | `arbiter.akitsu` |
 | Astro | 耳机 | Astro A50（Gen 4 / 5 / X）/ A30 | `astro.a50_modern` |
 | | 耳机 | Astro A50（Gen 3）/ A20 | `astro.legacy` |
@@ -180,7 +181,7 @@
 
 以下设备来源因架构边界暂未迁入单会话 HID 层：
 
-- **需同时持有两个 HID 集合句柄的拆分集合设备**：`Endgame Gear WE`、`Areson`、`DAREU EM901X / SGM50W`、`ZOWIE DW`、`Wraith W1`。
+- **需同时持有两个 HID 集合句柄的拆分集合设备**：`Endgame Gear WE`、`Areson`、`DAREU EM901X / SGM50W`、`ZOWIE DW`、`Wraith W1`、`A4Tech Bloody 8K`。
 - **非 HID / 系统专有 / 外部进程来源**：BLE 主动广播监听（AirPods / Google Fast Pair）、经典蓝牙 RFCOMM（Samsung Galaxy Buds / Nothing Ear）、Windows Phone Link 本地 JSON 缓存、虚拟串口 COM（`atk_serial`）、厂商私有 BLE GATT（`gamesir_ble`）、Windows PnP 通用蓝牙缓存属性，以及外部 `headsetcontrol.exe` 进程委托。
 
 ---

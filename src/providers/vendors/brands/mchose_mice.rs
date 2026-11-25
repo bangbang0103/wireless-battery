@@ -264,7 +264,7 @@ fn wait_mchose_ack(
 }
 
 fn decode_mchose_payload(frame: &[u8]) -> Result<Option<Vec<u8>>, BatteryError> {
-    if frame.len() != 65 || frame[0] != 0x11 {
+    if frame.len() < 13 || !matches!(frame[0], 0x11 | 0x12) {
         return Err(BatteryError::invalid_response(
             "invalid MCHOSE feature length",
         ));
