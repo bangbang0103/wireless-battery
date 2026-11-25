@@ -1,11 +1,11 @@
 //! PC wireless gamepad HID battery protocols
-//! (GameSir Nova/Cyclone 2/SAPJoy, Flydigi Vader 5/Apex 5, BEITONG KP20/KP40D).
+//! (GameSir Nova/Cyclone 2/SAPJoy, Flydigi Vader 5/Apex 5, BEITONG KP20/KP40D, NVIDIA Shield).
 
 use crate::error::BatteryError;
 use crate::model::{ChargeState, DeviceKind, Endpoint, ProviderReading};
 use crate::providers::fixed::{
     capabilities, checked_percentage, drain_input, experimental_metadata, reading, send_with_modes,
-    unnumbered_payload, wait_frame, OUTPUT,
+    unnumbered_payload, wait_frame, OUTPUT, OUTPUT_THEN_SET,
 };
 use crate::providers::{Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata};
 use crate::transport::HidSession;
@@ -19,6 +19,7 @@ pub(crate) fn providers() -> Vec<Arc<dyn Provider>> {
         Arc::new(GameSirSapjoyProvider),
         Arc::new(FlydigiProvider),
         Arc::new(BeitongProvider),
+        Arc::new(NvidiaShieldProvider),
     ]
 }
 
@@ -406,4 +407,96 @@ fn beitong_dec(x: u8) -> u8 {
         .position(|&v| v == (x >> 4))
         .unwrap_or(0) as u8;
     (hi << 4) | ((x & 0x0F) ^ 0x08)
+}
+
+struct NvidiaShieldProvider;
+
+impl Provider for NvidiaShieldProvider {
+    fn id(&self) -> &str {
+        "nvidia.shield"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(
+            DeviceKind::Gamepad,
+            capabilities(true, true, true),
+            Duration::from_millis(500),
+        )
+    }
+
+    fn display_name(&self, endpoint: &Endpoint) -> Option<String> {
+        Some(
+            endpoint
+                .product_name
+                .clone()
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| "NVIDIA Shield Controller".to_owned()),
+        )
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        if endpoint.vid == Some(0x0955)
+            && endpoint.pid == Some(0x7214)
+            && (endpoint.usage_page.is_none()
+                || matches!(endpoint.usage_page, Some(0x0001) | Some(0xFF00..=0xFFFF)))
+        {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        drain_input(session, device, deadline, 8)?;
+
+        // Step 1: Query battery percentage and voltage.
+        let mut bat_req = vec![0_u8; 33];
+        bat_req[0] = 0x04;
+        bat_req[1] = 0x07;
+        send_with_modes(session, device, OUTPUT_THEN_SET, &bat_req)?;
+        let bat = wait_frame(
+            session,
+            device,
+            deadline,
+            Duration::from_millis(500),
+            16,
+            |f| Ok(f.len() >= 15 && f[0] == 0x03 && f[1] == 0x07),
+        )?;
+        let pct = checked_percentage(bat[14])?;
+        let mv = u16::from_le_bytes([bat[12], bat[13]]);
+        let voltage_mv = (mv > 0).then_some(u32::from(mv));
+
+        // Step 2: Query charger connection and state.
+        let mut chg_req = vec![0_u8; 33];
+        chg_req[0] = 0x04;
+        chg_req[1] = 0x3A;
+        send_with_modes(session, device, OUTPUT_THEN_SET, &chg_req)?;
+        let chg = wait_frame(
+            session,
+            device,
+            deadline,
+            Duration::from_millis(500),
+            16,
+            |f| Ok(f.len() >= 6 && f[0] == 0x03 && f[1] == 0x3A),
+        )?;
+        let connected = chg[3];
+        let state = chg[5];
+        let charge = if connected == 0 {
+            ChargeState::Discharging
+        } else {
+            match state {
+                2 => ChargeState::Charging,
+                3 => ChargeState::Full,
+                1 | 8 => ChargeState::Discharging,
+                _ => ChargeState::Unknown,
+            }
+        };
+
+        Ok(reading(Some(pct), charge, voltage_mv))
+    }
 }

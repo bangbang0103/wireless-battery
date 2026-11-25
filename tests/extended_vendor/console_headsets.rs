@@ -235,6 +235,31 @@ pub(super) fn sony_and_gamepad_fixtures() -> Vec<Fixture> {
         expect_pct(83, ChargeState::Charging, None),
     ));
 
+    let mut shield_bat = vec![0_u8; 14];
+    shield_bat[0] = 0x07;
+    shield_bat[11..13].copy_from_slice(&4000_u16.to_le_bytes());
+    shield_bat[13] = 82;
+    fixtures.push(make_fixture(
+        "nvidia.shield",
+        ep(
+            "nvidia_shield",
+            0x0955,
+            0x7214,
+            Some(0x0001),
+            Some(5),
+            None,
+            None,
+        ),
+        vec![
+            step_flush_timeout(),
+            step_write(0x04, &padded(&[0x07], 32)),
+            step_read(0x03, &shield_bat),
+            step_write(0x04, &padded(&[0x3A], 32)),
+            step_read(0x03, &[0x3A, 0x00, 0x01, 0x00, 0x02]),
+        ],
+        expect_pct(82, ChargeState::Charging, Some(4000)),
+    ));
+
     fixtures
 }
 

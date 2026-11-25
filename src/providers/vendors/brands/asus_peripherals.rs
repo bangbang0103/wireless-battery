@@ -14,7 +14,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub(crate) fn providers() -> Vec<Arc<dyn Provider>> {
-    vec![Arc::new(AsusRogPeripheralProvider)]
+    vec![
+        Arc::new(AsusRogPeripheralProvider),
+        Arc::new(AsusT100ChiProvider),
+    ]
 }
 
 #[derive(Clone, Copy)]
@@ -630,5 +633,70 @@ impl Provider for AsusRogPeripheralProvider {
             };
             Ok(reading(Some(val as u8), charge, None))
         }
+    }
+}
+
+struct AsusT100ChiProvider;
+
+impl Provider for AsusT100ChiProvider {
+    fn id(&self) -> &str {
+        "asus.t100chi"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(
+            DeviceKind::Keyboard,
+            capabilities(true, true, false),
+            Duration::from_millis(500),
+        )
+    }
+
+    fn display_name(&self, endpoint: &Endpoint) -> Option<String> {
+        Some(
+            endpoint
+                .product_name
+                .clone()
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| "ASUS T100CHI Keyboard".to_owned()),
+        )
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        if endpoint.vid == Some(0x0B05)
+            && endpoint.pid == Some(0x8502)
+            && (endpoint.usage_page.is_none()
+                || endpoint
+                    .usage_page
+                    .is_some_and(|p| p >= 0xFF00 || p == 0x0001 || p == 0x000C))
+        {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        deadline.check("ASUS T100CHI")?;
+        let payload = session
+            .get_input_report(0x03, 8)
+            .map_err(|error| error.into_battery(&device.endpoint.id))?;
+        if payload.len() < 8 {
+            return Err(BatteryError::invalid_response(
+                "truncated ASUS T100CHI battery report",
+            ));
+        }
+        let pct = checked_percentage(((u16::from(payload[0]) * 100) / 255) as u8)?;
+        let charge = match payload[7] {
+            0 => ChargeState::Discharging,
+            1 => ChargeState::Charging,
+            2 => ChargeState::Full,
+            _ => ChargeState::Unknown,
+        };
+        Ok(reading(Some(pct), charge, None))
     }
 }

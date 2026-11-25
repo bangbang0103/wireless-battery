@@ -358,6 +358,16 @@ pub(super) fn razer_and_asus_fixtures() -> Vec<Fixture> {
         ],
         expect_pct(88, ChargeState::Charging, None),
     ));
+    fixtures.push(make_fixture(
+        "asus.t100chi",
+        ep("t100chi", 0x0B05, 0x8502, Some(0x0001), Some(6), None, None),
+        vec![step_get_input(
+            0x03,
+            8,
+            &[204, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01],
+        )],
+        expect_pct(80, ChargeState::Charging, None),
+    ));
 
     fixtures
 }

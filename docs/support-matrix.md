@@ -2,7 +2,7 @@
 
 > **Language / 语言**: **English** | [简体中文](support-matrix.zh-CN.md)
 
-**163 built-in providers** (**161** vendor HID providers + `os.xinput` + `bluetooth.bas`) are included and enabled by default. If you encounter reading issues on a specific model or firmware, please open an Issue.
+**165 built-in providers** (**163** vendor HID providers + `os.xinput` + `bluetooth.bas`) are included and enabled by default. If you encounter reading issues on a specific model or firmware, please open an Issue.
 
 ## Built-in Vendor & OS Providers
 
@@ -16,7 +16,7 @@
 | AKG | Headset | AKG N9 Hybrid | `akg.n9_hybrid` |
 | Akko / MonsGeek | Keyboard | Akko / MonsGeek Dash | `akko.dash` |
 | Alienware | Headset | Alienware AW920H | `alienware.aw920h` |
-| Apple | Keyboard | Apple Magic Keyboard (HID `0x90`) | `apple.magic` |
+| Apple | Keyboard / Mouse / Trackpad | Apple Magic Keyboard / Magic Mouse 2 / Magic Trackpad 2 (HID `0x90`) | `apple.magic` |
 | Arbiter | Mouse | Arbiter Akitsu | `arbiter.akitsu` |
 | Astro | Headset | Astro A50 (Gen 4 / 5 / X) / A30 | `astro.a50_modern` |
 | | Headset | Astro A50 (Gen 3) / A20 | `astro.legacy` |
@@ -24,6 +24,7 @@
 | | Mouse / Keyboard | ROG Harpe / Gladius / Keris / Chakram / Azoth / Falchion | `asus.rog_peripheral` |
 | | Headset | ROG Delta II / Pelta | `asus.headset` |
 | | Headset | ROG Cetra | `asus.rog_cetra` |
+| ASUS | Keyboard | Transformer Book T100CHI / T90CHI (`0B05:8502`) | `asus.t100chi` |
 | ATK | Mouse | ATK A9 Air+ `373B:1278` | `atk.a9_air` |
 | | Mouse | ATK Zero | `atk.zero` |
 | | Mouse | ATK Bitmouse NK | `atk.bitmouse_nk` |
@@ -117,6 +118,7 @@
 | | Mouse | Ninjutso Ten | `ninjutso.ten` |
 | Nintendo | Gamepad | Switch Pro / Joy-Con | `nintendo.switch_pro` |
 | NuPhy | Keyboard | NuPhy Air / WH80 | `nuphy.wh80` |
+| NVIDIA | Gamepad | NVIDIA SHIELD Controller (`0955:7214`) | `nvidia.shield` |
 | NZXT | Mouse | NZXT Lift Elite | `nzxt.lift_elite` |
 | Plantronics / Poly | Receiver | Poly BT600 | `plantronics.bt600` |
 | Press Play | Mouse | Press Play Icarus | `pressplay.icarus` |

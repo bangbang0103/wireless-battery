@@ -2,7 +2,7 @@
 
 > **Language / 语言**: [English](support-matrix.md) | **简体中文**
 
-**当前内置 163 条 Provider**（161 条厂商 HID + `os.xinput` + `bluetooth.bas`），默认全部启用；如在特定型号或固件上遇到读数异常，欢迎直接提交 Issue 反馈。
+**当前内置 165 条 Provider**（163 条厂商 HID + `os.xinput` + `bluetooth.bas`），默认全部启用；如在特定型号或固件上遇到读数异常，欢迎直接提交 Issue 反馈。
 
 ## 内置厂商与系统支持列表
 
@@ -16,7 +16,7 @@
 | AKG | 耳机 | AKG N9 Hybrid | `akg.n9_hybrid` |
 | Akko / MonsGeek | 键盘 | Akko / MonsGeek Dash | `akko.dash` |
 | Alienware（外星人） | 耳机 | Alienware AW920H | `alienware.aw920h` |
-| Apple（苹果） | 键盘 | Apple Magic Keyboard（HID `0x90`） | `apple.magic` |
+| Apple（苹果） | 键盘 / 鼠标 / 触控板 | Apple Magic Keyboard / Magic Mouse 2 / Magic Trackpad 2（HID `0x90`） | `apple.magic` |
 | Arbiter | 鼠标 | Arbiter Akitsu | `arbiter.akitsu` |
 | Astro | 耳机 | Astro A50（Gen 4 / 5 / X）/ A30 | `astro.a50_modern` |
 | | 耳机 | Astro A50（Gen 3）/ A20 | `astro.legacy` |
@@ -24,6 +24,7 @@
 | | 鼠标 / 键盘 | ROG Harpe / Gladius / Keris / Chakram / Azoth / Falchion | `asus.rog_peripheral` |
 | | 耳机 | ROG Delta II / Pelta | `asus.headset` |
 | | 耳机 | ROG Cetra | `asus.rog_cetra` |
+| ASUS（华硕） | 键盘 | Transformer Book T100CHI / T90CHI (`0B05:8502`) | `asus.t100chi` |
 | ATK | 鼠标 | ATK A9 Air+ `373B:1278` | `atk.a9_air` |
 | | 鼠标 | ATK Zero | `atk.zero` |
 | | 鼠标 | ATK Bitmouse NK | `atk.bitmouse_nk` |
@@ -117,6 +118,7 @@
 | | 鼠标 | Ninjutso Ten | `ninjutso.ten` |
 | Nintendo（任天堂） | 手柄 | Switch Pro / Joy-Con | `nintendo.switch_pro` |
 | NuPhy | 键盘 | NuPhy Air / WH80 | `nuphy.wh80` |
+| NVIDIA | 手柄 | NVIDIA SHIELD Controller (`0955:7214`) | `nvidia.shield` |
 | NZXT | 鼠标 | NZXT Lift Elite | `nzxt.lift_elite` |
 | Plantronics / Poly | 接收器 | Poly BT600 | `plantronics.bt600` |
 | Press Play | 鼠标 | Press Play Icarus | `pressplay.icarus` |

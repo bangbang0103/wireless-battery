@@ -49,13 +49,32 @@ impl Provider for SwitchProProvider {
                 .product_name
                 .clone()
                 .filter(|name| !name.is_empty())
-                .unwrap_or_else(|| "Nintendo Switch Pro Controller".to_owned()),
+                .unwrap_or_else(|| match (endpoint.vid, endpoint.pid) {
+                    (Some(0x057E), Some(0x2006)) => "Nintendo Joy-Con (L)".to_owned(),
+                    (Some(0x057E), Some(0x2007)) => "Nintendo Joy-Con (R)".to_owned(),
+                    (Some(0x057E), Some(0x200E)) => "Nintendo Joy-Con Charging Grip".to_owned(),
+                    (Some(0x057E), Some(0x2017)) => "Nintendo Switch SNES Controller".to_owned(),
+                    (Some(0x057E), Some(0x2019)) => "Nintendo Switch N64 Controller".to_owned(),
+                    (Some(0x057E), Some(0x201E)) => {
+                        "Nintendo Switch Sega Genesis Controller".to_owned()
+                    }
+                    (Some(0x0F0D), Some(0x00F6)) => "HORI Wireless Switch Pad".to_owned(),
+                    (Some(0x0E6F), Some(0x018C)) => "PDP Afterglow Switch Controller".to_owned(),
+                    _ => "Nintendo Switch Pro Controller".to_owned(),
+                }),
         )
     }
 
     fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
-        if endpoint.vid == Some(0x057E)
-            && endpoint.pid == Some(0x2009)
+        let id_ok = matches!(
+            (endpoint.vid, endpoint.pid),
+            (
+                Some(0x057E),
+                Some(0x2006 | 0x2007 | 0x2009 | 0x200E | 0x2017 | 0x2019 | 0x201E)
+            ) | (Some(0x0F0D), Some(0x00F6))
+                | (Some(0x0E6F), Some(0x018C))
+        );
+        if id_ok
             && endpoint.usage_page == Some(0x0001)
             && matches!(endpoint.usage, Some(0x0004) | Some(0x0005))
         {
@@ -79,7 +98,8 @@ impl Provider for SwitchProProvider {
             16,
             |frame| Ok(frame.len() >= 13 && frame[0] == 0x30),
         )?;
-        let raw_level = (frame[2] & 0xE0) >> 5;
+        let bat = frame[2];
+        let raw_level = (bat & 0xE0) >> 5;
         let level = match raw_level {
             0 | 1 => BatteryLevel::Critical,
             2 => BatteryLevel::Low,
@@ -91,11 +111,12 @@ impl Provider for SwitchProProvider {
                 ))
             }
         };
-        let charging_bit = (frame[2] & 0x10) != 0;
-        let charge_state = if charging_bit && raw_level < 4 {
-            ChargeState::Charging
-        } else if raw_level == 4 && charging_bit {
+        let charging = (bat & 0x10) != 0;
+        let host_powered = (bat & 0x01) != 0;
+        let charge_state = if raw_level == 4 && (charging || host_powered) {
             ChargeState::Full
+        } else if charging {
+            ChargeState::Charging
         } else {
             ChargeState::Discharging
         };
@@ -183,6 +204,7 @@ impl Provider for SteamControllerProvider {
             let percentage = checked_percentage(r[2])?;
             let charge = match r[1] {
                 0x02 => ChargeState::Charging,
+                0x04 => ChargeState::Full,
                 0x00 | 0x01 => ChargeState::Discharging,
                 _ => ChargeState::Unknown,
             };

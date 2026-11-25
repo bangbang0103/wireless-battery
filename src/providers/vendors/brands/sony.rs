@@ -173,7 +173,9 @@ impl Provider for DualShock4Provider {
             _ => return Err(BatteryError::invalid_response("unknown DualShock 4 report")),
         };
         let status = frame[status_index];
-        if device.endpoint.pid == Some(0x0BA0) && status == 0 {
+        let dongle_offline = device.endpoint.pid == Some(0x0BA0)
+            && (status == 0 || (frame[0] == 0x01 && frame.len() > 31 && (frame[31] & 0x04) != 0));
+        if dongle_offline {
             return Ok(ProviderReading {
                 reachability: Reachability::Offline,
                 ..reading(None, ChargeState::Unknown, None)
@@ -182,20 +184,23 @@ impl Provider for DualShock4Provider {
         let level = status & 0x0F;
         let cable = (status & 0x10) != 0;
         let (percentage, charge) = if cable {
-            if level >= 11 {
-                (100, ChargeState::Full)
-            } else {
-                ((level.saturating_mul(10)).min(100), ChargeState::Charging)
+            match level {
+                0..=10 => (
+                    Some(level.saturating_mul(10).min(100)),
+                    ChargeState::Charging,
+                ),
+                11 => (Some(100), ChargeState::Full),
+                _ => (None, ChargeState::Unknown),
             }
         } else {
             (
-                (level.saturating_mul(10).saturating_add(5)).min(100),
+                Some((level.saturating_mul(10).saturating_add(5)).min(100)),
                 ChargeState::Discharging,
             )
         };
         Ok(ProviderReading {
             reachability: Reachability::Online,
-            ..reading(Some(percentage), charge, None)
+            ..reading(percentage, charge, None)
         })
     }
 }

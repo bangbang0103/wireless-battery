@@ -19,8 +19,8 @@ use std::time::Duration;
 const VID_CORSAIR: u16 = 0x1B1C;
 
 const VOID_PIDS: &[u16] = &[
-    0x1B1C, 0x1B27, 0x0A14, 0x0A16, 0x0A17, 0x0A1D, 0x0A1A, 0x1B2A, 0x1B23, 0x1B29, 0x0A55, 0x0A51,
-    0x0A52, 0x0A38, 0x0A4F, 0x0A2B, 0x0A75, 0x0A56,
+    0x1B1C, 0x1B25, 0x1B27, 0x0A0C, 0x0A14, 0x0A16, 0x0A17, 0x0A1D, 0x0A1A, 0x1B2A, 0x1B23, 0x1B29,
+    0x0A55, 0x0A51, 0x0A52, 0x0A38, 0x0A4F, 0x0A2B, 0x0A75, 0x0A56,
 ];
 
 const BRAGI_KNOWN_PIDS: &[u16] = &[
@@ -101,11 +101,12 @@ impl Provider for CorsairVoidProvider {
             });
         }
         let charge = match st {
-            4 | 5 => ChargeState::Charging,
-            1 | 2 => ChargeState::Discharging,
+            1..=3 => ChargeState::Discharging,
+            4 => ChargeState::Full,
+            5 => ChargeState::Charging,
             _ => ChargeState::Unknown,
         };
-        let pct = if matches!(st, 1 | 2 | 4 | 5) {
+        let pct = if matches!(st, 1..=5) {
             Some(checked_percentage(frame[2] & 0x7F)?)
         } else {
             None

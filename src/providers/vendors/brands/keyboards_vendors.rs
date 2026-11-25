@@ -78,8 +78,11 @@ fn parse_wob(frame: &[u8]) -> Result<Option<ProviderReading>, BatteryError> {
     )))
 }
 
-const APPLE_MAGIC_KEYBOARD_PIDS: &[u16] = &[
-    0x0267, 0x026C, 0x029A, 0x029C, 0x029F, 0x0320, 0x0321, 0x0322,
+const APPLE_MAGIC_PIDS: &[u16] = &[
+    // Magic Keyboards
+    0x0267, 0x026C, 0x029A, 0x029C, 0x029F, 0x0320, 0x0321, 0x0322, // Magic Mice
+    0x0269, 0x0323, // Magic Trackpads
+    0x0265, 0x0324,
 ];
 
 struct AppleMagicProvider;
@@ -97,6 +100,14 @@ impl Provider for AppleMagicProvider {
         )
     }
 
+    fn device_kind(&self, endpoint: &Endpoint) -> DeviceKind {
+        match endpoint.pid {
+            Some(0x0269 | 0x0323) => DeviceKind::Mouse,
+            Some(0x0265 | 0x0324) => DeviceKind::Peripheral,
+            _ => DeviceKind::Keyboard,
+        }
+    }
+
     fn display_name(&self, endpoint: &Endpoint) -> Option<String> {
         Some(match endpoint.pid {
             Some(0x0267) => "Apple Magic Keyboard 2".to_owned(),
@@ -109,6 +120,10 @@ impl Provider for AppleMagicProvider {
             Some(0x0322) => {
                 "Apple Magic Keyboard with Touch ID and Numeric Keypad (USB-C)".to_owned()
             }
+            Some(0x0269) => "Apple Magic Mouse 2".to_owned(),
+            Some(0x0323) => "Apple Magic Mouse (USB-C)".to_owned(),
+            Some(0x0265) => "Apple Magic Trackpad 2".to_owned(),
+            Some(0x0324) => "Apple Magic Trackpad (USB-C)".to_owned(),
             _ => endpoint
                 .product_name
                 .clone()
@@ -123,9 +138,7 @@ impl Provider for AppleMagicProvider {
             .is_some_and(|p| p >= 0xFF00 || p == 0x0006 || p == 0x000C)
             || (endpoint.usage_page.is_none() && endpoint.interface_number == Some(1));
         if matches!(endpoint.vid, Some(0x004C | 0x05AC))
-            && endpoint
-                .pid
-                .is_some_and(|p| APPLE_MAGIC_KEYBOARD_PIDS.contains(&p))
+            && endpoint.pid.is_some_and(|p| APPLE_MAGIC_PIDS.contains(&p))
             && collection_ok
         {
             MatchDecision::Exact
@@ -140,13 +153,13 @@ impl Provider for AppleMagicProvider {
         session: &mut dyn HidSession,
         deadline: Deadline,
     ) -> Result<ProviderReading, BatteryError> {
-        deadline.check("Apple Magic Keyboard")?;
+        deadline.check("Apple Magic")?;
         let payload = session
             .get_input_report(0x90, 7)
             .map_err(|error| error.into_battery(&device.endpoint.id))?;
         if payload.len() < 2 {
             return Err(BatteryError::invalid_response(
-                "truncated Apple Magic Keyboard battery report",
+                "truncated Apple Magic battery report",
             ));
         }
         Ok(reading(

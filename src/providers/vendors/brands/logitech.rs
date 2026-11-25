@@ -253,12 +253,12 @@ impl LogitechProvider {
         let feature_1000 = self.feature_index(session, device, deadline, index, 0x1000)?;
         if feature_1000 != 0 {
             let response = self.call(session, device, deadline, index, feature_1000, 0)?;
-            return parse_logitech_battery(&response);
+            return parse_logitech_battery(&response, 0);
         }
         let feature_1004 = self.feature_index(session, device, deadline, index, 0x1004)?;
         if feature_1004 != 0 {
             let response = self.call(session, device, deadline, index, feature_1004, 1)?;
-            return parse_logitech_battery(&response);
+            return parse_logitech_battery(&response, 1);
         }
         let feature_1001 = self.feature_index(session, device, deadline, index, 0x1001)?;
         if feature_1001 != 0 {
@@ -369,18 +369,36 @@ impl Provider for LogitechProvider {
     }
 }
 
-fn parse_logitech_battery(response: &[u8]) -> Result<ProviderReading, BatteryError> {
+fn parse_logitech_battery(
+    response: &[u8],
+    battery_function: u8,
+) -> Result<ProviderReading, BatteryError> {
     if response.len() < 7 {
         return Err(BatteryError::invalid_response(
             "truncated Logitech HID++ battery response",
         ));
     }
-    let percentage = checked_percentage(response[4])?;
-    let charge = match response[6] {
-        0 => ChargeState::Discharging,
-        1 | 2 | 4 => ChargeState::Charging,
-        3 => ChargeState::Full,
-        _ => ChargeState::Unknown,
+    let mut percentage = checked_percentage(response[4])?;
+    let charge = if battery_function == 1 {
+        // HID++ 2.0 0x1004 UnifiedBattery: 4 is charging error, not charging.
+        match response[6] {
+            0 => ChargeState::Discharging,
+            1 | 2 => ChargeState::Charging,
+            3 => ChargeState::Full,
+            _ => ChargeState::Unknown,
+        }
+    } else {
+        // HID++ 2.0 0x1000 BatteryStatus
+        let state = match response[6] {
+            0 => ChargeState::Discharging,
+            1 | 2 | 4 => ChargeState::Charging,
+            3 => ChargeState::Full,
+            _ => ChargeState::Unknown,
+        };
+        if state == ChargeState::Full && percentage == 0 {
+            percentage = 100;
+        }
+        state
     };
     Ok(reading(Some(percentage), charge, None))
 }
@@ -445,10 +463,19 @@ fn parse_logitech_voltage(response: &[u8]) -> Result<ProviderReading, BatteryErr
         ));
     }
     let mv = u32::from(u16::from_be_bytes([response[4], response[5]]));
-    let charge = if (response[6] & 0x90) != 0 {
-        ChargeState::Charging
+    let flags = response[6];
+    let charge = if (flags & 0x80) == 0 {
+        if (flags & 0x10) != 0 {
+            ChargeState::Charging
+        } else {
+            ChargeState::Discharging
+        }
     } else {
-        ChargeState::Discharging
+        match flags & 0x07 {
+            0 => ChargeState::Charging,
+            1 => ChargeState::Full,
+            _ => ChargeState::Unknown,
+        }
     };
     let pct = interpolate_mv(mv, LOGITECH_LIION_TABLE);
     Ok(reading(Some(pct), charge, Some(mv)))
@@ -462,8 +489,9 @@ fn parse_logitech_adc(response: &[u8], pid: u16) -> Result<ProviderReading, Batt
     }
     let mv = u32::from(u16::from_be_bytes([response[4], response[5]]));
     let charge = match response[6] {
-        0x03 => ChargeState::Charging,
         0x01 => ChargeState::Discharging,
+        0x03 => ChargeState::Charging,
+        0x07 => ChargeState::Full,
         _ => ChargeState::Unknown,
     };
     let table: &[(u32, u8)] = match pid {
@@ -1046,8 +1074,8 @@ fn parse_hidpp10_battery_status(p0: u8, p1: u8) -> Result<ProviderReading, Batte
     };
     let charge_state = match p1 {
         0x00..=0x1F => ChargeState::Discharging,
-        0x21 | 0x24 | 0x25 | 0x26 => ChargeState::Charging,
-        0x22 => ChargeState::Full,
+        0x21 | 0x24 | 0x25 => ChargeState::Charging,
+        0x22 | 0x26 => ChargeState::Full,
         _ => ChargeState::Unknown,
     };
     Ok(ProviderReading {

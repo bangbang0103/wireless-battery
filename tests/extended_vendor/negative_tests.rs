@@ -4,7 +4,7 @@ use super::common::*;
 use wireless_battery::providers::MatchDecision;
 use wireless_battery::registry::Registry;
 use wireless_battery::transport::replay::{verify_fixture, Expectation};
-use wireless_battery::{ChargeState, DeviceKind, ErrorKind, Precision, Reachability};
+use wireless_battery::{BatteryLevel, ChargeState, DeviceKind, ErrorKind, Precision, Reachability};
 
 #[test]
 fn negative_out_of_range_percentage_bytes_are_rejected_not_clamped() {
@@ -1185,4 +1185,245 @@ fn attack_shark_x6_scaling_and_steelseries_new_pids() {
         assert_eq!(matches[0].0.id(), "steelseries.aerox");
         assert_eq!(matches[0].1, MatchDecision::Exact);
     }
+}
+
+#[test]
+fn apple_magic_mouse_and_trackpad_device_kinds() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    let cases = [
+        ("apple_mm2", 0x004C_u16, 0x0269_u16, DeviceKind::Mouse),
+        ("apple_mm_usbc", 0x05AC, 0x0323, DeviceKind::Mouse),
+        ("apple_mt2", 0x004C, 0x0265, DeviceKind::Peripheral),
+        ("apple_mt_usbc", 0x05AC, 0x0324, DeviceKind::Peripheral),
+    ];
+
+    for (id, vid, pid, expected_kind) in cases {
+        let endpoint = ep(id, vid, pid, Some(0xFF00), Some(1), None, None);
+        let matches = match_providers(&registry, &endpoint);
+        assert_eq!(
+            matches.len(),
+            1,
+            "expected exact match for {vid:04X}:{pid:04X}"
+        );
+        assert_eq!(matches[0].0.id(), "apple.magic");
+        assert_eq!(matches[0].1, MatchDecision::Exact);
+        assert_eq!(matches[0].0.device_kind(&endpoint), expected_kind);
+    }
+}
+
+#[test]
+fn sony_ds4_error_codes_and_dongle_offline_bit() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    // DS4 cable + level 14 (error code) -> (None, ChargeState::Unknown), Online.
+    let mut ds4_err = vec![0_u8; 63];
+    ds4_err[29] = 0x10 | 14;
+    let ds4_error_fixture = make_fixture(
+        "sony.dualshock4",
+        ep("ds4_err", 0x054C, 0x09CC, Some(1), Some(5), None, None),
+        vec![step_read(0x01, &ds4_err)],
+        Expectation::Reading {
+            percentage: None,
+            level: None,
+            voltage_mv: None,
+            charge_state: ChargeState::Unknown,
+            reachability: Reachability::Online,
+            precision: Precision::None,
+        },
+    );
+
+    // DS4 wireless adapter (0x0BA0) with frame[31] & 0x04 != 0 -> Reachability::Offline.
+    let mut ds4_dongle = vec![0_u8; 63];
+    ds4_dongle[29] = 0x05; // non-zero status byte
+    ds4_dongle[30] = 0x04; // frame[31] dongle offline bit
+    let ds4_dongle_offline = make_fixture(
+        "sony.dualshock4",
+        ep(
+            "ds4_dongle_off",
+            0x054C,
+            0x0BA0,
+            Some(1),
+            Some(5),
+            None,
+            None,
+        ),
+        vec![step_read(0x01, &ds4_dongle)],
+        Expectation::Reading {
+            percentage: None,
+            level: None,
+            voltage_mv: None,
+            charge_state: ChargeState::Unknown,
+            reachability: Reachability::Offline,
+            precision: Precision::None,
+        },
+    );
+
+    verify_all(&registry, &[ds4_error_fixture, ds4_dongle_offline]);
+}
+
+#[test]
+fn nintendo_switch_extra_pids_and_host_powered_full() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    // Joy-Con (L) (057E:2006) and HORI Wireless Switch Pad (0F0D:00F6) match nintendo.switch_pro.
+    for (id, vid, pid) in [
+        ("joycon_l", 0x057E_u16, 0x2006_u16),
+        ("hori_pad", 0x0F0D, 0x00F6),
+    ] {
+        let endpoint = ep(id, vid, pid, Some(1), Some(5), None, None);
+        let matches = match_providers(&registry, &endpoint);
+        assert_eq!(matches.len(), 1, "expected exact match for {id}");
+        assert_eq!(matches[0].0.id(), "nintendo.switch_pro");
+        assert_eq!(matches[0].1, MatchDecision::Exact);
+    }
+
+    // raw_level == 4 with host_powered (0x01) and charging == 0 reports ChargeState::Full.
+    let mut sp_full = vec![0_u8; 48];
+    sp_full[1] = (4 << 5) | 0x01;
+    let host_powered_full = make_fixture(
+        "nintendo.switch_pro",
+        ep("switch_full", 0x057E, 0x2006, Some(1), Some(5), None, None),
+        vec![step_read(0x30, &sp_full)],
+        Expectation::Reading {
+            percentage: None,
+            level: Some(BatteryLevel::Full),
+            voltage_mv: None,
+            charge_state: ChargeState::Full,
+            reachability: Reachability::Online,
+            precision: Precision::DiscreteLevel,
+        },
+    );
+
+    verify_fixture(&host_powered_full, registry)
+        .expect("host-powered Switch controller at level 4 must report Full");
+}
+
+#[test]
+fn corsair_void_critical_and_full_states() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    // PIDs 0x0A0C and 0x1B25 match corsair.void.
+    for pid in [0x0A0C_u16, 0x1B25] {
+        let endpoint = ep(
+            &format!("cor_void_{pid:04x}"),
+            0x1B1C,
+            pid,
+            Some(0xFFC5),
+            Some(1),
+            None,
+            None,
+        );
+        let matches = match_providers(&registry, &endpoint);
+        assert_eq!(matches.len(), 1, "expected exact match for 1B1C:{pid:04X}");
+        assert_eq!(matches[0].0.id(), "corsair.void");
+        assert_eq!(matches[0].1, MatchDecision::Exact);
+    }
+
+    // st == 3 -> Discharging with valid percentage.
+    let void_critical = make_fixture(
+        "corsair.void",
+        ep(
+            "cor_void_crit",
+            0x1B1C,
+            0x0A0C,
+            Some(0xFFC5),
+            Some(1),
+            None,
+            None,
+        ),
+        vec![
+            step_flush_timeout(),
+            step_write(0xC9, &padded(&[0x64], 63)),
+            step_read(0xCA, &[0x00, 0x80 | 12, 0x00, 0x03]),
+        ],
+        expect_pct(12, ChargeState::Discharging, None),
+    );
+
+    // st == 4 -> ChargeState::Full with valid percentage.
+    let void_full = make_fixture(
+        "corsair.void",
+        ep(
+            "cor_void_full",
+            0x1B1C,
+            0x1B25,
+            Some(0xFFC5),
+            Some(1),
+            None,
+            None,
+        ),
+        vec![
+            step_flush_timeout(),
+            step_write(0xC9, &padded(&[0x64], 63)),
+            step_read(0xCA, &[0x00, 0x80 | 100, 0x00, 0x04]),
+        ],
+        expect_pct(100, ChargeState::Full, None),
+    );
+
+    verify_all(&registry, &[void_critical, void_full]);
+}
+
+#[test]
+fn logitech_hidpp_1004_error_and_1f20_full() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    // 0x1004 UnifiedBattery status 4 -> ChargeState::Unknown (NOT Charging).
+    let hidpp_1004_err = make_fixture(
+        "logitech.hidpp",
+        ep(
+            "logi_1004_err",
+            0x046D,
+            0xC09B,
+            Some(0xFF00),
+            Some(2),
+            None,
+            Some("PRO X SUPERLIGHT 2"),
+        ),
+        vec![
+            step_write(0x11, &padded(&[0xFF, 0x00, 0x1E], 19)),
+            step_read(0x11, &padded(&[0xFF, 0x00, 0x1E, 0x04, 0x02], 19)),
+            step_write(0x11, &padded(&[0xFF, 0x00, 0x0E, 0x10, 0x00], 19)),
+            step_read(0x11, &padded(&[0xFF, 0x00, 0x0E, 0x00], 19)),
+            step_write(0x11, &padded(&[0xFF, 0x00, 0x0E, 0x10, 0x04], 19)),
+            step_read(0x11, &padded(&[0xFF, 0x00, 0x0E, 0x05], 19)),
+            step_write(0x11, &padded(&[0xFF, 0x05, 0x1E], 19)),
+            step_read(0x11, &padded(&[0xFF, 0x05, 0x1E, 50, 0x00, 0x04], 19)),
+        ],
+        expect_pct(50, ChargeState::Unknown, None),
+    );
+
+    // 0x1F20 ADC status 0x07 -> ChargeState::Full.
+    let mv_full = 4102_u16.to_be_bytes();
+    let hidpp_1f20_full = make_fixture(
+        "logitech.hidpp",
+        ep(
+            "logi_1f20_full",
+            0x046D,
+            0x0AAA,
+            Some(0xFF00),
+            Some(2),
+            None,
+            Some("Logitech G PRO X"),
+        ),
+        vec![
+            step_write(0x11, &padded(&[0xFF, 0x00, 0x1E], 19)),
+            step_read(0x11, &padded(&[0xFF, 0x00, 0x1E, 0x04, 0x02], 19)),
+            step_write(0x11, &padded(&[0xFF, 0x00, 0x0E, 0x10, 0x00], 19)),
+            step_read(0x11, &padded(&[0xFF, 0x00, 0x0E, 0x00], 19)),
+            step_write(0x11, &padded(&[0xFF, 0x00, 0x0E, 0x10, 0x04], 19)),
+            step_read(0x11, &padded(&[0xFF, 0x00, 0x0E, 0x00], 19)),
+            step_write(0x11, &padded(&[0xFF, 0x00, 0x0E, 0x10, 0x01], 19)),
+            step_read(0x11, &padded(&[0xFF, 0x00, 0x0E, 0x00], 19)),
+            step_write(0x11, &padded(&[0xFF, 0x00, 0x0E, 0x1F, 0x20], 19)),
+            step_read(0x11, &padded(&[0xFF, 0x00, 0x0E, 0x07], 19)),
+            step_write(0x11, &padded(&[0xFF, 0x07, 0x0E], 19)),
+            step_read(
+                0x11,
+                &padded(&[0xFF, 0x07, 0x0E, mv_full[0], mv_full[1], 0x07], 19),
+            ),
+        ],
+        expect_pct(100, ChargeState::Full, Some(4102)),
+    );
+
+    verify_all(&registry, &[hidpp_1004_err, hidpp_1f20_full]);
 }

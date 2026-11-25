@@ -213,6 +213,8 @@ impl Provider for Compx08Provider {
                 _ => "Corsair Sabre V2 Pro Ultralight",
             },
             Compx08Kind::Kysona => match (endpoint.vid, endpoint.pid) {
+                (Some(0x3554), Some(0xF507..=0xF509)) => "Pulsar wireless mouse",
+                (Some(0x3554), Some(0xF57C | 0xF57D)) => "Kysona M600",
                 (Some(0x3554), Some(0xF55D | 0xF55E)) => "Redragon M916 Pro",
                 (Some(0x3554), Some(0xF5D5)) => "Taidu TSG808",
                 (Some(0x3554), Some(0xF58A | 0xF58C | 0xF58E | 0xF58F | 0xF505 | 0xF506)) => {
