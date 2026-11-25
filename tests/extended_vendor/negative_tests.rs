@@ -755,3 +755,293 @@ fn negative_protocol_family_abnormal_paths() {
         ],
     );
 }
+
+#[test]
+fn logitech_g930_beats_hidpp10_and_g535_consumer_matches_hidpp() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    // logitech.g930 (Exact) beats logitech.hidpp10 (Family) on 046D:0A1F (0xFF00 / 0x0001).
+    let g930_ep = ep(
+        "logi_g930_prio",
+        0x046D,
+        0x0A1F,
+        Some(0xFF00),
+        Some(0x0001),
+        None,
+        None,
+    );
+    let g930_matches = match_providers(&registry, &g930_ep);
+    let exact: Vec<&str> = g930_matches
+        .iter()
+        .filter(|(_, d)| *d == MatchDecision::Exact)
+        .map(|(p, _)| p.id())
+        .collect();
+    let family: Vec<&str> = g930_matches
+        .iter()
+        .filter(|(_, d)| *d == MatchDecision::Family)
+        .map(|(p, _)| p.id())
+        .collect();
+    assert_eq!(exact, vec!["logitech.g930"]);
+    assert_eq!(family, vec!["logitech.hidpp10"]);
+    let g930_provider = g930_matches
+        .iter()
+        .find(|(p, _)| p.id() == "logitech.g930")
+        .expect("logitech.g930 present")
+        .0;
+    assert_eq!(g930_provider.device_kind(&g930_ep), DeviceKind::Headset);
+
+    // logitech.hidpp matches G535 (046D:0AC4) on usage_page=0x000C, usage=0x0001, interface=3.
+    let g535_ep = ep(
+        "logi_g535_cc",
+        0x046D,
+        0x0AC4,
+        Some(0x000C),
+        Some(0x0001),
+        Some(3),
+        None,
+    );
+    let g535_matches = match_providers(&registry, &g535_ep);
+    assert_eq!(g535_matches.len(), 1);
+    assert_eq!(g535_matches[0].0.id(), "logitech.hidpp");
+    assert_eq!(g535_matches[0].1, MatchDecision::Exact);
+    assert_eq!(g535_matches[0].0.device_kind(&g535_ep), DeviceKind::Headset);
+
+    // Wrong interface on G535 consumer control collection must not match.
+    let g535_wrong_if = ep(
+        "logi_g535_if0",
+        0x046D,
+        0x0AC4,
+        Some(0x000C),
+        Some(0x0001),
+        Some(0),
+        None,
+    );
+    assert!(match_providers(&registry, &g535_wrong_if).is_empty());
+}
+
+#[test]
+fn logitech_centurion_direct_vs_bridged_and_offline_state() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    let bridged_ep = ep(
+        "cent_bridged",
+        0x046D,
+        0x0AF7,
+        Some(0xFFA0),
+        Some(0x0001),
+        Some(3),
+        None,
+    );
+    let direct_ep = ep(
+        "cent_direct",
+        0x046D,
+        0x0B2E,
+        Some(0xFFA0),
+        Some(0x0001),
+        Some(3),
+        None,
+    );
+    for endpoint in [&bridged_ep, &direct_ep] {
+        let matches = match_providers(&registry, endpoint);
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].0.id(), "logitech.centurion");
+        assert_eq!(matches[0].1, MatchDecision::Exact);
+    }
+
+    // Direct USB-wired Centurion (0x0B2E, prefix [0x50, 0x23]) queries root -> battery directly.
+    let direct_ok = make_fixture(
+        "logitech.centurion",
+        direct_ep,
+        vec![
+            step_write(0x50, &padded(&[0x23, 5, 0x00, 0x00, 0x01, 0x01, 0x04], 63)),
+            step_read(0x50, &padded(&[0x23, 4, 0x00, 0x00, 0x01, 0x05], 63)),
+            step_write(0x50, &padded(&[0x23, 3, 0x00, 0x05, 0x01], 63)),
+            step_read(
+                0x50,
+                &padded(&[0x23, 6, 0x00, 0x05, 0x01, 64, 0x00, 0x00], 63),
+            ),
+        ],
+        expect_pct(64, ChargeState::Discharging, None),
+    );
+
+    // Bridged Centurion (0x0AF7) reports Offline when bridge connection event signals disconnected.
+    let bridged_offline = make_fixture(
+        "logitech.centurion",
+        bridged_ep,
+        vec![
+            step_write(0x51, &padded(&[5, 0x00, 0x00, 0x01, 0x00, 0x03], 63)),
+            step_read(0x51, &padded(&[4, 0x00, 0x00, 0x01, 0x03], 63)),
+            step_write(
+                0x51,
+                &padded(
+                    &[
+                        10, 0x00, 0x03, 0x11, 0x00, 0x05, 0x00, 0x00, 0x01, 0x01, 0x04,
+                    ],
+                    63,
+                ),
+            ),
+            step_read(0x51, &padded(&[5, 0x00, 0x03, 0x00, 0x00, 0x00], 63)),
+        ],
+        Expectation::Reading {
+            percentage: None,
+            level: None,
+            voltage_mv: None,
+            charge_state: ChargeState::Unknown,
+            reachability: Reachability::Offline,
+            precision: Precision::None,
+        },
+    );
+
+    verify_all(&registry, &[direct_ok, bridged_offline]);
+}
+
+#[test]
+fn corsair_void_0x64_header_and_bragi_headset_kind() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    // corsair.void accepts real 0x64 response header as well as 0xCA.
+    let void_64 = make_fixture(
+        "corsair.void",
+        ep(
+            "cor_void_64",
+            0x1B1C,
+            0x0A55,
+            Some(0xFFC5),
+            Some(1),
+            None,
+            None,
+        ),
+        vec![
+            step_flush_timeout(),
+            step_write(0xC9, &padded(&[0x64], 63)),
+            step_read(0x64, &[0x00, 0x80 | 68, 0x00, 0x01]),
+        ],
+        expect_pct(68, ChargeState::Discharging, None),
+    );
+    verify_fixture(&void_64, registry.clone())
+        .expect("corsair.void must accept 0x64 response header");
+
+    // corsair.bragi classifies 0x2A08 as DeviceKind::Headset with Exact match.
+    let bragi_hs = ep(
+        "cor_bragi_2a08",
+        0x1B1C,
+        0x2A08,
+        Some(0xFF42),
+        Some(1),
+        None,
+        None,
+    );
+    let matches = match_providers(&registry, &bragi_hs);
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].0.id(), "corsair.bragi");
+    assert_eq!(matches[0].1, MatchDecision::Exact);
+    assert_eq!(matches[0].0.device_kind(&bragi_hs), DeviceKind::Headset);
+}
+
+#[test]
+fn sony_pulse_3d_charging_and_offline_states() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    // Charging: r[3] == 0x80, online bit (r[4] & 0x08) != 0 -> percentage: None, ChargeState::Charging.
+    let pulse_charging = make_fixture(
+        "sony.pulse_3d",
+        ep(
+            "pulse3d_chg",
+            0x054C,
+            0x0D5E,
+            Some(0xFF01),
+            Some(0x0020),
+            None,
+            None,
+        ),
+        vec![
+            step_read(0xB0, &[0x00, 0x00, 0x80, 0x08, 0x00, 0x00, 0x00]),
+            step_flush_timeout(),
+        ],
+        Expectation::Reading {
+            percentage: None,
+            level: None,
+            voltage_mv: None,
+            charge_state: ChargeState::Charging,
+            reachability: Reachability::Online,
+            precision: Precision::None,
+        },
+    );
+
+    // Offline: (r[4] & 0x08) == 0 -> Reachability::Offline, percentage: None.
+    let pulse_offline = make_fixture(
+        "sony.pulse_3d",
+        ep(
+            "pulse3d_off",
+            0x054C,
+            0x0D5E,
+            Some(0xFF01),
+            Some(0x0020),
+            None,
+            None,
+        ),
+        vec![
+            step_read(0xB0, &[0x00, 0x00, 50, 0x00, 0x00, 0x00, 0x00]),
+            step_flush_timeout(),
+        ],
+        Expectation::Reading {
+            percentage: None,
+            level: None,
+            voltage_mv: None,
+            charge_state: ChargeState::Unknown,
+            reachability: Reachability::Offline,
+            precision: Precision::None,
+        },
+    );
+
+    verify_all(&registry, &[pulse_charging, pulse_offline]);
+}
+
+#[test]
+fn negative_new_headset_providers_reject_out_of_range_percentage() {
+    let registry = Registry::builtin().expect("builtin registry must load cleanly");
+
+    let lenovo_oob = make_fixture(
+        "lenovo.wireless_voip",
+        ep(
+            "lenovo_oob",
+            0x17EF,
+            0xA07D,
+            Some(0xFF07),
+            Some(0x0222),
+            None,
+            None,
+        ),
+        vec![
+            step_flush_timeout(),
+            step_send_feature(0x24, &padded(&[0x01], 60)),
+            step_read(0x27, &[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 101]),
+        ],
+        Expectation::Error {
+            error: ErrorKind::InvalidResponse,
+        },
+    );
+
+    let fifine_oob = make_fixture(
+        "fifine.ht6",
+        ep(
+            "fifine_oob",
+            0x3142,
+            0x00C3,
+            Some(0xFF90),
+            Some(0x0001),
+            None,
+            None,
+        ),
+        vec![
+            step_flush_timeout(),
+            step_write(0x55, &padded(&[0x65, 0x01], 63)),
+            step_read(0x55, &[0x65, 101, 0x00]),
+        ],
+        Expectation::Error {
+            error: ErrorKind::InvalidResponse,
+        },
+    );
+
+    verify_all(&registry, &[lenovo_oob, fifine_oob]);
+}

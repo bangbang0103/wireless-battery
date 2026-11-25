@@ -1,13 +1,13 @@
-//! Sony DualSense, DualShock 4, and INZONE headset battery protocols (VID 0x054C).
+//! Sony DualSense, DualShock 4, INZONE, and PULSE 3D headset battery protocols (VID 0x054C).
 
 use crate::error::BatteryError;
 use crate::model::{ChargeState, DeviceKind, Endpoint, HidBusType, ProviderReading, Reachability};
 use crate::providers::fixed::{
-    capabilities, checked_percentage, checksum_sum, drain_input, experimental_metadata, reading,
-    send_with_modes, wait_frame, OUTPUT,
+    capabilities, checked_percentage, checksum_sum, drain_input, experimental_metadata, frame,
+    reading, send_with_modes, wait_frame, OUTPUT,
 };
 use crate::providers::{Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata};
-use crate::transport::HidSession;
+use crate::transport::{HidSession, TransportError};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,6 +16,7 @@ pub(crate) fn providers() -> Vec<Arc<dyn Provider>> {
         Arc::new(DualSenseProvider),
         Arc::new(DualShock4Provider),
         Arc::new(SonyInzoneProvider),
+        Arc::new(SonyPulse3dProvider),
     ]
 }
 
@@ -335,6 +336,90 @@ impl Provider for SonyInzoneProvider {
                 ChargeState::Discharging
             };
             Ok(reading(Some(pct), charge, None))
+        }
+    }
+}
+
+struct SonyPulse3dProvider;
+
+impl Provider for SonyPulse3dProvider {
+    fn id(&self) -> &str {
+        "sony.pulse_3d"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(
+            DeviceKind::Headset,
+            capabilities(true, true, false),
+            Duration::from_millis(1000),
+        )
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Sony PULSE 3D".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        let matched = endpoint.vid == Some(0x054C)
+            && endpoint.pid == Some(0x0D5E)
+            && ((endpoint.usage_page == Some(0xFF01)
+                && matches!(endpoint.usage, None | Some(0x0020)))
+                || (endpoint.usage_page.is_none() && endpoint.interface_number == Some(3)));
+        if matched {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        let mut newest: Option<Vec<u8>> = None;
+        for _ in 0..64 {
+            let timeout = deadline
+                .remaining("Sony PULSE 3D")?
+                .min(Duration::from_millis(50));
+            match session.read_input(timeout) {
+                Ok(report) => {
+                    let f = frame(report);
+                    if f.len() >= 8 && f[0] == 0xB0 {
+                        newest = Some(f);
+                    }
+                }
+                Err(TransportError::Timeout) => break,
+                Err(error) => return Err(error.into_battery(&device.endpoint.id)),
+            }
+        }
+        let r = match newest {
+            Some(f) => f,
+            None => wait_frame(
+                session,
+                device,
+                deadline,
+                Duration::from_millis(1000),
+                16,
+                |f| Ok(f.len() >= 8 && f[0] == 0xB0),
+            )?,
+        };
+        if (r[4] & 0x08) == 0 {
+            return Ok(ProviderReading {
+                reachability: Reachability::Offline,
+                ..reading(None, ChargeState::Unknown, None)
+            });
+        }
+        if r[3] == 0x80 {
+            Ok(reading(None, ChargeState::Charging, None))
+        } else if r[3] <= 100 {
+            Ok(reading(Some(r[3]), ChargeState::Discharging, None))
+        } else {
+            Err(BatteryError::invalid_response(format!(
+                "invalid Sony PULSE 3D battery byte 0x{:02X}",
+                r[3]
+            )))
         }
     }
 }

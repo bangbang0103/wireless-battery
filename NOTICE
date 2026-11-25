@@ -3,4 +3,7 @@ Wireless Battery is licensed under the GNU General Public License v3.0 or later 
 This project includes protocol definitions informed by:
 - Wireless-Device-Battery-Monitor / BatteryHub (GPL-3.0-or-later, https://github.com/krisgfx9/Wireless-Device-Battery-Monitor).
 - Voltide (MIT License, Copyright (c) 2026 Joko).
+- HeadsetControl (GPL-3.0, https://github.com/Sapd/HeadsetControl) — wireless headset battery protocols and USB product IDs (Logitech Centurion / G930, Lenovo Wireless VoIP, EPOS H3PRO Hybrid, FIFINE HT6, MCHOSE X9 / V9 Pro, Sony PULSE 3D, Razer BlackShark V2 Pro PlayStation, and SteelSeries / Audeze / Corsair / Logitech headset protocol details).
+- libratbag (MIT License, https://github.com/libratbag/libratbag) — Logitech HID++ 1.0 battery registers (`0x07` / `0x0D`) and HID++ 2.0 `0x1001` wireless charging flag.
+- OpenRGB (GPL-2.0-or-later, https://gitlab.com/CalcProgrammer1/OpenRGB) — wireless peripheral USB product IDs (Razer, SteelSeries Aerox 5 editions, ASUS ROG Strix Scope RX TKL) and Logitech Centurion transport references.
 - Community protocol documentation and references including GitHub user yiwluoq (ATK protocols), mitsimi/mchose-tray, and Rapou7/offline-mchose (MCHOSE K7 documentation).

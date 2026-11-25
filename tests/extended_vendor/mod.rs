@@ -70,7 +70,7 @@ fn all_builtin_providers_have_replay_coverage() {
         missing.is_empty(),
         "every builtin provider must have a strict replay test; missing: {missing:?}"
     );
-    assert_eq!(registry.providers().len(), 153);
+    assert_eq!(registry.providers().len(), 162);
 
     // Quick sanity check verifying an unknown endpoint matches no built-in providers.
     let unknown_ep = ep("unmatched", 0xFFFF, 0xFFFF, None, None, None, None);

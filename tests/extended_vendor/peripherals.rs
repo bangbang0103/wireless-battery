@@ -231,6 +231,91 @@ pub(super) fn razer_and_asus_fixtures() -> Vec<Fixture> {
         expect_pct(68, ChargeState::Discharging, None),
     ));
 
+    let ps_pkt = |cmd_type: u8, seq: u8, body: &[u8]| {
+        let mut payload = Vec::with_capacity(6 + body.len());
+        payload.extend_from_slice(&[0x50, 0x41, cmd_type, seq, (body.len() & 0xFF) as u8]);
+        if cmd_type == 0x06 {
+            payload.push((body.len() >> 8) as u8);
+        }
+        payload.extend_from_slice(body);
+        let mut pkt = [0_u8; 64];
+        pkt[0] = 0x02;
+        pkt[1] = 0x80;
+        pkt[2] = payload.len() as u8;
+        pkt[5..5 + payload.len()].copy_from_slice(&payload);
+        let crc = crc16(&pkt, 0x0000);
+        pkt[3] = (crc & 0xFF) as u8;
+        pkt[4] = (crc >> 8) as u8;
+        pkt[1..].to_vec()
+    };
+    let ps_reply = |cmd_type: u8, seq: u8, data: &[u8]| {
+        let mut r = vec![0_u8; 13 + data.len()];
+        r[0] = (12 + data.len()) as u8;
+        r[1] = 0x50;
+        r[2] = 0x49;
+        r[3] = 0x01;
+        r[11] = cmd_type;
+        r[12] = 0x80 | seq;
+        r[13..].copy_from_slice(data);
+        r
+    };
+    let ps_link_data = |id: u8, val: u8| {
+        let mut d = [0_u8; 13];
+        d[0] = 0x00;
+        d[1] = 0x50;
+        d[2] = 0x49;
+        d[11] = id;
+        d[12] = val;
+        d
+    };
+    let ps_custom_reply = |id: u8, val: u8| {
+        let mut r = vec![0_u8; 15];
+        r[0] = 14;
+        r[1] = 0x50;
+        r[2] = 0x49;
+        r[3] = 0x08;
+        r[9] = 0x04;
+        r[10] = 0x00;
+        r[11] = id;
+        r[12] = 0x01;
+        r[13] = 0x01;
+        r[14] = val;
+        r
+    };
+    let ps_ack = padded(&[b'O'], 63);
+    let mv_4000 = 4000_u16.to_le_bytes();
+    fixtures.push(make_fixture(
+        "razer.blackshark_v2_pro_ps",
+        ep(
+            "rz_v2_ps",
+            0x1532,
+            0x1014,
+            Some(0xFF00),
+            Some(0x0001),
+            None,
+            None,
+        ),
+        vec![
+            step_flush_timeout(),
+            step_write(0x02, &ps_pkt(0x0E, 1, &[0xE6])),
+            step_get_input(0x02, 63, &ps_ack),
+            step_read(0x02, &ps_reply(0x0E, 1, &ps_link_data(0xE6, 0x08))),
+            step_write(0x02, &ps_pkt(0x0E, 2, &[0xE0])),
+            step_get_input(0x02, 63, &ps_ack),
+            step_read(0x02, &ps_reply(0x0E, 2, &ps_link_data(0xE0, 0x01))),
+            step_write(0x02, &ps_pkt(0x06, 3, &[0x31])),
+            step_get_input(0x02, 63, &ps_ack),
+            step_read(0x02, &ps_reply(0x06, 3, &[0x00, mv_4000[0], mv_4000[1]])),
+            step_write(0x02, &ps_pkt(0x08, 4, &[0x2A, 0x00, 0x00])),
+            step_get_input(0x02, 63, &ps_ack),
+            step_read(0x02, &ps_custom_reply(0x2A, 0x01)),
+            step_write(0x02, &ps_pkt(0x08, 5, &[0x21, 0x00, 0x00])),
+            step_get_input(0x02, 63, &ps_ack),
+            step_read(0x02, &ps_custom_reply(0x21, 84)),
+        ],
+        expect_pct(84, ChargeState::Charging, Some(4000)),
+    ));
+
     // ASUS ROG Cetra & ROG Peripheral
     fixtures.push(make_fixture(
         "asus.rog_cetra",

@@ -6,11 +6,11 @@ use crate::model::{
 };
 use crate::providers::fixed::{
     capabilities, charge_bool, checked_percentage, crc16_poly_1021, drain_input,
-    experimental_metadata, feature_frame, input_frame, query, reading, send_with_modes, sleep,
-    wait_frame, SendMode, OUTPUT,
+    experimental_metadata, feature_frame, frame, input_frame, interpolate_mv, query, reading,
+    send_with_modes, sleep, wait_frame, SendMode, OUTPUT,
 };
 use crate::providers::{Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata};
-use crate::transport::HidSession;
+use crate::transport::{HidSession, TransportError};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -23,6 +23,7 @@ pub(crate) fn providers() -> Vec<Arc<dyn Provider>> {
         Arc::new(BlackSharkV3XProvider),
         Arc::new(BlackSharkV3Provider),
         Arc::new(BarracudaProProvider),
+        Arc::new(BlackSharkV2ProPsProvider),
     ]
 }
 
@@ -693,5 +694,379 @@ impl Provider for BarracudaProProvider {
         };
         let _ = send_with_modes(session, device, OUTPUT, &remote(false));
         result
+    }
+}
+
+const BLACKSHARK_V2_PRO_PS_MV_TABLE: &[(u32, u8)] = &[
+    (4150, 100),
+    (4074, 90),
+    (3982, 80),
+    (3929, 70),
+    (3869, 60),
+    (3809, 50),
+    (3782, 40),
+    (3766, 30),
+    (3734, 20),
+    (3683, 10),
+    (3304, 0),
+];
+
+const BLACKSHARK_V2_PRO_PS_IOCTL_READ_MAX_LEN: [u8; 13] = [
+    0x25, 0x34, 0x12, 0x5A, 0x5A, 0x01, 0x00, 0x00, 0x00, 0xF0, 0x00, 0x00, 0x00,
+];
+
+struct BlackSharkV2ProPsProvider;
+
+struct BlackSharkV2ProPsState {
+    seq: u8,
+    reported_pct: Option<u8>,
+    reported_charge: Option<u8>,
+}
+
+impl BlackSharkV2ProPsState {
+    fn new() -> Self {
+        Self {
+            seq: 0,
+            reported_pct: None,
+            reported_charge: None,
+        }
+    }
+
+    fn next_seq(&mut self) -> u8 {
+        self.seq = (self.seq % 127) + 1;
+        self.seq
+    }
+
+    fn note_indication(&mut self, report: &[u8]) {
+        if !is_ps_custom_frame(report) {
+            return;
+        }
+        let value = report[15];
+        match report[12] {
+            0x21 if value <= 100 => {
+                self.reported_pct = Some(value);
+            }
+            0x2A if value <= 0x02 => {
+                self.reported_charge = Some(value);
+            }
+            0x2A if value == 0x03 => {
+                self.reported_charge = None;
+            }
+            _ => {}
+        }
+    }
+}
+
+fn is_ps_custom_frame(report: &[u8]) -> bool {
+    report.len() == 16
+        && report[4] == 0x08
+        && report[10] == 0x04
+        && report[11] == 0x00
+        && matches!(report[13], 0x01 | 0x02)
+        && report[14] == 0x01
+}
+
+fn ps_build_frame(cmd_type: u8, seq: u8, body: &[u8]) -> Vec<u8> {
+    let mut payload = Vec::with_capacity(6 + body.len());
+    payload.extend_from_slice(&[0x50, 0x41, cmd_type, seq, (body.len() & 0xFF) as u8]);
+    if cmd_type == 0x06 {
+        payload.push((body.len() >> 8) as u8);
+    }
+    payload.extend_from_slice(body);
+
+    let mut pkt = vec![0_u8; 64];
+    let take = payload.len().min(pkt.len() - 5);
+    pkt[0] = 0x02;
+    pkt[1] = 0x80;
+    pkt[2] = take as u8;
+    pkt[5..5 + take].copy_from_slice(&payload[..take]);
+    let crc = crc16_poly_1021(&pkt, 0x0000);
+    pkt[3] = (crc & 0xFF) as u8;
+    pkt[4] = (crc >> 8) as u8;
+    pkt
+}
+
+fn ps_send_and_ack(
+    session: &mut dyn HidSession,
+    device: &DeviceContext<'_>,
+    deadline: Deadline,
+    pkt: &[u8],
+) -> Result<(), BatteryError> {
+    const RESEND_DELAYS: [Duration; 2] = [Duration::from_millis(20), Duration::from_millis(60)];
+    for attempt in 0..=RESEND_DELAYS.len() {
+        if attempt > 0 {
+            sleep(deadline, RESEND_DELAYS[attempt - 1])?;
+        }
+        send_with_modes(session, device, OUTPUT, pkt)?;
+        let ack = input_frame(session, device, 0x02, 63)?;
+        if ack.len() >= 2 && ack[1] == b'O' {
+            return Ok(());
+        }
+    }
+    Err(BatteryError::DeviceBusy {
+        endpoint: device.endpoint.id.to_string(),
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn ps_command(
+    state: &mut BlackSharkV2ProPsState,
+    session: &mut dyn HidSession,
+    device: &DeviceContext<'_>,
+    deadline: Deadline,
+    cmd_type: u8,
+    body: &[u8],
+    timeout: Duration,
+    custom_id: Option<u8>,
+) -> Result<Vec<u8>, BatteryError> {
+    let seq = state.next_seq();
+    let expect = 0x80 | seq;
+    let pkt = ps_build_frame(cmd_type, seq, body);
+    ps_send_and_ack(session, device, deadline, &pkt)?;
+
+    for _ in 0..32 {
+        let remaining = deadline
+            .remaining("Razer BlackShark V2 Pro (PlayStation)")?
+            .min(timeout);
+        let report = match session.read_input(remaining) {
+            Ok(report) => frame(report),
+            Err(TransportError::Timeout) => {
+                return Err(BatteryError::timeout(
+                    "Razer BlackShark V2 Pro (PlayStation)",
+                ))
+            }
+            Err(error) => return Err(error.into_battery(&device.endpoint.id)),
+        };
+        if report.len() < 5 || report[0] != 0x02 {
+            continue;
+        }
+        let end = report.len().min(2 + usize::from(report[1]));
+        if end <= 4 || report[2] != 0x50 || report[3] != 0x49 {
+            continue;
+        }
+        let slice = &report[..end];
+        if custom_id.is_none()
+            && end > 14
+            && slice[4] == 0x01
+            && slice[12] == cmd_type
+            && slice[13] == expect
+        {
+            return Ok(slice[14..end].to_vec());
+        }
+        state.note_indication(slice);
+        if let Some(id) = custom_id {
+            if is_ps_custom_frame(slice) && slice[12] == id && slice[13] == 0x01 {
+                return Ok(slice[12..end].to_vec());
+            }
+        }
+    }
+    Err(BatteryError::timeout(
+        "Razer BlackShark V2 Pro (PlayStation)",
+    ))
+}
+
+fn ps_get_link_value(
+    state: &mut BlackSharkV2ProPsState,
+    session: &mut dyn HidSession,
+    device: &DeviceContext<'_>,
+    deadline: Deadline,
+    id: u8,
+) -> Result<u8, BatteryError> {
+    let data = ps_command(
+        state,
+        session,
+        device,
+        deadline,
+        0x0E,
+        &[id],
+        Duration::from_millis(500),
+        None,
+    )?;
+    if data.len() < 13 || data[0] != 0x00 || data[1] != 0x50 || data[2] != 0x49 || data[11] != id {
+        return Err(BatteryError::invalid_response(format!(
+            "unexpected Razer BlackShark V2 Pro PS link reply for 0x{id:02X}"
+        )));
+    }
+    Ok(data[12])
+}
+
+fn ps_set_mode(
+    state: &mut BlackSharkV2ProPsState,
+    session: &mut dyn HidSession,
+    device: &DeviceContext<'_>,
+    deadline: Deadline,
+    mode: u8,
+) -> Result<(), BatteryError> {
+    let reply = ps_command(
+        state,
+        session,
+        device,
+        deadline,
+        0x0E,
+        &[0xE1, mode],
+        Duration::from_millis(500),
+        None,
+    )?;
+    if reply.first() != Some(&0x00) {
+        return Err(BatteryError::invalid_response(
+            "Razer BlackShark V2 Pro PS rejected mode switch",
+        ));
+    }
+    sleep(deadline, Duration::from_millis(50))?;
+    let _ = ps_command(
+        state,
+        session,
+        device,
+        deadline,
+        0x06,
+        &BLACKSHARK_V2_PRO_PS_IOCTL_READ_MAX_LEN,
+        Duration::from_millis(1000),
+        None,
+    )?;
+    Ok(())
+}
+
+impl Provider for BlackSharkV2ProPsProvider {
+    fn id(&self) -> &str {
+        "razer.blackshark_v2_pro_ps"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(
+            DeviceKind::Headset,
+            capabilities(true, true, true),
+            Duration::from_millis(1500),
+        )
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Razer BlackShark V2 Pro (PlayStation)".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        let matched = endpoint.vid == Some(0x1532)
+            && endpoint.pid == Some(0x1014)
+            && ((endpoint.usage_page == Some(0xFF00)
+                && matches!(endpoint.usage, None | Some(0x0001)))
+                || (endpoint.usage_page.is_none() && endpoint.interface_number == Some(3)));
+        if matched {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        let mut state = BlackSharkV2ProPsState::new();
+        for _ in 0..16 {
+            let timeout = deadline
+                .remaining("Razer BlackShark V2 Pro (PlayStation)")?
+                .min(Duration::from_millis(10));
+            match session.read_input(timeout) {
+                Ok(report) => {
+                    let f = frame(report);
+                    if f.len() >= 5 && f[0] == 0x02 {
+                        let end = f.len().min(2 + usize::from(f[1]));
+                        if end > 4 && f[2] == 0x50 && f[3] == 0x49 {
+                            state.note_indication(&f[..end]);
+                        }
+                    }
+                }
+                Err(TransportError::Timeout) => break,
+                Err(error) => return Err(error.into_battery(&device.endpoint.id)),
+            }
+        }
+
+        let link = ps_get_link_value(&mut state, session, device, deadline, 0xE6)?;
+        if (link & 0x08) == 0 {
+            return Ok(ProviderReading {
+                reachability: Reachability::Offline,
+                source: ReadingSource::VendorHid,
+                ..ProviderReading::default()
+            });
+        }
+
+        let mode = ps_get_link_value(&mut state, session, device, deadline, 0xE0)?;
+        if !matches!(mode, 0x00 | 0x01) {
+            return Err(BatteryError::invalid_response(format!(
+                "unexpected Razer BlackShark V2 Pro PS mode 0x{mode:02X}"
+            )));
+        }
+
+        let mut switched_to_remote = false;
+        if mode == 0x00 {
+            switched_to_remote = true;
+            if let Err(error) = ps_set_mode(&mut state, session, device, deadline, 0x01) {
+                let _ = ps_set_mode(&mut state, session, device, deadline, 0x00);
+                return Err(error);
+            }
+        }
+
+        let voltage_result = (|| -> Result<u16, BatteryError> {
+            let data = ps_command(
+                &mut state,
+                session,
+                device,
+                deadline,
+                0x06,
+                &[0x31],
+                Duration::from_millis(1000),
+                None,
+            )?;
+            if data.len() < 3 || data[0] != 0x00 {
+                return Err(BatteryError::invalid_response(
+                    "Razer BlackShark V2 Pro PS rejected battery voltage query",
+                ));
+            }
+            let mv = u16::from_le_bytes([data[1], data[2]]);
+            if !(2500..=4500).contains(&mv) {
+                return Err(BatteryError::invalid_response(format!(
+                    "implausible Razer BlackShark V2 Pro PS voltage {mv} mV"
+                )));
+            }
+            let _ = ps_command(
+                &mut state,
+                session,
+                device,
+                deadline,
+                0x08,
+                &[0x2A, 0x00, 0x00],
+                Duration::from_millis(500),
+                Some(0x2A),
+            );
+            let _ = ps_command(
+                &mut state,
+                session,
+                device,
+                deadline,
+                0x08,
+                &[0x21, 0x00, 0x00],
+                Duration::from_millis(500),
+                Some(0x21),
+            );
+            Ok(mv)
+        })();
+
+        if switched_to_remote {
+            let _ = ps_set_mode(&mut state, session, device, deadline, 0x00);
+        }
+
+        let mv = voltage_result?;
+        let pct = match state.reported_pct {
+            Some(p) => checked_percentage(p)?,
+            None => interpolate_mv(u32::from(mv), BLACKSHARK_V2_PRO_PS_MV_TABLE),
+        };
+        let charge = match state.reported_charge {
+            Some(0x00) => ChargeState::Discharging,
+            Some(0x01) => ChargeState::Charging,
+            Some(0x02) => ChargeState::Full,
+            _ => ChargeState::Unknown,
+        };
+        Ok(reading(Some(pct), charge, Some(u32::from(mv))))
     }
 }

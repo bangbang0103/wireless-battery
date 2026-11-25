@@ -14,8 +14,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const VID_STEELSERIES: u16 = 0x1038;
-const AEROX_WIRED_PIDS: &[u16] = &[0x183A, 0x187A, 0x1892, 0x1854, 0x185A, 0x1842];
-const AEROX_RX_PIDS: &[u16] = &[0x1838, 0x1878, 0x1890, 0x1852, 0x1858, 0x1840, 0x1860];
+const AEROX_WIRED_PIDS: &[u16] = &[
+    0x183A, 0x187A, 0x1892, 0x1854, 0x185A, 0x1842, 0x185E, 0x1862,
+];
+const AEROX_RX_PIDS: &[u16] = &[
+    0x1838, 0x1878, 0x1890, 0x1852, 0x1858, 0x1840, 0x185C, 0x1860,
+];
 
 pub(crate) fn providers() -> Vec<Arc<dyn Provider>> {
     vec![
@@ -46,7 +50,8 @@ impl Provider for AeroxProvider {
             Some(0x1878 | 0x187A) => "SteelSeries Aerox 3 Wireless CS2",
             Some(0x1890 | 0x1892) => "SteelSeries Aerox 3 Wireless Gen 2",
             Some(0x1852 | 0x1854) => "SteelSeries Aerox 5 Wireless",
-            Some(0x1860) => "SteelSeries Aerox 5 Wireless Diablo IV",
+            Some(0x185C | 0x185E) => "SteelSeries Aerox 5 Wireless Destiny 2",
+            Some(0x1860 | 0x1862) => "SteelSeries Aerox 5 Wireless Diablo IV",
             Some(0x1858 | 0x185A) => "SteelSeries Aerox 9 Wireless",
             Some(0x1840 | 0x1842) => "SteelSeries Prime Wireless",
             _ => "SteelSeries Wireless Mouse",

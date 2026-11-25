@@ -2,7 +2,7 @@
 
 > **Language / 语言**: [English](support-matrix.md) | **简体中文**
 
-**当前内置 153 条 Provider**（151 条厂商 HID + `os.xinput` + `bluetooth.bas`），默认全部启用；如在特定型号或固件上遇到读数异常，欢迎直接提交 Issue 反馈。
+**当前内置 162 条 Provider**（160 条厂商 HID + `os.xinput` + `bluetooth.bas`），默认全部启用；如在特定型号或固件上遇到读数异常，欢迎直接提交 Issue 反馈。
 
 ## 内置厂商与系统支持列表
 
@@ -30,7 +30,7 @@
 | | 耳机 | ATK N9V2 Ultimate `373B:1262` | `atk.n9v2` |
 | | 键盘 | ATK Z87 | `atk.z87` |
 | | 键盘 | ATK 键盘（EVision） | `evision.atk_keyboard` |
-| Audeze | 耳机 | Audeze Maxwell | `audeze.maxwell` |
+| Audeze | 耳机 | Audeze Maxwell / Maxwell 2 ANC | `audeze.maxwell` |
 | AULA（狼蛛） | 鼠标 | AULA 鼠标（EVision） | `evision.aula_mouse` |
 | | 鼠标 | AULA SC580 | `aula.sc580` |
 | | 键盘 | AULA HERO 68 | `aula.hero68` |
@@ -52,9 +52,11 @@
 | Delux（多彩） | 鼠标 | Delux M800 Pro | `delux.m800_pro` |
 | Endgame Gear | 鼠标 | OP1w / XM2w 4K | `endgame.4k` |
 | Endorfy | 耳机 | Endorfy Viro | `endorfy.viro` |
+| EPOS | 耳机 | EPOS H3PRO Hybrid | `epos.h3pro_hybrid` |
 | EWEADN（前行者） | 鼠标 | EWEADN S9 Pro `372E:103D` / `1027` | `eweadn.s9_pro` |
 | | 鼠标 | EWEADN A5 Pro `258A:0138` | `eweadn.a5_pro` |
 | Fantech | 鼠标 | Fantech XD5 | `fantech.xd5` |
+| FIFINE | 耳机 | FIFINE HT6 Wireless | `fifine.ht6` |
 | Finalmouse | 鼠标 | Finalmouse ULX | `finalmouse.mouse` |
 | Flydigi（飞智） | 手柄 | 飞智 Vader 5 Pro / Apex 5 等 | `flydigi.controller` |
 | Fractal | 耳机 | Fractal Scape | `fractal.scape` |
@@ -84,8 +86,12 @@
 | | 键盘 | Keychron Q / K / V / P / Max / Pro QMK 无线键盘 | `keychron.qmk_keyboard` |
 | Kysona | 鼠标 | Kysona 无线鼠标 | `kysona.mouse` |
 | Lamzu | 鼠标 | Lamzu Maya / Atlantis / Thorn | `lamzu.mouse` |
-| Logitech（罗技） | 鼠标 / 键盘 | GPW3 `046D:C547` 及 HID++ 设备（`0x1004`/`0x1000`/`0x1001`/`0x1F20`） | `logitech.hidpp` |
+| Lenovo（联想） | 耳机 | Lenovo Wireless VoIP Headset | `lenovo.wireless_voip` |
+| Logitech（罗技） | 鼠标 / 键盘 / 耳机 | GPW3 `046D:C547` 及 HID++ 2.0 设备（`0x1004`/`0x1000`/`0x1001`/`0x1F20`） | `logitech.hidpp` |
+| | 鼠标 / 键盘 | 早期罗技 HID++ 1.0 设备（寄存器 `0x0D`/`0x07`） | `logitech.hidpp10` |
+| | 耳机 | G PRO X 2/3 LIGHTSPEED / G522 LIGHTSPEED / ASTRO A20 X（Centurion） | `logitech.centurion` |
 | | 耳机 | Logitech G435 | `logitech.g435` |
+| | 耳机 | Logitech G930 | `logitech.g930` |
 | Machenike（机械师） | 鼠标 | Machenike L7 | `machenike.l7` |
 | Maono（闪克） | 麦克风 | Maono PD200W | `maono.pd200w` |
 | MCHOSE（迈从） | 鼠标 | MCHOSE A5（Gen 1） | `mchose.a5_gen1` |
@@ -99,6 +105,7 @@
 | | 键盘 | MCHOSE K87 V3 | `mchose.k87_v3` |
 | | 耳机 | MCHOSE V9 Turbo+ `3837:600A` | `mchose.v9` |
 | | 耳机 | MCHOSE V9 Pro2 | `mchose.v9_pro2` |
+| | 耳机 | MCHOSE X9 / V9 Pro Wireless | `mchose.x9_v9pro` |
 | Microsoft（微软） | 手柄 | Windows XInput 手柄槽位（仅 4 档离散电量） | `os.xinput` |
 | Moondrop（水月雨） | 耳机 | Moondrop GM01 Pro | `moondrop.gm01_pro` |
 | Motospeed（摩豹） | 鼠标 | Motospeed X6 | `motospeed.x6` |
@@ -122,6 +129,7 @@
 | | 耳机 | BlackShark V2 Pro `1532:0555` | `razer.headset` |
 | | 耳机 | BlackShark V2 HyperSpeed | `razer.blackshark_v2_hs` |
 | | 耳机 | BlackShark V2 Pro (2020) | `razer.blackshark_v2_pro_2020` |
+| | 耳机 | BlackShark V2 Pro (PlayStation) | `razer.blackshark_v2_pro_ps` |
 | | 耳机 | BlackShark V3 | `razer.blackshark_v3` |
 | | 耳机 | BlackShark V3 X | `razer.blackshark_v3_x` |
 | | 耳机 | Barracuda X | `razer.barracuda_x` |
@@ -136,6 +144,7 @@
 | Sony（索尼） | 手柄 | DualSense / DualSense Edge | `sony.dualsense` |
 | | 手柄 | DualShock 4 | `sony.dualshock4` |
 | | 耳机 | INZONE H5 / H7 / H9 / Buds | `sony.inzone` |
+| | 耳机 | Sony PULSE 3D | `sony.pulse_3d` |
 | Sprime | 鼠标 | Sprime PM1 | `sprime.pm1` |
 | SteelSeries（赛睿） | 耳机 | Arctis 1 | `steelseries.arctis1` |
 | | 耳机 | Arctis 7 / 7+ / 7P / 7X | `steelseries.arctis7` |

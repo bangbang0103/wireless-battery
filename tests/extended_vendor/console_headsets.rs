@@ -51,6 +51,24 @@ pub(super) fn sony_and_gamepad_fixtures() -> Vec<Fixture> {
         expect_pct(85, ChargeState::Charging, None),
     ));
 
+    fixtures.push(make_fixture(
+        "sony.pulse_3d",
+        ep(
+            "pulse3d",
+            0x054C,
+            0x0D5E,
+            Some(0xFF01),
+            Some(0x0020),
+            None,
+            None,
+        ),
+        vec![
+            step_read(0xB0, &[0x00, 0x00, 78, 0x08, 0x00, 0x00, 0x00]),
+            step_flush_timeout(),
+        ],
+        expect_pct(78, ChargeState::Discharging, None),
+    ));
+
     // --- Gamepads ---
     let mut sp = vec![0_u8; 48];
     sp[1] = (3 << 5) | 0x10; // Medium + charging
@@ -708,6 +726,102 @@ pub(super) fn hyperx_and_logitech_audio_fixtures() -> Vec<Fixture> {
         expect_pct(69, ChargeState::Discharging, None),
     ));
 
+    // --- Logitech Centurion, G930, and HID++ 1.0 ---
+    fixtures.push(make_fixture(
+        "logitech.centurion",
+        ep(
+            "logi_cent",
+            0x046D,
+            0x0AF7,
+            Some(0xFFA0),
+            Some(0x0001),
+            Some(3),
+            None,
+        ),
+        vec![
+            step_write(0x51, &padded(&[5, 0x00, 0x00, 0x01, 0x00, 0x03], 63)),
+            step_read(0x51, &padded(&[4, 0x00, 0x00, 0x01, 0x03], 63)),
+            step_write(
+                0x51,
+                &padded(
+                    &[
+                        10, 0x00, 0x03, 0x11, 0x00, 0x05, 0x00, 0x00, 0x01, 0x01, 0x04,
+                    ],
+                    63,
+                ),
+            ),
+            step_read(0x51, &padded(&[3, 0x00, 0x03, 0x11], 63)),
+            step_read(
+                0x51,
+                &padded(
+                    &[9, 0x00, 0x03, 0x10, 0x00, 0x04, 0x00, 0x00, 0x01, 0x04],
+                    63,
+                ),
+            ),
+            step_write(
+                0x51,
+                &padded(&[8, 0x00, 0x03, 0x11, 0x00, 0x03, 0x00, 0x04, 0x01], 63),
+            ),
+            step_read(0x51, &padded(&[3, 0x00, 0x03, 0x11], 63)),
+            step_read(
+                0x51,
+                &padded(
+                    &[
+                        11, 0x00, 0x03, 0x10, 0x00, 0x06, 0x00, 0x04, 0x01, 82, 0x00, 0x01,
+                    ],
+                    63,
+                ),
+            ),
+        ],
+        expect_pct(82, ChargeState::Charging, None),
+    ));
+
+    let mut g930_resp = vec![0_u8; 64];
+    g930_resp[12] = 91; // raw 91 -> 100%
+    fixtures.push(make_fixture(
+        "logitech.g930",
+        ep(
+            "g930",
+            0x046D,
+            0x0A1F,
+            Some(0xFF00),
+            Some(0x0001),
+            None,
+            None,
+        ),
+        vec![
+            step_send_feature(
+                0xFF,
+                &padded(
+                    &[0x09, 0x00, 0xFD, 0xF4, 0x10, 0x05, 0xB1, 0xBF, 0xA0, 0x04],
+                    63,
+                ),
+            ),
+            step_get_feature(0xFF, 64, &g930_resp),
+            step_get_feature(0xFF, 64, &g930_resp),
+            step_get_feature(0xFF, 64, &g930_resp),
+        ],
+        expect_pct(100, ChargeState::Unknown, None),
+    ));
+
+    fixtures.push(make_fixture(
+        "logitech.hidpp10",
+        ep(
+            "hidpp10",
+            0x046D,
+            0xC52F,
+            Some(0xFF00),
+            Some(0x0001),
+            None,
+            Some("Logitech Mouse"),
+        ),
+        vec![
+            step_write(0x10, &[0x00, 0x81, 0x0D, 0x00, 0x00, 0x00]),
+            step_read(0x10, &[0x00, 0x81, 0x0D, 75, 0x00, 0x40]),
+        ],
+        expect_pct(75, ChargeState::Charging, None),
+    ));
+
     fixtures
 }
 
@@ -931,6 +1045,129 @@ pub(super) fn headsets_audio_fixtures() -> Vec<Fixture> {
             step_read(0x4B, &[0x80, 0x27, 0x06, 0, 0, 0, 0, 0x01, 58]),
         ],
         expect_pct(58, ChargeState::Unknown, None),
+    ));
+
+    fixtures.push(make_fixture(
+        "lenovo.wireless_voip",
+        ep(
+            "lenovo_voip",
+            0x17EF,
+            0xA07D,
+            Some(0xFF07),
+            Some(0x0222),
+            None,
+            None,
+        ),
+        vec![
+            step_flush_timeout(),
+            step_send_feature(0x24, &padded(&[0x01], 60)),
+            step_read(0x27, &[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 85]),
+        ],
+        expect_pct(85, ChargeState::Unknown, None),
+    ));
+
+    let crc8_epos = |data: &[u8]| -> u8 {
+        let mut crc = 0xFF_u8;
+        for &byte in data {
+            crc ^= byte;
+            for _ in 0..8 {
+                if (crc & 0x80) != 0 {
+                    crc = (crc << 1) ^ 0x07;
+                } else {
+                    crc <<= 1;
+                }
+            }
+        }
+        crc
+    };
+    let epos_req_payload = |target: u16, group: u16, cmd: u16| {
+        let mut payload = [0_u8; 4];
+        payload[0..2].copy_from_slice(&group.to_le_bytes());
+        payload[2..4].copy_from_slice(&cmd.to_le_bytes());
+        let mut req = vec![0_u8; 106];
+        req[0] = 0xEB;
+        req[1] = 0xFE;
+        req[2..4].copy_from_slice(&0x0001_u16.to_le_bytes());
+        req[4..6].copy_from_slice(&0x0004_u16.to_le_bytes());
+        req[6..8].copy_from_slice(&target.to_le_bytes());
+        req[8..10].copy_from_slice(&(payload.len() as u16).to_le_bytes());
+        req[10..12].copy_from_slice(&u16::from(crc8_epos(&payload)).to_le_bytes());
+        req[12..16].copy_from_slice(&payload);
+        req
+    };
+    let epos_resp_payload = |target: u16, group: u16, cmd: u16, val: u16| {
+        let mut payload = [0_u8; 6];
+        payload[0..2].copy_from_slice(&group.to_le_bytes());
+        payload[2..4].copy_from_slice(&cmd.to_le_bytes());
+        payload[4..6].copy_from_slice(&val.to_le_bytes());
+        let mut resp = vec![0_u8; 18];
+        resp[0] = 0xEB;
+        resp[1] = 0xFE;
+        resp[2..4].copy_from_slice(&0x0001_u16.to_le_bytes());
+        resp[4..6].copy_from_slice(&0x0004_u16.to_le_bytes());
+        resp[6..8].copy_from_slice(&target.to_le_bytes());
+        resp[8..10].copy_from_slice(&(payload.len() as u16).to_le_bytes());
+        resp[10..12].copy_from_slice(&u16::from(crc8_epos(&payload)).to_le_bytes());
+        resp[12..18].copy_from_slice(&payload);
+        resp
+    };
+    fixtures.push(make_fixture(
+        "epos.h3pro_hybrid",
+        ep(
+            "epos_h3pro",
+            0x1395,
+            0x0303,
+            Some(0xFFFF),
+            Some(0x0001),
+            None,
+            None,
+        ),
+        vec![
+            step_flush_timeout(),
+            step_write(0x01, &epos_req_payload(0x0001, 0x0001, 0x0009)),
+            step_read(0x01, &epos_resp_payload(0x0000, 0x0001, 0x0009, 1)),
+            step_write(0x01, &epos_req_payload(0x0005, 0x0012, 0x0003)),
+            step_read(0x01, &epos_resp_payload(0x0004, 0x0012, 0x0003, 76)),
+        ],
+        expect_pct(76, ChargeState::Unknown, None),
+    ));
+
+    fixtures.push(make_fixture(
+        "fifine.ht6",
+        ep(
+            "fifine_ht6",
+            0x3142,
+            0x00C3,
+            Some(0xFF90),
+            Some(0x0001),
+            None,
+            None,
+        ),
+        vec![
+            step_flush_timeout(),
+            step_write(0x55, &padded(&[0x65, 0x01], 63)),
+            step_read(0x55, &[0x65, 72, 0x03]),
+        ],
+        expect_pct(72, ChargeState::Charging, None),
+    ));
+
+    fixtures.push(make_fixture(
+        "mchose.x9_v9pro",
+        ep(
+            "mchose_x9",
+            0x3837,
+            0x6045,
+            Some(0xFF90),
+            Some(0x0001),
+            None,
+            None,
+        ),
+        vec![
+            step_flush_timeout(),
+            step_write(0x55, &padded(&[0x65, 0x01], 63)),
+            step_read(0x55, &[0x65, 91, 0x02]),
+        ],
+        expect_pct(91, ChargeState::Unknown, None),
     ));
 
     fixtures

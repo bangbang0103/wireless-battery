@@ -2,7 +2,7 @@
 
 > **Language / 语言**: **English** | [简体中文](support-matrix.zh-CN.md)
 
-**153 built-in providers** (**151** vendor HID providers + `os.xinput` + `bluetooth.bas`) are included and enabled by default. If you encounter reading issues on a specific model or firmware, please open an Issue.
+**162 built-in providers** (**160** vendor HID providers + `os.xinput` + `bluetooth.bas`) are included and enabled by default. If you encounter reading issues on a specific model or firmware, please open an Issue.
 
 ## Built-in Vendor & OS Providers
 
@@ -30,7 +30,7 @@
 | | Headset | ATK N9V2 Ultimate `373B:1262` | `atk.n9v2` |
 | | Keyboard | ATK Z87 | `atk.z87` |
 | | Keyboard | ATK keyboards (EVision) | `evision.atk_keyboard` |
-| Audeze | Headset | Audeze Maxwell | `audeze.maxwell` |
+| Audeze | Headset | Audeze Maxwell / Maxwell 2 ANC | `audeze.maxwell` |
 | AULA | Mouse | AULA mice (EVision) | `evision.aula_mouse` |
 | | Mouse | AULA SC580 | `aula.sc580` |
 | | Keyboard | AULA HERO 68 | `aula.hero68` |
@@ -52,9 +52,11 @@
 | Delux | Mouse | Delux M800 Pro | `delux.m800_pro` |
 | Endgame Gear | Mouse | OP1w / XM2w 4K | `endgame.4k` |
 | Endorfy | Headset | Endorfy Viro | `endorfy.viro` |
+| EPOS | Headset | EPOS H3PRO Hybrid | `epos.h3pro_hybrid` |
 | EWEADN | Mouse | EWEADN S9 Pro `372E:103D` / `1027` | `eweadn.s9_pro` |
 | | Mouse | EWEADN A5 Pro `258A:0138` | `eweadn.a5_pro` |
 | Fantech | Mouse | Fantech XD5 | `fantech.xd5` |
+| FIFINE | Headset | FIFINE HT6 Wireless | `fifine.ht6` |
 | Finalmouse | Mouse | Finalmouse ULX | `finalmouse.mouse` |
 | Flydigi | Gamepad | Flydigi Vader 5 Pro / Apex 5 | `flydigi.controller` |
 | Fractal | Headset | Fractal Scape | `fractal.scape` |
@@ -84,8 +86,12 @@
 | | Keyboard | Keychron Q / K / V / P / Max / Pro QMK wireless keyboards | `keychron.qmk_keyboard` |
 | Kysona | Mouse | Kysona wireless mice | `kysona.mouse` |
 | Lamzu | Mouse | Lamzu Maya / Atlantis / Thorn | `lamzu.mouse` |
-| Logitech | Mouse / Keyboard | GPW3 `046D:C547` & HID++ devices (`0x1004`/`0x1000`/`0x1001`/`0x1F20`) | `logitech.hidpp` |
+| Lenovo | Headset | Lenovo Wireless VoIP Headset | `lenovo.wireless_voip` |
+| Logitech | Mouse / Keyboard / Headset | GPW3 `046D:C547` & HID++ 2.0 devices (`0x1004`/`0x1000`/`0x1001`/`0x1F20`) | `logitech.hidpp` |
+| | Mouse / Keyboard | Legacy Logitech HID++ 1.0 devices (registers `0x0D`/`0x07`) | `logitech.hidpp10` |
+| | Headset | G PRO X 2/3 LIGHTSPEED / G522 LIGHTSPEED / ASTRO A20 X (Centurion) | `logitech.centurion` |
 | | Headset | Logitech G435 | `logitech.g435` |
+| | Headset | Logitech G930 | `logitech.g930` |
 | Machenike | Mouse | Machenike L7 | `machenike.l7` |
 | Maono | Microphone | Maono PD200W | `maono.pd200w` |
 | MCHOSE | Mouse | MCHOSE A5 (Gen 1) | `mchose.a5_gen1` |
@@ -99,6 +105,7 @@
 | | Keyboard | MCHOSE K87 V3 | `mchose.k87_v3` |
 | | Headset | MCHOSE V9 Turbo+ `3837:600A` | `mchose.v9` |
 | | Headset | MCHOSE V9 Pro2 | `mchose.v9_pro2` |
+| | Headset | MCHOSE X9 / V9 Pro Wireless | `mchose.x9_v9pro` |
 | Microsoft | Gamepad | Windows XInput controller slots (4 discrete levels only) | `os.xinput` |
 | Moondrop | Headset | Moondrop GM01 Pro | `moondrop.gm01_pro` |
 | Motospeed | Mouse | Motospeed X6 | `motospeed.x6` |
@@ -122,6 +129,7 @@
 | | Headset | BlackShark V2 Pro `1532:0555` | `razer.headset` |
 | | Headset | BlackShark V2 HyperSpeed | `razer.blackshark_v2_hs` |
 | | Headset | BlackShark V2 Pro (2020) | `razer.blackshark_v2_pro_2020` |
+| | Headset | BlackShark V2 Pro (PlayStation) | `razer.blackshark_v2_pro_ps` |
 | | Headset | BlackShark V3 | `razer.blackshark_v3` |
 | | Headset | BlackShark V3 X | `razer.blackshark_v3_x` |
 | | Headset | Barracuda X | `razer.barracuda_x` |
@@ -136,6 +144,7 @@
 | Sony | Gamepad | DualSense / DualSense Edge | `sony.dualsense` |
 | | Gamepad | DualShock 4 | `sony.dualshock4` |
 | | Headset | INZONE H5 / H7 / H9 / Buds | `sony.inzone` |
+| | Headset | Sony PULSE 3D | `sony.pulse_3d` |
 | Sprime | Mouse | Sprime PM1 | `sprime.pm1` |
 | SteelSeries | Headset | Arctis 1 | `steelseries.arctis1` |
 | | Headset | Arctis 7 / 7+ / 7P / 7X | `steelseries.arctis7` |

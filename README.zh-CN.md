@@ -9,7 +9,7 @@
 
 ## 功能特性
 
-- **广泛的设备支持**：目前内置 **153 个 Provider**（151 个厂商 HID Provider，以及 `os.xinput` 和 `bluetooth.bas`），覆盖鼠标、键盘、耳机、手柄等无线外设。完整设备与型号列表见[设备支持矩阵](docs/support-matrix.zh-CN.md)。
+- **广泛的设备支持**：目前内置 **162 个 Provider**（160 个厂商 HID Provider，以及 `os.xinput` 和 `bluetooth.bas`），覆盖鼠标、键盘、耳机、手柄等无线外设。完整设备与型号列表见[设备支持矩阵](docs/support-matrix.zh-CN.md)。
 - **多种交付形态**：提供 **Tray、CLI 与 Rust API**，分别满足桌面交互、脚本自动化与第三方应用集成需求。
 - **原生托盘体验**：Tray 支持 **macOS 与 Windows**，分别采用 SwiftUI 与 Win32 / Direct2D，界面风格与系统原生 UI 保持一致。
 - **有据可依的设备支持**：设备支持主要来自真实设备逆向，并参考了其他开源项目的实现；相关说明与署名见 [NOTICE](NOTICE)。

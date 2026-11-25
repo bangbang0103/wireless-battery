@@ -1,13 +1,14 @@
-//! Logitech HID++ 2.0, G435, and ASTRO headset battery protocols.
+//! Logitech HID++ 2.0, HID++ 1.0, G930, G435, and ASTRO headset battery protocols.
 
 use crate::error::BatteryError;
 use crate::model::{
-    ChargeState, DeviceKind, Endpoint, EndpointId, HidBusType, ProviderReading, Reachability,
-    ReadingSource, SupportStatus,
+    BatteryLevel, Capabilities, ChargeState, DeviceKind, Endpoint, EndpointId, HidBusType,
+    ProviderReading, Reachability, ReadingSource, SupportStatus,
 };
 use crate::providers::fixed::{
-    capabilities, checked_percentage, crc16_poly_1021, drain_input, experimental_metadata, frame,
-    interpolate_mv, reading, send_with_modes, unnumbered_payload, wait_frame, OUTPUT,
+    capabilities, checked_percentage, crc16_poly_1021, drain_input, experimental_metadata,
+    feature_frame, frame, interpolate_mv, reading, send_with_modes, sleep, unnumbered_payload,
+    wait_frame, SendMode, OUTPUT,
 };
 use crate::providers::{
     infer_device_kind_from_name, Deadline, DeviceContext, MatchDecision, Provider, ProviderMetadata,
@@ -38,6 +39,8 @@ fn scan_indexes_for(endpoint: &Endpoint) -> &'static [u8] {
 pub(crate) fn providers() -> Vec<Arc<dyn Provider>> {
     vec![
         Arc::new(LogitechProvider::new()),
+        Arc::new(LogitechHidpp10Provider),
+        Arc::new(LogitechG930Provider),
         Arc::new(LogitechG435Provider),
         Arc::new(AstroModernProvider),
         Arc::new(AstroLegacyProvider),
@@ -302,10 +305,12 @@ impl Provider for LogitechProvider {
                     | 0x0A87
                     | 0x0AB5
                     | 0x0AFE
+                    | 0x0B1F
                     | 0x0AAA
                     | 0x0ABA
                     | 0x0AA7
                     | 0x0AFB
+                    | 0x0AFC
                     | 0x0AC4
                     | 0x0A66
             )
@@ -333,7 +338,11 @@ impl Provider for LogitechProvider {
         let bolt_or_pro = endpoint.usage_page == Some(0xFF43)
             && (endpoint.usage == Some(0x0202)
                 || (endpoint.pid == Some(0xC54F) && endpoint.usage == Some(0x0302)));
-        if endpoint.vid == Some(0x046D) && (standard_long || bolt_or_pro) {
+        let g535_consumer = endpoint.pid == Some(0x0AC4)
+            && endpoint.usage_page == Some(0x000C)
+            && endpoint.usage == Some(0x0001)
+            && matches!(endpoint.interface_number, None | Some(3));
+        if endpoint.vid == Some(0x046D) && (standard_long || bolt_or_pro || g535_consumer) {
             MatchDecision::Exact
         } else {
             MatchDecision::NoMatch
@@ -448,7 +457,7 @@ fn parse_logitech_voltage(response: &[u8]) -> Result<ProviderReading, BatteryErr
         ));
     }
     let mv = u32::from(u16::from_be_bytes([response[4], response[5]]));
-    let charge = if (response[6] & 0x80) != 0 {
+    let charge = if (response[6] & 0x90) != 0 {
         ChargeState::Charging
     } else {
         ChargeState::Discharging
@@ -486,7 +495,7 @@ fn parse_logitech_adc(response: &[u8], pid: u16) -> Result<ProviderReading, Batt
             (3664, 5),
             (3310, 0),
         ],
-        0x0A5C | 0x0A89 | 0x0A5B | 0x0A87 | 0x0AB5 | 0x0AFE => &[
+        0x0A5C | 0x0A89 | 0x0A5B | 0x0A87 | 0x0AB5 | 0x0AFE | 0x0B1F => &[
             (4100, 100),
             (3950, 80),
             (3850, 60),
@@ -519,7 +528,7 @@ fn parse_logitech_adc(response: &[u8], pid: u16) -> Result<ProviderReading, Batt
             (3426, 5),
             (3293, 0),
         ],
-        0x0AA7 | 0x0AFB => &[
+        0x0AA7 | 0x0AFB | 0x0AFC => &[
             (4150, 100),
             (3830, 50),
             (3780, 30),
@@ -797,4 +806,267 @@ impl Provider for AstroLegacyProvider {
         };
         Ok(reading(Some(pct), charge, None))
     }
+}
+
+struct LogitechG930Provider;
+
+impl Provider for LogitechG930Provider {
+    fn id(&self) -> &str {
+        "logitech.g930"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(
+            DeviceKind::Headset,
+            capabilities(true, false, false),
+            Duration::from_millis(500),
+        )
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Logitech G930".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        if endpoint.vid == Some(0x046D)
+            && endpoint.pid == Some(0x0A1F)
+            && endpoint.usage_page == Some(0xFF00)
+            && endpoint.usage == Some(0x0001)
+        {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        let mut req = vec![0_u8; 64];
+        req[..11].copy_from_slice(&[
+            0xFF, 0x09, 0x00, 0xFD, 0xF4, 0x10, 0x05, 0xB1, 0xBF, 0xA0, 0x04,
+        ]);
+        send_with_modes(session, device, &[SendMode::Feature], &req)?;
+
+        let mut buf = Vec::new();
+        for attempt in 0..3 {
+            buf = feature_frame(session, device, 0xFF, 64)?;
+            if attempt < 2 {
+                sleep(deadline, Duration::from_millis(100))?;
+            }
+        }
+        if buf.len() < 14 {
+            return Err(BatteryError::invalid_response(
+                "truncated Logitech G930 feature report",
+            ));
+        }
+        let pct = interpolate_mv(u32::from(buf[13]), &[(91, 100), (44, 0)]);
+        Ok(reading(Some(pct), ChargeState::Unknown, None))
+    }
+}
+
+const REPORT_SHORT: u8 = 0x10;
+const HIDPP10_GET_REGISTER: u8 = 0x81;
+const HIDPP10_ERROR_SUB_ID: u8 = 0x8F;
+const HIDPP10_REG_BATTERY_STATUS: u8 = 0x07;
+const HIDPP10_REG_BATTERY_MILEAGE: u8 = 0x0D;
+const HIDPP10_SCAN_INDEXES: [u8; 7] = [0x00, 1, 2, 3, 4, 5, 6];
+
+enum Hidpp10RegisterReply {
+    Data([u8; 3]),
+    Error(u8),
+}
+
+struct LogitechHidpp10Provider;
+
+impl LogitechHidpp10Provider {
+    fn query_register(
+        session: &mut dyn HidSession,
+        device: &DeviceContext<'_>,
+        deadline: Deadline,
+        budget: Duration,
+        device_index: u8,
+        register: u8,
+    ) -> Result<Hidpp10RegisterReply, BatteryError> {
+        let payload = [
+            device_index,
+            HIDPP10_GET_REGISTER,
+            register,
+            0x00,
+            0x00,
+            0x00,
+        ];
+        session
+            .write_output(REPORT_SHORT, &payload)
+            .map_err(|error| error.into_battery(&device.endpoint.id))?;
+
+        let op_deadline = Deadline::after(deadline.remaining("Logitech HID++ 1.0")?.min(budget));
+        for _ in 0..16 {
+            let timeout = deadline
+                .remaining("Logitech HID++ 1.0")?
+                .min(op_deadline.remaining("Logitech HID++ 1.0")?)
+                .min(Duration::from_millis(60));
+            let report = match session.read_input(timeout) {
+                Ok(report) => frame(report),
+                Err(TransportError::Timeout) => {
+                    if op_deadline.check("Logitech HID++ 1.0").is_err() {
+                        return Err(BatteryError::timeout("Logitech HID++ 1.0"));
+                    }
+                    continue;
+                }
+                Err(error) => return Err(error.into_battery(&device.endpoint.id)),
+            };
+            if report.len() < 6 || report[0] != REPORT_SHORT || report[1] != device_index {
+                continue;
+            }
+            if report[2] == HIDPP10_ERROR_SUB_ID
+                && report[3] == HIDPP10_GET_REGISTER
+                && report[4] == register
+            {
+                return Ok(Hidpp10RegisterReply::Error(report[5]));
+            }
+            if report.len() >= 7 && report[2] == HIDPP10_GET_REGISTER && report[3] == register {
+                return Ok(Hidpp10RegisterReply::Data([
+                    report[4], report[5], report[6],
+                ]));
+            }
+        }
+        Err(BatteryError::timeout("Logitech HID++ 1.0"))
+    }
+}
+
+impl Provider for LogitechHidpp10Provider {
+    fn id(&self) -> &str {
+        "logitech.hidpp10"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        ProviderMetadata {
+            version: "1.0.0".to_owned(),
+            device_kind: DeviceKind::Peripheral,
+            support_status: SupportStatus::Experimental,
+            capabilities: Capabilities {
+                percentage: true,
+                discrete_level: true,
+                charge_state: true,
+                voltage: false,
+                reachability: false,
+            },
+            io_timeout: Duration::from_millis(250),
+            cooldown: Duration::from_millis(250),
+        }
+    }
+
+    fn device_kind(&self, endpoint: &Endpoint) -> DeviceKind {
+        infer_device_kind_from_name(endpoint.product_name.as_deref())
+            .unwrap_or(DeviceKind::Peripheral)
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Logitech HID++ 1.0 device".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        if endpoint.vid == Some(0x046D)
+            && endpoint.usage_page == Some(0xFF00)
+            && endpoint.usage == Some(0x0001)
+        {
+            MatchDecision::Family
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        let total = HIDPP10_SCAN_INDEXES.len();
+        for (pos, &idx) in HIDPP10_SCAN_INDEXES.iter().enumerate() {
+            let remaining = deadline.remaining("Logitech HID++ 1.0")?;
+            let slots_left = (total - pos) as u32;
+            let per_slot = (remaining / slots_left)
+                .clamp(Duration::from_millis(60), Duration::from_millis(250))
+                .min(remaining);
+
+            match Self::query_register(
+                session,
+                device,
+                deadline,
+                per_slot,
+                idx,
+                HIDPP10_REG_BATTERY_MILEAGE,
+            ) {
+                Ok(Hidpp10RegisterReply::Data([p0, _p1, p2])) => {
+                    let pct = checked_percentage(p0 & 0x7F)?;
+                    let charge = match p2 >> 6 {
+                        0 => ChargeState::Discharging,
+                        1 => ChargeState::Charging,
+                        2 => ChargeState::Full,
+                        _ => ChargeState::Unknown,
+                    };
+                    return Ok(reading(Some(pct), charge, None));
+                }
+                Ok(Hidpp10RegisterReply::Error(code)) => {
+                    // 0x08 ResourceError / 0x09 UnknownDevice / 0x0A ConnectionRequestFailed
+                    if matches!(code, 0x08..=0x0A) {
+                        continue;
+                    }
+                    let fallback_budget = deadline
+                        .remaining("Logitech HID++ 1.0")?
+                        .min(Duration::from_millis(250));
+                    match Self::query_register(
+                        session,
+                        device,
+                        deadline,
+                        fallback_budget,
+                        idx,
+                        HIDPP10_REG_BATTERY_STATUS,
+                    ) {
+                        Ok(Hidpp10RegisterReply::Data([p0, p1, _p2])) => {
+                            return parse_hidpp10_battery_status(p0, p1);
+                        }
+                        Ok(Hidpp10RegisterReply::Error(_)) | Err(BatteryError::Timeout { .. }) => {}
+                        Err(error) => return Err(error),
+                    }
+                }
+                Err(BatteryError::Timeout { .. }) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Err(BatteryError::timeout("Logitech HID++ 1.0"))
+    }
+}
+
+fn parse_hidpp10_battery_status(p0: u8, p1: u8) -> Result<ProviderReading, BatteryError> {
+    let level = match p0 {
+        0 => None,
+        1 | 2 => Some(BatteryLevel::Critical),
+        3 | 4 => Some(BatteryLevel::Low),
+        5 | 6 => Some(BatteryLevel::High),
+        7 => Some(BatteryLevel::Full),
+        _ => {
+            return Err(BatteryError::invalid_response(format!(
+                "unknown Logitech HID++ 1.0 battery level 0x{p0:02X}"
+            )));
+        }
+    };
+    let charge_state = match p1 {
+        0x00..=0x1F => ChargeState::Discharging,
+        0x21 | 0x24 | 0x25 | 0x26 => ChargeState::Charging,
+        0x22 => ChargeState::Full,
+        _ => ChargeState::Unknown,
+    };
+    Ok(ProviderReading {
+        percentage: None,
+        level,
+        charge_state,
+        source: ReadingSource::VendorHid,
+        ..ProviderReading::default()
+    })
 }

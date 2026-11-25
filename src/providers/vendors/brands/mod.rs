@@ -13,6 +13,7 @@ mod hyperx;
 mod keyboards_vendors;
 mod keychron;
 mod logitech;
+mod logitech_centurion;
 mod mchose_keyboards;
 mod mchose_mice;
 mod mice_esports;
@@ -44,6 +45,7 @@ pub(crate) fn providers() -> Vec<Arc<dyn Provider>> {
     providers.extend(keyboards_vendors::providers());
     providers.extend(keychron::providers());
     providers.extend(logitech::providers());
+    providers.extend(logitech_centurion::providers());
     providers.extend(mchose_keyboards::providers());
     providers.extend(mchose_mice::providers());
     providers.extend(mice_esports::providers());

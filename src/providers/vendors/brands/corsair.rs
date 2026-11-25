@@ -27,7 +27,7 @@ const BRAGI_KNOWN_PIDS: &[u16] = &[
     0x2A08, 0x2A02, 0x0A97, 0x0A64, 0x0A62, 0x0A3E, 0x0A3D, 0x2B00,
 ];
 
-const BRAGI_HEADSET_PIDS: &[u16] = &[0x0A97, 0x0A64, 0x0A62, 0x0A3E, 0x0A3D];
+const BRAGI_HEADSET_PIDS: &[u16] = &[0x2A08, 0x2A02, 0x0A97, 0x0A64, 0x0A62, 0x0A3E, 0x0A3D];
 
 const CORSAIR_COMPX_PIDS: &[u16] = &[0x2B2A, 0x2B34];
 
@@ -90,7 +90,7 @@ impl Provider for CorsairVoidProvider {
             deadline,
             Duration::from_millis(500),
             12,
-            |f| Ok(f.len() >= 5 && f[0] == 0xCA),
+            |f| Ok(f.len() >= 5 && matches!(f[0], 0x64 | 0xCA)),
         )?;
         let st = frame[4];
         if st == 0 {

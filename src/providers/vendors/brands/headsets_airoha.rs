@@ -43,7 +43,7 @@ impl Provider for AudezeMaxwellProvider {
 
     fn display_name(&self, endpoint: &Endpoint) -> Option<String> {
         Some(match endpoint.pid {
-            Some(0x4B28 | 0x4B29) => "Audeze Maxwell 2".to_owned(),
+            Some(0x4B28 | 0x4B29 | 0x4BA9) => "Audeze Maxwell 2".to_owned(),
             _ => "Audeze Maxwell".to_owned(),
         })
     }
@@ -52,7 +52,7 @@ impl Provider for AudezeMaxwellProvider {
         if endpoint.vid == Some(0x3329)
             && matches!(
                 endpoint.pid,
-                Some(0x4B18 | 0x4B19 | 0x4B1A | 0x4B1E | 0x4B28 | 0x4B29)
+                Some(0x4B18 | 0x4B19 | 0x4B1A | 0x4B1E | 0x4B28 | 0x4B29 | 0x4BA9)
             )
             && endpoint.usage_page == Some(0xFF13)
             && endpoint.usage == Some(0x0001)

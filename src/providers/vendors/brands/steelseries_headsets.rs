@@ -57,7 +57,7 @@ impl Provider for Arctis1Provider {
 
     fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
         if endpoint.vid == Some(VID_STEELSERIES)
-            && matches!(endpoint.pid, Some(0x12B3 | 0x12B6 | 0x12D7))
+            && matches!(endpoint.pid, Some(0x12B3 | 0x12B6 | 0x12D5 | 0x12D7))
             && endpoint.usage_page == Some(0xFF43)
             && endpoint.usage == Some(0x0202)
         {
@@ -185,7 +185,7 @@ impl Provider for Arctis9Provider {
 
     fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
         if endpoint.vid == Some(VID_STEELSERIES)
-            && endpoint.pid == Some(0x12C2)
+            && matches!(endpoint.pid, Some(0x12C2 | 0x12C4))
             && endpoint.interface_number == Some(0)
             && endpoint.usage_page.is_some_and(|p| p >= 0xFF00)
         {
@@ -331,7 +331,7 @@ impl Provider for NovaProWirelessProvider {
 
     fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
         if endpoint.vid == Some(VID_STEELSERIES)
-            && matches!(endpoint.pid, Some(0x12E0 | 0x225D))
+            && matches!(endpoint.pid, Some(0x12E0 | 0x12E5 | 0x225D))
             && endpoint.interface_number == Some(4)
             && endpoint.usage_page.is_some_and(|p| p >= 0xFF00)
         {
@@ -383,7 +383,7 @@ const NOVA_7_PLUS_PIDS: &[u16] = &[0x220E, 0x2212, 0x2216, 0x2236];
 const NOVA_3P_5_PIDS: &[u16] = &[0x2269, 0x226D, 0x2232, 0x2253];
 const NOVA_7_DISCRETE_PIDS: &[u16] = &[0x2202, 0x2206, 0x220A, 0x223A, 0x227A, 0x22A4];
 const NOVA_7_PCT_PIDS: &[u16] = &[
-    0x22A1, 0x227E, 0x2258, 0x229E, 0x22AD, 0x22A9, 0x22A5, 0x22A7,
+    0x22A1, 0x227E, 0x2258, 0x2298, 0x229E, 0x22AD, 0x22A9, 0x22A5, 0x22A7,
 ];
 
 struct NovaFamilyProvider;

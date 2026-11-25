@@ -165,6 +165,14 @@ const ROG_MODELS: &[RogModel] = &[
         offset: 6,
         scale: 1,
     },
+    RogModel {
+        pid: 0x1A05,
+        name: "ASUS ROG Strix Scope RX TKL",
+        keyboard: true,
+        report_id: 0,
+        offset: 6,
+        scale: 1,
+    },
     // Mice (0..4 gauge, scale 25)
     RogModel {
         pid: 0x18E5,

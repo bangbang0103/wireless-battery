@@ -1,6 +1,7 @@
 //! Wireless audio headset and microphone HID battery protocols:
 //! Jabra GNP, JBL Quantum (HIDV1 & HIDV3), Poly/Plantronics BT600, Fractal Scape,
-//! Alienware AW920H, MOONDROP GM01 Pro, XIBERIA T7, MAONO PD200W, and DARKRIM SHADOW.
+//! Alienware AW920H, MOONDROP GM01 Pro, XIBERIA T7, MAONO PD200W, DARKRIM SHADOW,
+//! Lenovo Wireless VoIP, EPOS H3PRO Hybrid, FIFINE HT6, and MCHOSE X9 / V9 Pro.
 
 use crate::error::BatteryError;
 use crate::model::{
@@ -43,6 +44,10 @@ pub(crate) fn providers() -> Vec<Arc<dyn Provider>> {
         Arc::new(MoondropGm01Provider),
         Arc::new(MaonoPd200wProvider),
         Arc::new(DarkrimShadowProvider),
+        Arc::new(LenovoWirelessVoipProvider),
+        Arc::new(EposH3ProHybridProvider),
+        Arc::new(FifineHt6Provider),
+        Arc::new(MchoseX9V9ProProvider),
     ]
 }
 
@@ -156,7 +161,7 @@ impl Provider for JabraGnpProvider {
                 Err(error) => return Err(error),
             };
             if frame[5] == 0xFE {
-                if dst == 0x04 && (is_link || frame[6] == 0xF3) {
+                if dst == 0x04 && (is_link || matches!(frame[6], 0xF3..=0xF5)) {
                     return Ok(ProviderReading {
                         reachability: Reachability::Offline,
                         source: ReadingSource::VendorHid,
@@ -834,6 +839,378 @@ impl Provider for DarkrimShadowProvider {
         }
         Err(BatteryError::invalid_response(
             "DARKRIM battery TLV missing",
+        ))
+    }
+}
+
+struct LenovoWirelessVoipProvider;
+
+impl Provider for LenovoWirelessVoipProvider {
+    fn id(&self) -> &str {
+        "lenovo.wireless_voip"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(
+            DeviceKind::Headset,
+            capabilities(true, false, false),
+            Duration::from_millis(500),
+        )
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("Lenovo Wireless VoIP Headset".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        let matched = endpoint.vid == Some(0x17EF)
+            && endpoint.pid == Some(0xA07D)
+            && ((endpoint.usage_page == Some(0xFF07)
+                && matches!(endpoint.usage, None | Some(0x0222)))
+                || (endpoint.usage_page.is_none() && endpoint.interface_number == Some(3)));
+        if matched {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        drain_input(session, device, deadline, 6)?;
+        let mut req = vec![0_u8; 61];
+        req[0] = 0x24;
+        req[1] = 0x01;
+        send_with_modes(session, device, &[SendMode::Feature], &req)?;
+        let f = wait_frame(
+            session,
+            device,
+            deadline,
+            Duration::from_millis(500),
+            12,
+            |r| Ok(r.len() >= 8 && r[0] == 0x27 && r[1] == 0x01),
+        )?;
+        if f[2] != 0x00 {
+            return Ok(ProviderReading {
+                reachability: Reachability::Offline,
+                source: ReadingSource::VendorHid,
+                ..ProviderReading::default()
+            });
+        }
+        Ok(reading(
+            Some(checked_percentage(f[7])?),
+            ChargeState::Unknown,
+            None,
+        ))
+    }
+}
+
+struct EposH3ProHybridProvider;
+
+fn crc8_epos(data: &[u8]) -> u8 {
+    let mut crc = 0xFF_u8;
+    for &byte in data {
+        crc ^= byte;
+        for _ in 0..8 {
+            if (crc & 0x80) != 0 {
+                crc = (crc << 1) ^ 0x07;
+            } else {
+                crc <<= 1;
+            }
+        }
+    }
+    crc
+}
+
+struct EposFrame {
+    target: u16,
+    group: u16,
+    command: u16,
+    values: Vec<u16>,
+}
+
+fn parse_epos_frame(report: &[u8]) -> Option<EposFrame> {
+    if report.len() < 13 || report[0] != 0x01 || report[1] != 0xEB || report[2] != 0xFE {
+        return None;
+    }
+    let payload_len = usize::from(u16::from_le_bytes([report[9], report[10]]));
+    if payload_len < 4 || payload_len % 2 != 0 || 13 + payload_len > report.len() {
+        return None;
+    }
+    let payload = &report[13..13 + payload_len];
+    let expected_crc = u16::from(crc8_epos(payload));
+    if u16::from_le_bytes([report[11], report[12]]) != expected_crc {
+        return None;
+    }
+    let target = u16::from_le_bytes([report[7], report[8]]);
+    let group = u16::from_le_bytes([report[13], report[14]]);
+    let command = u16::from_le_bytes([report[15], report[16]]);
+    let mut values = Vec::with_capacity((payload_len - 4) / 2);
+    for chunk in report[17..13 + payload_len].chunks_exact(2) {
+        values.push(u16::from_le_bytes([chunk[0], chunk[1]]));
+    }
+    Some(EposFrame {
+        target,
+        group,
+        command,
+        values,
+    })
+}
+
+fn epos_request(
+    session: &mut dyn HidSession,
+    device: &DeviceContext<'_>,
+    deadline: Deadline,
+    target: u16,
+    group: u16,
+    cmd: u16,
+) -> Result<EposFrame, BatteryError> {
+    let mut payload = [0_u8; 4];
+    payload[0..2].copy_from_slice(&group.to_le_bytes());
+    payload[2..4].copy_from_slice(&cmd.to_le_bytes());
+    let mut req = vec![0_u8; 107];
+    req[0] = 0x01;
+    req[1] = 0xEB;
+    req[2] = 0xFE;
+    req[3..5].copy_from_slice(&0x0001_u16.to_le_bytes());
+    req[5..7].copy_from_slice(&0x0004_u16.to_le_bytes());
+    req[7..9].copy_from_slice(&target.to_le_bytes());
+    req[9..11].copy_from_slice(&(payload.len() as u16).to_le_bytes());
+    req[11..13].copy_from_slice(&u16::from(crc8_epos(&payload)).to_le_bytes());
+    req[13..17].copy_from_slice(&payload);
+    send_with_modes(session, device, OUTPUT, &req)?;
+
+    let raw = wait_frame(
+        session,
+        device,
+        deadline,
+        Duration::from_millis(500),
+        16,
+        |r| {
+            let Some(frame) = parse_epos_frame(r) else {
+                return Ok(false);
+            };
+            if frame.group != group || frame.command != cmd {
+                return Ok(false);
+            }
+            let is_reply = frame.target == target.saturating_sub(1);
+            let is_offline_bounce = target == 0x0005 && frame.target == 0x0001;
+            Ok(is_reply || is_offline_bounce)
+        },
+    )?;
+    parse_epos_frame(&raw)
+        .ok_or_else(|| BatteryError::invalid_response("invalid EPOS H3PRO Hybrid frame"))
+}
+
+impl Provider for EposH3ProHybridProvider {
+    fn id(&self) -> &str {
+        "epos.h3pro_hybrid"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(
+            DeviceKind::Headset,
+            capabilities(true, false, false),
+            Duration::from_millis(500),
+        )
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("EPOS H3PRO Hybrid".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        let matched = endpoint.vid == Some(0x1395)
+            && matches!(endpoint.pid, Some(0x0303 | 0x0101))
+            && ((endpoint.usage_page == Some(0xFFFF)
+                && matches!(endpoint.usage, None | Some(0x0001)))
+                || (endpoint.usage_page.is_none() && endpoint.interface_number == Some(3)));
+        if matched {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        drain_input(session, device, deadline, 6)?;
+        let dongle = device.endpoint.pid == Some(0x0303);
+        if dongle {
+            let conn = epos_request(session, device, deadline, 0x0001, 0x0001, 0x0009)?;
+            if conn.values.len() != 1 {
+                return Err(BatteryError::invalid_response(
+                    "unexpected EPOS H3PRO Hybrid connection reply",
+                ));
+            }
+            if conn.values[0] == 0 {
+                return Ok(ProviderReading {
+                    reachability: Reachability::Offline,
+                    source: ReadingSource::VendorHid,
+                    ..ProviderReading::default()
+                });
+            }
+        }
+        let target = if dongle { 0x0005 } else { 0x0001 };
+        let bat = epos_request(session, device, deadline, target, 0x0012, 0x0003)?;
+        if dongle && bat.target == 0x0001 {
+            return Ok(ProviderReading {
+                reachability: Reachability::Offline,
+                source: ReadingSource::VendorHid,
+                ..ProviderReading::default()
+            });
+        }
+        if bat.target != target.saturating_sub(1) || bat.values.len() != 1 || bat.values[0] > 100 {
+            return Err(BatteryError::invalid_response(
+                "unexpected EPOS H3PRO Hybrid battery reply",
+            ));
+        }
+        Ok(reading(
+            Some(checked_percentage(bat.values[0] as u8)?),
+            ChargeState::Unknown,
+            None,
+        ))
+    }
+}
+
+struct FifineHt6Provider;
+
+impl Provider for FifineHt6Provider {
+    fn id(&self) -> &str {
+        "fifine.ht6"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(
+            DeviceKind::Headset,
+            capabilities(true, true, false),
+            Duration::from_millis(500),
+        )
+    }
+
+    fn display_name(&self, _endpoint: &Endpoint) -> Option<String> {
+        Some("FIFINE HT6 Wireless".to_owned())
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        let matched = endpoint.vid == Some(0x3142)
+            && endpoint.pid == Some(0x00C3)
+            && ((endpoint.usage_page == Some(0xFF90)
+                && matches!(endpoint.usage, None | Some(0x0001)))
+                || (endpoint.usage_page.is_none() && endpoint.interface_number == Some(0)));
+        if matched {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        drain_input(session, device, deadline, 6)?;
+        let mut req = vec![0_u8; 64];
+        req[0] = 0x55;
+        req[1] = 0x65;
+        req[2] = 0x01;
+        send_with_modes(session, device, OUTPUT, &req)?;
+        let f = wait_frame(
+            session,
+            device,
+            deadline,
+            Duration::from_millis(500),
+            16,
+            |r| Ok(r.len() >= 4 && r[0] == 0x55 && (r[1] == 0x65 || r[1] == 0x0A || r[3] == 0x1A)),
+        )?;
+        if f[1] == 0x0A || f[3] == 0x1A {
+            return Ok(ProviderReading {
+                reachability: Reachability::Offline,
+                source: ReadingSource::VendorHid,
+                ..ProviderReading::default()
+            });
+        }
+        let pct = checked_percentage(f[2])?;
+        let charge = if f[3] == 0x03 {
+            ChargeState::Charging
+        } else {
+            ChargeState::Discharging
+        };
+        Ok(reading(Some(pct), charge, None))
+    }
+}
+
+struct MchoseX9V9ProProvider;
+
+impl Provider for MchoseX9V9ProProvider {
+    fn id(&self) -> &str {
+        "mchose.x9_v9pro"
+    }
+
+    fn metadata(&self) -> ProviderMetadata {
+        experimental_metadata(
+            DeviceKind::Headset,
+            capabilities(true, false, false),
+            Duration::from_millis(500),
+        )
+    }
+
+    fn display_name(&self, endpoint: &Endpoint) -> Option<String> {
+        Some(match (endpoint.vid, endpoint.pid) {
+            (Some(0x3837), Some(0x6045)) => "MCHOSE X9 Wireless".to_owned(),
+            (Some(0x291D), Some(0x385D)) => "MCHOSE V9 Pro Wireless".to_owned(),
+            _ => "MCHOSE Wireless Headset".to_owned(),
+        })
+    }
+
+    fn matches(&self, endpoint: &Endpoint) -> MatchDecision {
+        let matched = matches!(
+            (endpoint.vid, endpoint.pid),
+            (Some(0x3837), Some(0x6045)) | (Some(0x291D), Some(0x385D))
+        ) && ((endpoint.usage_page == Some(0xFF90)
+            && matches!(endpoint.usage, None | Some(0x0001)))
+            || (endpoint.usage_page.is_none() && endpoint.interface_number == Some(0)));
+        if matched {
+            MatchDecision::Exact
+        } else {
+            MatchDecision::NoMatch
+        }
+    }
+
+    fn read(
+        &self,
+        device: &DeviceContext<'_>,
+        session: &mut dyn HidSession,
+        deadline: Deadline,
+    ) -> Result<ProviderReading, BatteryError> {
+        drain_input(session, device, deadline, 6)?;
+        let mut req = vec![0_u8; 64];
+        req[0] = 0x55;
+        req[1] = 0x65;
+        req[2] = 0x01;
+        send_with_modes(session, device, OUTPUT, &req)?;
+        let f = wait_frame(
+            session,
+            device,
+            deadline,
+            Duration::from_millis(500),
+            16,
+            |r| Ok(r.len() >= 4 && r[0] == 0x55 && r[1] == 0x65 && r[3] == 0x02),
+        )?;
+        Ok(reading(
+            Some(checked_percentage(f[2])?),
+            ChargeState::Unknown,
+            None,
         ))
     }
 }
