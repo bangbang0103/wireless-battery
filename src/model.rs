@@ -31,7 +31,7 @@ impl std::fmt::Display for EndpointId {
 }
 
 /// The transport used by an endpoint.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TransportKind {
     /// USB or operating-system HID.
@@ -45,7 +45,7 @@ pub enum TransportKind {
 }
 
 /// Physical bus reported by HID enumeration, when available.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HidBusType {
     /// USB HID.
@@ -133,7 +133,7 @@ pub struct Capabilities {
 }
 
 /// Coarse static match state for an enumerated endpoint.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MatchStatus {
     /// One highest-priority provider matched statically.
@@ -145,7 +145,7 @@ pub enum MatchStatus {
 }
 
 /// Provider lifecycle and evidence status. `Unknown` is used for unmatched endpoints.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SupportStatus {
     /// Unknown because no provider is selected.
@@ -201,7 +201,7 @@ pub struct Device {
 }
 
 /// Discrete battery level without fabricated percentage conversion.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BatteryLevel {
     /// Critically low.
@@ -264,7 +264,7 @@ pub enum Precision {
 }
 
 /// Origin of a battery reading.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReadingSource {
     /// An operating-system battery property.
@@ -280,7 +280,7 @@ pub enum ReadingSource {
 }
 
 /// Whether this reading came from a new observation or the process-local cache.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Freshness {
     /// Newly observed from the device.

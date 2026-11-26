@@ -820,6 +820,77 @@ fn logitech_g930_beats_hidpp10_and_g535_consumer_matches_hidpp() {
 }
 
 #[test]
+fn logitech_hidpp20_exact_suppresses_sibling_hidpp10_family_endpoint() {
+    use std::sync::Arc;
+    use wireless_battery::model::{Endpoint, EndpointId};
+    use wireless_battery::transport::{HidSession, Transport, TransportError};
+    use wireless_battery::{BatteryClient, ClientConfig};
+
+    struct StaticTransport(Vec<Endpoint>);
+    impl Transport for StaticTransport {
+        fn enumerate(&self) -> Result<Vec<Endpoint>, TransportError> {
+            Ok(self.0.clone())
+        }
+        fn open(&self, _endpoint: &EndpointId) -> Result<Box<dyn HidSession>, TransportError> {
+            Err(TransportError::Timeout)
+        }
+    }
+
+    let gpw3_long = ep(
+        "gpw3_long",
+        0x046D,
+        0xC54D,
+        Some(0xFF00),
+        Some(0x0002),
+        Some(2),
+        Some("PRO X 2"),
+    );
+    let gpw3_short = ep(
+        "gpw3_short",
+        0x046D,
+        0xC54D,
+        Some(0xFF00),
+        Some(0x0001),
+        Some(2),
+        Some("PRO X 2"),
+    );
+    let legacy_hidpp10 = ep(
+        "legacy_hidpp10",
+        0x046D,
+        0xC52F,
+        Some(0xFF00),
+        Some(0x0001),
+        Some(1),
+        Some("Logitech Nano Receiver"),
+    );
+
+    let transport = Arc::new(StaticTransport(vec![
+        gpw3_long,
+        gpw3_short,
+        legacy_hidpp10,
+    ]));
+    let client = BatteryClient::with_transport(
+        ClientConfig::default(),
+        transport,
+        Registry::builtin().expect("builtin registry"),
+    )
+    .expect("client must initialize");
+    let devices = client.list_devices().expect("list_devices must succeed");
+    let readable: Vec<(&str, Option<&str>)> = devices
+        .iter()
+        .filter(|d| d.readable)
+        .map(|d| (d.endpoint_id.0.as_str(), d.provider_id.as_deref()))
+        .collect();
+    assert_eq!(
+        readable,
+        vec![
+            ("ep_gpw3_long", Some("logitech.hidpp")),
+            ("ep_legacy_hidpp10", Some("logitech.hidpp10")),
+        ]
+    );
+}
+
+#[test]
 fn logitech_centurion_direct_vs_bridged_and_offline_state() {
     let registry = Registry::builtin().expect("builtin registry must load cleanly");
 

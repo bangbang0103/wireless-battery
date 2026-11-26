@@ -80,9 +80,22 @@ impl BatteryClient {
             .transport
             .enumerate()
             .map_err(|error| error.into_battery(&EndpointId("enumeration".to_owned())))?;
+        let exact_sibling_keys: HashSet<(TransportKind, u16, u16)> = endpoints
+            .iter()
+            .filter_map(|endpoint| {
+                let (vid, pid) = (endpoint.vid?, endpoint.pid?);
+                let exact_count = self
+                    .registry
+                    .matches(endpoint)
+                    .into_iter()
+                    .filter(|(_, decision)| *decision == MatchDecision::Exact)
+                    .count();
+                (exact_count == 1).then_some((endpoint.transport, vid, pid))
+            })
+            .collect();
         let devices = endpoints
             .iter()
-            .map(|endpoint| self.device_from_endpoint(endpoint))
+            .map(|endpoint| self.device_from_endpoint(endpoint, &exact_sibling_keys))
             .collect::<Vec<_>>();
         self.remember_devices(&devices)?;
         Ok(devices)
@@ -268,7 +281,11 @@ impl BatteryClient {
         })
     }
 
-    fn device_from_endpoint(&self, endpoint: &Endpoint) -> Device {
+    fn device_from_endpoint(
+        &self,
+        endpoint: &Endpoint,
+        exact_sibling_keys: &HashSet<(TransportKind, u16, u16)>,
+    ) -> Device {
         let id = identity::device_id(&endpoint.id);
         let matches = self.registry.matches(endpoint);
         let exact = matches
@@ -279,10 +296,16 @@ impl BatteryClient {
             .iter()
             .filter(|(_, decision)| *decision == MatchDecision::Family)
             .collect::<Vec<_>>();
+        let has_exact_sibling = endpoint
+            .vid
+            .zip(endpoint.pid)
+            .is_some_and(|(vid, pid)| exact_sibling_keys.contains(&(endpoint.transport, vid, pid)));
         let (selected, match_status) = if exact.len() == 1 {
             (Some(exact[0].0.clone()), MatchStatus::Exact)
         } else if exact.len() > 1 {
             (None, MatchStatus::Conflict)
+        } else if has_exact_sibling {
+            (None, MatchStatus::Unmatched)
         } else if family.len() == 1 {
             (Some(family[0].0.clone()), MatchStatus::Exact)
         } else if family.len() > 1 {
