@@ -864,11 +864,7 @@ fn logitech_hidpp20_exact_suppresses_sibling_hidpp10_family_endpoint() {
         Some("Logitech Nano Receiver"),
     );
 
-    let transport = Arc::new(StaticTransport(vec![
-        gpw3_long,
-        gpw3_short,
-        legacy_hidpp10,
-    ]));
+    let transport = Arc::new(StaticTransport(vec![gpw3_long, gpw3_short, legacy_hidpp10]));
     let client = BatteryClient::with_transport(
         ClientConfig::default(),
         transport,
