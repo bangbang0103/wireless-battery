@@ -21,8 +21,8 @@ use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_MEASURING_MODE_NATURAL, DWRITE_PARAGRAPH_ALIGNMENT,
     DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_NEAR, DWRITE_TEXT_ALIGNMENT,
     DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_TEXT_ALIGNMENT_TRAILING,
-    DWRITE_TRIMMING, DWRITE_TRIMMING_GRANULARITY_CHARACTER, DWRITE_WORD_WRAPPING_NO_WRAP,
-    DWRITE_WORD_WRAPPING_WRAP,
+    DWRITE_TEXT_METRICS, DWRITE_TRIMMING, DWRITE_TRIMMING_GRANULARITY_CHARACTER,
+    DWRITE_WORD_WRAPPING_NO_WRAP, DWRITE_WORD_WRAPPING_WRAP,
 };
 use wireless_battery_tray_core::{DeviceKind, TraySnapshot};
 
@@ -277,6 +277,23 @@ pub(super) fn estimate_text_width(text: &str) -> f32 {
     text.chars()
         .map(|c| if c.is_ascii() { 7.0 } else { 12.5 })
         .sum()
+}
+
+pub(super) unsafe fn measure_text_width(
+    dwrite: &IDWriteFactory,
+    text: &str,
+    format: &IDWriteTextFormat,
+    max_width: f32,
+    max_height: f32,
+) -> f32 {
+    let wide = HSTRING::from(text);
+    if let Ok(layout) = dwrite.CreateTextLayout(wide.as_wide(), format, max_width, max_height) {
+        let mut metrics = DWRITE_TEXT_METRICS::default();
+        if layout.GetMetrics(&mut metrics).is_ok() {
+            return metrics.widthIncludingTrailingWhitespace.min(max_width);
+        }
+    }
+    max_width
 }
 
 pub(super) unsafe fn draw_text(

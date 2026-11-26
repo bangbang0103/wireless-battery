@@ -620,6 +620,12 @@ mod win_app {
                         let _ = set_autostart(enabled);
                     });
             }
+            PopoverAction::ToggleShowPinButton => {
+                let mut cfg = host.poller.service().config();
+                cfg.show_pin_button = !cfg.show_pin_button;
+                let snap = host.poller.service().update_config_async(cfg);
+                host.popover.set_snapshot(snap);
+            }
             PopoverAction::CheckUpdates => {
                 spawn_update_check(host, false);
             }

@@ -271,6 +271,20 @@ impl Lang {
         }
     }
 
+    pub const fn setting_show_pin_button_title(self) -> &'static str {
+        match self {
+            Self::ZhCn => "显示置顶按钮",
+            Self::En => "Show Pin Button",
+        }
+    }
+
+    pub const fn setting_show_pin_button_desc(self) -> &'static str {
+        match self {
+            Self::ZhCn => "开启后在主面板顶部显示置顶按钮",
+            Self::En => "Show the pin button in the panel header",
+        }
+    }
+
     pub const fn setting_version_title(self) -> &'static str {
         match self {
             Self::ZhCn => "版本与更新",

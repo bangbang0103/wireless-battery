@@ -10,8 +10,8 @@ use super::widgets::{
     draw_community_icon, draw_community_icon_button, draw_elevated_card, draw_standard_button,
     draw_subtle_icon_button, draw_text, draw_win11_toggle_switch, rect_xywh, rounded_rect,
     PaintBrush, TextFormats, GLYPH_BACK, GLYPH_CHEVRON_DOWN, GLYPH_CHEVRON_UP, GLYPH_CLOCK,
-    GLYPH_COLOR_THEME, GLYPH_INFO, GLYPH_LANGUAGE, GLYPH_PEOPLE, GLYPH_POWER, GLYPH_RINGER,
-    GLYPH_RINGER_SILENT,
+    GLYPH_COLOR_THEME, GLYPH_INFO, GLYPH_LANGUAGE, GLYPH_PEOPLE, GLYPH_PIN, GLYPH_POWER,
+    GLYPH_RINGER, GLYPH_RINGER_SILENT,
 };
 use crate::i18n::Lang;
 use crate::theme::{with_alpha, Palette, SystemTheme};
@@ -86,7 +86,7 @@ pub(super) unsafe fn draw_settings_view(
     };
     *viewport_height = (height - HEADER_HEIGHT).max(1.0);
     *content_height =
-        OUTER_PADDING * 2.0 + SETTINGS_CARD_H * 9.0 + SETTINGS_CARD_GAP * 8.0 + subrow_extra;
+        OUTER_PADDING * 2.0 + SETTINGS_CARD_H * 10.0 + SETTINGS_CARD_GAP * 9.0 + subrow_extra;
     let max_scroll = (*content_height - *viewport_height).max(0.0);
     ui.scroll_offset = ui.scroll_offset.clamp(0.0, max_scroll);
 
@@ -257,6 +257,40 @@ pub(super) unsafe fn draw_settings_view(
     hit_regions.push(HitRegion {
         rect: auto_card,
         target: auto_target,
+    });
+    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+
+    // Card 6: Show Pin Button (ToggleSwitch)
+    let pin_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
+    let pin_target = HitTarget::ToggleShowPinButton;
+    let pin_hovered = ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(&pin_target);
+    let pin_pressed = ui.open_dropdown.is_none() && ui.pressed.as_ref() == Some(&pin_target);
+    draw_settings_card_base(
+        rt,
+        formats,
+        brush,
+        pin_card,
+        GLYPH_PIN,
+        lang.setting_show_pin_button_title(),
+        lang.setting_show_pin_button_desc(),
+        64.0,
+        palette,
+        pin_hovered,
+        pin_pressed,
+    );
+    draw_win11_toggle_switch(
+        rt,
+        brush,
+        pin_card.right - 14.0 - 40.0,
+        pin_card.top + (SETTINGS_CARD_H - 20.0) * 0.5,
+        ui.toggle_show_pin_button_anim.value(now),
+        pin_hovered,
+        pin_pressed,
+        palette,
+    );
+    hit_regions.push(HitRegion {
+        rect: pin_card,
+        target: pin_target,
     });
     y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
 

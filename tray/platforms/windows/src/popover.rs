@@ -72,6 +72,7 @@ pub enum PopoverAction {
     ToggleLowBatteryNotify,
     ToggleLowBatterySilent,
     ToggleAutostart,
+    ToggleShowPinButton,
     CheckUpdates,
     OpenUpdateUrl(String),
     OpenCommunityLink(CommunityLinkKind),
@@ -1124,6 +1125,16 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) -> ClickOutcome {
             out.action = Some(PopoverAction::ToggleLowBatterySilent);
         }
         HitTarget::ToggleAutostart => out.action = Some(PopoverAction::ToggleAutostart),
+        HitTarget::ToggleShowPinButton => {
+            if inner.snapshot.config.show_pin_button && inner.ui.pinned {
+                inner.ui.pinned = false;
+                inner.compact_active = false;
+                unsafe {
+                    let _ = KillTimer(inner.hwnd, COLLAPSE_TIMER_ID);
+                }
+            }
+            out.action = Some(PopoverAction::ToggleShowPinButton);
+        }
         HitTarget::CheckUpdates => match &inner.ui.update_status {
             UpdateUiStatus::Checking => {}
             UpdateUiStatus::Available { url, .. } => {

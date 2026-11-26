@@ -70,6 +70,7 @@ pub enum HitTarget {
     ToggleLowBatteryNotify,
     ToggleLowBatterySilent,
     ToggleAutostart,
+    ToggleShowPinButton,
     CheckUpdates,
 }
 
@@ -177,6 +178,7 @@ pub struct UiState {
     pub(super) toggle_notify_anim: ScalarAnim,
     pub(super) toggle_silent_anim: ScalarAnim,
     pub(super) toggle_autostart_anim: ScalarAnim,
+    pub(super) toggle_show_pin_button_anim: ScalarAnim,
     pub(super) dropdown_anim: ScalarAnim,
     pub(super) drawer_reveal_anim: ScalarAnim,
     pub(super) refresh_anim_start: Option<Instant>,
@@ -198,6 +200,7 @@ impl Default for UiState {
             toggle_notify_anim: ScalarAnim::settled(1.0),
             toggle_silent_anim: ScalarAnim::settled(0.0),
             toggle_autostart_anim: ScalarAnim::settled(0.0),
+            toggle_show_pin_button_anim: ScalarAnim::settled(0.0),
             dropdown_anim: ScalarAnim::settled(0.0),
             drawer_reveal_anim: ScalarAnim::settled(1.0),
             refresh_anim_start: None,
@@ -230,16 +233,24 @@ impl UiState {
             0.0
         };
         let auto_t = if snapshot.config.autostart { 1.0 } else { 0.0 };
+        let pin_btn_t = if snapshot.config.show_pin_button {
+            1.0
+        } else {
+            0.0
+        };
 
         if instant {
             self.toggle_notify_anim.snap(notify_t);
             self.toggle_silent_anim.snap(silent_t);
             self.toggle_autostart_anim.snap(auto_t);
+            self.toggle_show_pin_button_anim.snap(pin_btn_t);
             self.drawer_reveal_anim.snap(1.0);
         } else {
             self.toggle_notify_anim.animate_to(notify_t, 160, now);
             self.toggle_silent_anim.animate_to(silent_t, 160, now);
             self.toggle_autostart_anim.animate_to(auto_t, 160, now);
+            self.toggle_show_pin_button_anim
+                .animate_to(pin_btn_t, 160, now);
         }
 
         if snapshot.refreshing {
@@ -278,6 +289,7 @@ impl UiState {
         self.toggle_notify_anim.is_active(now)
             || self.toggle_silent_anim.is_active(now)
             || self.toggle_autostart_anim.is_active(now)
+            || self.toggle_show_pin_button_anim.is_active(now)
             || self.dropdown_anim.is_active(now)
             || self.drawer_reveal_anim.is_active(now)
     }

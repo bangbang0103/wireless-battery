@@ -58,6 +58,7 @@ pub struct PaintSurface {
 
 pub struct PopoverRenderer {
     d2d: ID2D1Factory,
+    dwrite: IDWriteFactory,
     formats: TextFormats,
     target: Option<ID2D1HwndRenderTarget>,
     brush: Option<PaintBrush>,
@@ -75,6 +76,7 @@ impl PopoverRenderer {
 
         Ok(Self {
             d2d,
+            dwrite,
             formats,
             target: None,
             brush: None,
@@ -95,8 +97,8 @@ impl PopoverRenderer {
                 };
                 (HEADER_HEIGHT
                     + OUTER_PADDING * 2.0
-                    + SETTINGS_CARD_H * 9.0
-                    + SETTINGS_CARD_GAP * 8.0
+                    + SETTINGS_CARD_H * 10.0
+                    + SETTINGS_CARD_GAP * 9.0
                     + subrow_extra)
                     .min(POPOVER_MAX_HEIGHT_DIP)
             }
@@ -192,6 +194,7 @@ impl PopoverRenderer {
             match ui.view {
                 PopoverView::Main => {
                     main_view::draw_main_view(
+                        &self.dwrite,
                         &rt,
                         &self.formats,
                         &brush,

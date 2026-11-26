@@ -69,6 +69,8 @@ pub struct TrayConfig {
     pub low_battery_threshold: u8,
     /// Launch silently into the system tray on login.
     pub autostart: bool,
+    /// Show the pin-on-top button in the main panel header.
+    pub show_pin_button: bool,
     /// Total read time budget per device in milliseconds.
     pub read_timeout_ms: u64,
     /// UI appearance theme preference (`system`, `light`, or `dark`).
@@ -86,6 +88,7 @@ impl Default for TrayConfig {
             low_battery_silent: false,
             low_battery_threshold: DEFAULT_LOW_BATTERY_THRESHOLD,
             autostart: false,
+            show_pin_button: false,
             read_timeout_ms: DEFAULT_READ_TIMEOUT_MS,
             theme_mode: ThemeMode::System,
             language: LanguageMode::System,
@@ -233,6 +236,7 @@ mod tests {
             low_battery_silent: true,
             low_battery_threshold: 20,
             autostart: true,
+            show_pin_button: true,
             read_timeout_ms: 5_500,
             theme_mode: ThemeMode::Dark,
             language: LanguageMode::En,
@@ -257,6 +261,7 @@ mod tests {
         assert_eq!(parsed.theme_mode, ThemeMode::System);
         assert_eq!(parsed.language, LanguageMode::System);
         assert!(!parsed.low_battery_silent);
+        assert!(!parsed.show_pin_button);
         assert_eq!(ThemeMode::System.next(), ThemeMode::Light);
         assert_eq!(ThemeMode::Light.next(), ThemeMode::Dark);
         assert_eq!(ThemeMode::Dark.next(), ThemeMode::System);

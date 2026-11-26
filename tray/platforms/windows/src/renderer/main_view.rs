@@ -6,9 +6,9 @@ use super::anim::{
 };
 use super::widgets::{
     device_kind_glyph, draw_standard_button, draw_subtle_icon_button, draw_text,
-    draw_text_shadowed, rect_xywh, rounded_rect, PaintBrush, TextFormats, GLYPH_CHARGING_BOLT,
-    GLYPH_CHEVRON_DOWN, GLYPH_CHEVRON_UP, GLYPH_COPY, GLYPH_PERIPHERAL, GLYPH_PIN, GLYPH_PINNED,
-    GLYPH_REFRESH, GLYPH_SETTINGS,
+    draw_text_shadowed, measure_text_width, rect_xywh, rounded_rect, PaintBrush, TextFormats,
+    GLYPH_CHARGING_BOLT, GLYPH_CHEVRON_DOWN, GLYPH_CHEVRON_UP, GLYPH_COPY, GLYPH_PERIPHERAL,
+    GLYPH_PIN, GLYPH_PINNED, GLYPH_REFRESH, GLYPH_SETTINGS,
 };
 use crate::i18n::Lang;
 use crate::theme::{with_alpha, Palette};
@@ -17,11 +17,13 @@ use windows::Win32::Graphics::Direct2D::Common::{D2D1_COLOR_F, D2D_POINT_2F, D2D
 use windows::Win32::Graphics::Direct2D::{
     ID2D1HwndRenderTarget, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_ELLIPSE, D2D1_ROUNDED_RECT,
 };
+use windows::Win32::Graphics::DirectWrite::IDWriteFactory;
 use wireless_battery::{BatteryLevel, ChargeState, Freshness, Precision, Reachability};
 use wireless_battery_tray_core::{DeviceView, TrayIconState, TraySnapshot};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) unsafe fn draw_main_view(
+    dwrite: &IDWriteFactory,
     rt: &ID2D1HwndRenderTarget,
     formats: &TextFormats,
     brush: &PaintBrush,
@@ -39,11 +41,16 @@ pub(super) unsafe fn draw_main_view(
     let compact = ui.is_compact_pinned(snapshot);
     if !compact {
         // --- Win11 Flyout Header (52 DIPs) ---
+        let title_max_w = if snapshot.config.show_pin_button {
+            width - 100.0
+        } else {
+            width - 64.0
+        };
         draw_text(
             rt,
             "Wireless Battery",
             &formats.title,
-            rect_xywh(OUTER_PADDING, 10.0, width - 136.0, 32.0),
+            rect_xywh(OUTER_PADDING, 10.0, title_max_w, 32.0),
             &palette.text_primary,
             brush,
         );
@@ -51,44 +58,28 @@ pub(super) unsafe fn draw_main_view(
         let btn_size = 32.0;
         let btn_y = (HEADER_HEIGHT - btn_size) * 0.5;
         let settings_rect = rect_xywh(width - 12.0 - btn_size, btn_y, btn_size, btn_size);
-        let refresh_rect = rect_xywh(
-            settings_rect.left - 4.0 - btn_size,
-            btn_y,
-            btn_size,
-            btn_size,
-        );
-        let pin_rect = rect_xywh(
-            refresh_rect.left - 4.0 - btn_size,
-            btn_y,
-            btn_size,
-            btn_size,
-        );
 
-        let pin_glyph = if ui.pinned { GLYPH_PINNED } else { GLYPH_PIN };
-        draw_subtle_icon_button(
-            rt,
-            formats,
-            brush,
-            hit_regions,
-            pin_rect,
-            pin_glyph,
-            &HitTarget::TogglePin,
-            ui.pinned,
-            palette,
-            ui,
-        );
-        draw_subtle_icon_button(
-            rt,
-            formats,
-            brush,
-            hit_regions,
-            refresh_rect,
-            GLYPH_REFRESH,
-            &HitTarget::RefreshAll,
-            false,
-            palette,
-            ui,
-        );
+        if snapshot.config.show_pin_button {
+            let pin_rect = rect_xywh(
+                settings_rect.left - 4.0 - btn_size,
+                btn_y,
+                btn_size,
+                btn_size,
+            );
+            let pin_glyph = if ui.pinned { GLYPH_PINNED } else { GLYPH_PIN };
+            draw_subtle_icon_button(
+                rt,
+                formats,
+                brush,
+                hit_regions,
+                pin_rect,
+                pin_glyph,
+                &HitTarget::TogglePin,
+                ui.pinned,
+                palette,
+                ui,
+            );
+        }
         draw_subtle_icon_button(
             rt,
             formats,
@@ -259,6 +250,7 @@ pub(super) unsafe fn draw_main_view(
 
     if !compact {
         draw_footer(
+            dwrite,
             rt,
             formats,
             brush,
@@ -276,6 +268,7 @@ pub(super) unsafe fn draw_main_view(
 
 #[allow(clippy::too_many_arguments)]
 unsafe fn draw_footer(
+    dwrite: &IDWriteFactory,
     rt: &ID2D1HwndRenderTarget,
     formats: &TextFormats,
     brush: &PaintBrush,
@@ -364,21 +357,46 @@ unsafe fn draw_footer(
             snapshot.config.poll_interval_secs,
         )
     };
+    let quit_rect = rect_xywh(width - 12.0 - 48.0, list_bottom + 8.0, 48.0, 32.0);
+    let status_x = OUTER_PADDING + 13.0;
+    let refresh_size = 26.0;
+    let refresh_gap = 4.0;
+    let max_status_w = (quit_rect.left - 8.0 - refresh_size - refresh_gap - status_x).max(40.0);
+    let measured_w = measure_text_width(
+        dwrite,
+        &footer_status,
+        &formats.caption,
+        max_status_w,
+        FOOTER_HEIGHT,
+    );
     draw_text(
         rt,
         &footer_status,
         &formats.caption,
-        rect_xywh(
-            OUTER_PADDING + 13.0,
-            list_bottom,
-            width - 96.0,
-            FOOTER_HEIGHT,
-        ),
+        rect_xywh(status_x, list_bottom, max_status_w, FOOTER_HEIGHT),
         &palette.text_secondary,
         brush,
     );
 
-    let quit_rect = rect_xywh(width - 12.0 - 48.0, list_bottom + 8.0, 48.0, 32.0);
+    let refresh_rect = rect_xywh(
+        status_x + measured_w + refresh_gap,
+        list_bottom + (FOOTER_HEIGHT - refresh_size) * 0.5,
+        refresh_size,
+        refresh_size,
+    );
+    draw_subtle_icon_button(
+        rt,
+        formats,
+        brush,
+        hit_regions,
+        refresh_rect,
+        GLYPH_REFRESH,
+        &HitTarget::RefreshAll,
+        false,
+        palette,
+        ui,
+    );
+
     let quit_hovered = ui.hovered == Some(HitTarget::Quit);
     let quit_pressed = ui.pressed == Some(HitTarget::Quit);
     if quit_pressed || quit_hovered {
