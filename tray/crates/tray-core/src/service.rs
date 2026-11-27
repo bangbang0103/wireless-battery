@@ -576,8 +576,37 @@ fn transport_label(device: &Device) -> String {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct TransportGroupKey {
+    vid: Option<u16>,
+    provider_id: Option<String>,
+    name: String,
+}
+
+fn is_live_view(view: &DeviceView) -> bool {
+    view.freshness == Some(Freshness::Live)
+        && view.reachability == Reachability::Online
+        && view.last_error.is_none()
+}
+
+/// Collapse duplicate transports (e.g. wired charging + wireless receiver) for the
+/// same physical peripheral when at least one transport is currently live.
+fn collapse_transports(candidates: Vec<(TransportGroupKey, DeviceView)>) -> Vec<DeviceView> {
+    let has_live: std::collections::HashSet<TransportGroupKey> = candidates
+        .iter()
+        .filter(|(_, view)| is_live_view(view))
+        .map(|(key, _)| key.clone())
+        .collect();
+
+    candidates
+        .into_iter()
+        .filter(|(key, view)| is_live_view(view) || !has_live.contains(key))
+        .map(|(_, view)| view)
+        .collect()
+}
+
 pub(crate) fn build_snapshot(state: &ServiceState) -> TraySnapshot {
-    let mut views = Vec::new();
+    let mut candidates = Vec::new();
 
     for device in &state.devices {
         if device.match_status != MatchStatus::Exact {
@@ -631,26 +660,37 @@ pub(crate) fn build_snapshot(state: &ServiceState) -> TraySnapshot {
             && percentage.is_some_and(|pct| pct <= state.config.low_battery_threshold)
             && !matches!(charge_state, ChargeState::Charging | ChargeState::Full);
 
-        views.push(DeviceView {
-            id: device.id.0.clone(),
-            name: device.name.clone(),
-            kind: classify_device(device),
-            transport: device.endpoint.transport,
-            transport_label: transport_label(device),
+        let key = TransportGroupKey {
+            vid: device.endpoint.vid,
             provider_id: device.provider_id.clone(),
-            support_status: device.support_status,
-            precision,
-            percentage,
-            level,
-            voltage_mv,
-            charge_state,
-            reachability,
-            freshness,
-            observed_at,
-            last_error,
-            is_low,
-        });
+            name: device.name.clone(),
+        };
+
+        candidates.push((
+            key,
+            DeviceView {
+                id: device.id.0.clone(),
+                name: device.name.clone(),
+                kind: classify_device(device),
+                transport: device.endpoint.transport,
+                transport_label: transport_label(device),
+                provider_id: device.provider_id.clone(),
+                support_status: device.support_status,
+                precision,
+                percentage,
+                level,
+                voltage_mv,
+                charge_state,
+                reachability,
+                freshness,
+                observed_at,
+                last_error,
+                is_low,
+            },
+        ));
     }
+
+    let mut views = collapse_transports(candidates);
 
     views.sort_by(|a, b| {
         device_sort_rank(a).cmp(&device_sort_rank(b)).then_with(|| {
@@ -1018,5 +1058,170 @@ mod tests {
         let _ = poller.update_config(next);
         std::thread::sleep(Duration::from_millis(80));
         assert_eq!(enumerate_calls.load(Ordering::SeqCst), after_initial);
+    }
+
+    fn make_gpw3_device(id: &str, pid: u16) -> Device {
+        let mut endpoint = Endpoint::synthetic(id, 0x046D, pid);
+        endpoint.product_name = Some("Logitech GPW3".to_owned());
+        Device {
+            id: wireless_battery::DeviceId(id.to_owned()),
+            endpoint_id: endpoint.id.clone(),
+            name: "Logitech GPW3".to_owned(),
+            vendor: None,
+            model: None,
+            device_kind: wireless_battery::DeviceKind::Mouse,
+            provider_id: Some("logitech.hidpp".to_owned()),
+            provider_version: Some("0.1.0".to_owned()),
+            match_status: MatchStatus::Exact,
+            support_status: SupportStatus::Verified,
+            capabilities: Capabilities::default(),
+            readable: true,
+            endpoint,
+        }
+    }
+
+    fn make_reading(
+        id: &str,
+        percentage: u8,
+        charge_state: ChargeState,
+        reachability: Reachability,
+        freshness: Freshness,
+    ) -> BatteryReading {
+        BatteryReading {
+            device_id: wireless_battery::DeviceId(id.to_owned()),
+            endpoint_id: EndpointId(id.to_owned()),
+            percentage: Some(percentage),
+            level: None,
+            voltage_mv: None,
+            charge_state,
+            reachability,
+            precision: Precision::Percentage,
+            source: ReadingSource::VendorHid,
+            observed_at: Utc::now(),
+            freshness,
+        }
+    }
+
+    fn make_test_state(devices: Vec<Device>) -> ServiceState {
+        ServiceState {
+            config: TrayConfig::default(),
+            system_is_zh: false,
+            devices,
+            readings: HashMap::new(),
+            errors: HashMap::new(),
+            last_sync_at: None,
+            refreshing: false,
+            tracker: LowBatteryTracker::default(),
+            #[cfg(feature = "dev-tools")]
+            dev: crate::dev_tools::DevState::default(),
+        }
+    }
+
+    #[test]
+    fn collapses_stale_or_errored_receiver_when_wired_charging_is_live() {
+        let mut state = make_test_state(vec![
+            make_gpw3_device("logi-dongle", 0xC547),
+            make_gpw3_device("logi-wired", 0xC09B),
+        ]);
+        // Dongle still holds an old reading and recorded a read timeout after plugging in the cable.
+        state.readings.insert(
+            "logi-dongle".to_owned(),
+            make_reading(
+                "logi-dongle",
+                42,
+                ChargeState::Discharging,
+                Reachability::Online,
+                Freshness::Stale,
+            ),
+        );
+        state
+            .errors
+            .insert("logi-dongle".to_owned(), ErrorKind::Timeout);
+        state.readings.insert(
+            "logi-wired".to_owned(),
+            make_reading(
+                "logi-wired",
+                45,
+                ChargeState::Charging,
+                Reachability::Online,
+                Freshness::Live,
+            ),
+        );
+
+        let snap = build_snapshot(&state);
+        assert_eq!(snap.devices.len(), 1);
+        assert_eq!(snap.devices[0].id, "logi-wired");
+        assert_eq!(snap.devices[0].charge_state, ChargeState::Charging);
+        assert_eq!(snap.devices[0].percentage, Some(45));
+
+        // Even if the dongle reading still had Freshness::Live cached alongside an error,
+        // the errored transport must be collapsed.
+        state.readings.insert(
+            "logi-dongle".to_owned(),
+            make_reading(
+                "logi-dongle",
+                42,
+                ChargeState::Discharging,
+                Reachability::Online,
+                Freshness::Live,
+            ),
+        );
+        let snap2 = build_snapshot(&state);
+        assert_eq!(snap2.devices.len(), 1);
+        assert_eq!(snap2.devices[0].id, "logi-wired");
+    }
+
+    #[test]
+    fn keeps_two_identical_devices_when_both_are_live_or_both_offline() {
+        let mut state = make_test_state(vec![
+            make_gpw3_device("gpw3-a", 0xC547),
+            make_gpw3_device("gpw3-b", 0xC54D),
+        ]);
+        state.readings.insert(
+            "gpw3-a".to_owned(),
+            make_reading(
+                "gpw3-a",
+                80,
+                ChargeState::Discharging,
+                Reachability::Online,
+                Freshness::Live,
+            ),
+        );
+        state.readings.insert(
+            "gpw3-b".to_owned(),
+            make_reading(
+                "gpw3-b",
+                60,
+                ChargeState::Discharging,
+                Reachability::Online,
+                Freshness::Live,
+            ),
+        );
+
+        let both_live = build_snapshot(&state);
+        assert_eq!(both_live.devices.len(), 2);
+
+        state.readings.insert(
+            "gpw3-a".to_owned(),
+            make_reading(
+                "gpw3-a",
+                80,
+                ChargeState::Discharging,
+                Reachability::Sleeping,
+                Freshness::Stale,
+            ),
+        );
+        state.readings.insert(
+            "gpw3-b".to_owned(),
+            make_reading(
+                "gpw3-b",
+                60,
+                ChargeState::Discharging,
+                Reachability::Sleeping,
+                Freshness::Stale,
+            ),
+        );
+        let both_sleeping = build_snapshot(&state);
+        assert_eq!(both_sleeping.devices.len(), 2);
     }
 }
