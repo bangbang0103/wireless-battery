@@ -1,6 +1,6 @@
 [package]
 name = "wireless-battery"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 rust-version = "1.76"
 description = "Conservative, replayable peripheral battery readings"
