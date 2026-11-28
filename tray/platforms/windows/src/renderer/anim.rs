@@ -50,6 +50,95 @@ pub enum CommunityLinkKind {
     Discord,
 }
 
+/// Collapsible category sections inside the Settings view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsSection {
+    General,
+    Monitoring,
+    About,
+}
+
+/// Expansion state and smooth animation progress for each collapsible Settings section.
+#[derive(Debug, Clone, Copy)]
+pub struct SettingsSectionsState {
+    pub general: bool,
+    pub monitoring: bool,
+    pub about: bool,
+    general_anim: ScalarAnim,
+    monitoring_anim: ScalarAnim,
+    about_anim: ScalarAnim,
+}
+
+impl Default for SettingsSectionsState {
+    fn default() -> Self {
+        let mut general_anim = ScalarAnim::settled(1.0);
+        general_anim.snap(1.0);
+        let mut monitoring_anim = ScalarAnim::settled(0.0);
+        monitoring_anim.snap(0.0);
+        let mut about_anim = ScalarAnim::settled(0.0);
+        about_anim.snap(0.0);
+        Self {
+            general: true,
+            monitoring: false,
+            about: false,
+            general_anim,
+            monitoring_anim,
+            about_anim,
+        }
+    }
+}
+
+impl SettingsSectionsState {
+    pub fn is_expanded(&self, section: SettingsSection) -> bool {
+        match section {
+            SettingsSection::General => self.general,
+            SettingsSection::Monitoring => self.monitoring,
+            SettingsSection::About => self.about,
+        }
+    }
+
+    pub fn toggle(&mut self, section: SettingsSection, now: Instant) {
+        const DURATION_MS: u32 = 160;
+        match section {
+            SettingsSection::General => {
+                self.general = !self.general;
+                self.general_anim.animate_to(
+                    if self.general { 1.0 } else { 0.0 },
+                    DURATION_MS,
+                    now,
+                );
+            }
+            SettingsSection::Monitoring => {
+                self.monitoring = !self.monitoring;
+                self.monitoring_anim.animate_to(
+                    if self.monitoring { 1.0 } else { 0.0 },
+                    DURATION_MS,
+                    now,
+                );
+            }
+            SettingsSection::About => {
+                self.about = !self.about;
+                self.about_anim
+                    .animate_to(if self.about { 1.0 } else { 0.0 }, DURATION_MS, now);
+            }
+        }
+    }
+
+    pub fn progress(&self, section: SettingsSection, now: Instant) -> f32 {
+        match section {
+            SettingsSection::General => self.general_anim.value(now),
+            SettingsSection::Monitoring => self.monitoring_anim.value(now),
+            SettingsSection::About => self.about_anim.value(now),
+        }
+    }
+
+    pub fn is_animating(&self, now: Instant) -> bool {
+        self.general_anim.is_active(now)
+            || self.monitoring_anim.is_active(now)
+            || self.about_anim.is_active(now)
+    }
+}
+
 /// Interactive targets registered during every paint pass for pixel-accurate hit-testing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HitTarget {
@@ -71,6 +160,7 @@ pub enum HitTarget {
     ToggleLowBatterySilent,
     ToggleAutostart,
     ToggleShowPinButton,
+    ToggleSettingsSection(SettingsSection),
     CheckUpdates,
 }
 
@@ -167,6 +257,8 @@ impl ScalarAnim {
 pub struct UiState {
     pub view: PopoverView,
     pub open_dropdown: Option<OpenDropdown>,
+    pub settings_sections: SettingsSectionsState,
+    pub pending_settings_shrink: bool,
     pub pinned: bool,
     pub mouse_inside: bool,
     pub expanded_device_id: Option<String>,
@@ -189,6 +281,8 @@ impl Default for UiState {
         Self {
             view: PopoverView::Main,
             open_dropdown: None,
+            settings_sections: SettingsSectionsState::default(),
+            pending_settings_shrink: false,
             pinned: false,
             mouse_inside: false,
             expanded_device_id: None,
@@ -292,5 +386,7 @@ impl UiState {
             || self.toggle_show_pin_button_anim.is_active(now)
             || self.dropdown_anim.is_active(now)
             || self.drawer_reveal_anim.is_active(now)
+            || (self.view == PopoverView::Settings
+                && (self.settings_sections.is_animating(now) || self.pending_settings_shrink))
     }
 }

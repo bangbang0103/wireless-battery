@@ -14,22 +14,25 @@ use windows::Win32::Foundation::{BOOL, HMODULE, RECT};
 use windows::Win32::Graphics::Direct2D::Common::{
     D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_FIGURE_BEGIN_FILLED,
     D2D1_FIGURE_BEGIN_HOLLOW, D2D1_FIGURE_END_CLOSED, D2D1_FIGURE_END_OPEN, D2D1_PIXEL_FORMAT,
-    D2D_POINT_2F,
+    D2D_POINT_2F, D2D_SIZE_U,
 };
 use windows::Win32::Graphics::Direct2D::{
-    D2D1CreateFactory, ID2D1DCRenderTarget, ID2D1Factory, ID2D1PathGeometry, ID2D1StrokeStyle,
-    D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_CAP_STYLE_ROUND, D2D1_FACTORY_TYPE_SINGLE_THREADED,
-    D2D1_LINE_JOIN_ROUND, D2D1_QUADRATIC_BEZIER_SEGMENT, D2D1_RENDER_TARGET_PROPERTIES,
-    D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1_STROKE_STYLE_PROPERTIES,
+    D2D1CreateFactory, ID2D1Bitmap, ID2D1DCRenderTarget, ID2D1Factory, ID2D1HwndRenderTarget,
+    ID2D1PathGeometry, ID2D1StrokeStyle, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_BITMAP_PROPERTIES,
+    D2D1_CAP_STYLE_ROUND, D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_LINE_JOIN_ROUND,
+    D2D1_QUADRATIC_BEZIER_SEGMENT, D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_DEFAULT,
+    D2D1_STROKE_STYLE_PROPERTIES,
 };
 use windows::Win32::Graphics::DirectWrite::IDWriteFactory;
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::Gdi::{
-    CreateBitmap, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, SelectObject,
-    BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC,
+    CreateBitmap, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GdiFlush,
+    SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC,
 };
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateIconIndirect, DestroyIcon, GetSystemMetrics, LoadIconW, HICON, ICONINFO, SM_CXSMICON,
+    CreateIconIndirect, DestroyIcon, DrawIconEx, GetSystemMetrics, LoadIconW, LoadImageW,
+    DI_NORMAL, HICON, ICONINFO, IMAGE_ICON, LR_DEFAULTCOLOR, SM_CXSMICON,
 };
 use wireless_battery_tray_core::TrayIconState;
 
@@ -220,7 +223,8 @@ fn render_minimal_tray_svg(
         let inner_wave_stroke = (2.1 * s).max(1.25);
         let outer_wave_stroke = (1.8 * s).max(1.1);
 
-        let bolt_geometry = create_rounded_bolt_geometry(&d2d, s)?;
+        let origin = D2D_POINT_2F { x: 0.0, y: 0.0 };
+        let bolt_geometry = create_rounded_bolt_geometry(&d2d, s, origin)?;
         let inner_arc = create_quad_curve(
             &d2d,
             15.9 * s,
@@ -256,10 +260,100 @@ fn render_minimal_tray_svg(
     }
 }
 
+/// Rasterize the embedded application icon (`app-icon.ico`, built from `app-icon.png`)
+/// into a Direct2D bitmap at the exact DPI-scaled pixel size for the popover header.
+pub fn create_app_icon_bitmap(rt: &ID2D1HwndRenderTarget, pixel_size: u32) -> Option<ID2D1Bitmap> {
+    let size = pixel_size.clamp(16, 128) as i32;
+    unsafe {
+        let hinstance = GetModuleHandleW(None).ok()?;
+        let handle = LoadImageW(
+            hinstance,
+            PCWSTR(usize::from(APP_ICON_RESOURCE_ID) as *const u16),
+            IMAGE_ICON,
+            size,
+            size,
+            LR_DEFAULTCOLOR,
+        )
+        .ok()?;
+        let hicon = HICON(handle.0);
+        if hicon.is_invalid() {
+            return None;
+        }
+
+        let bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: size,
+                biHeight: -size,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mem_dc: HDC = CreateCompatibleDC(HDC::default());
+        if mem_dc.is_invalid() {
+            let _ = DestroyIcon(hicon);
+            return None;
+        }
+
+        let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
+        let Ok(dib): windows::core::Result<HBITMAP> =
+            CreateDIBSection(mem_dc, &bmi, DIB_RGB_COLORS, &mut bits, None, 0)
+        else {
+            let _ = DeleteDC(mem_dc);
+            let _ = DestroyIcon(hicon);
+            return None;
+        };
+        if bits.is_null() {
+            let _ = DeleteObject(dib);
+            let _ = DeleteDC(mem_dc);
+            let _ = DestroyIcon(hicon);
+            return None;
+        }
+
+        let old_obj = SelectObject(mem_dc, dib);
+        let draw_ok = DrawIconEx(mem_dc, 0, 0, hicon, size, size, 0, None, DI_NORMAL).is_ok();
+        let _ = GdiFlush();
+
+        let bitmap = if draw_ok {
+            let props = D2D1_BITMAP_PROPERTIES {
+                pixelFormat: D2D1_PIXEL_FORMAT {
+                    format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                    alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
+                },
+                dpiX: 96.0,
+                dpiY: 96.0,
+            };
+            rt.CreateBitmap(
+                D2D_SIZE_U {
+                    width: size as u32,
+                    height: size as u32,
+                },
+                Some(bits.cast_const()),
+                (size as u32) * 4,
+                &props,
+            )
+            .ok()
+        } else {
+            None
+        };
+
+        SelectObject(mem_dc, old_obj);
+        let _ = DeleteObject(dib);
+        let _ = DeleteDC(mem_dc);
+        let _ = DestroyIcon(hicon);
+        bitmap
+    }
+}
+
 /// Centered 70%-rounded diagonal lightning bolt geometry in 24x24 viewBox coordinates.
 unsafe fn create_rounded_bolt_geometry(
     d2d: &ID2D1Factory,
     s: f32,
+    offset: D2D_POINT_2F,
 ) -> windows::core::Result<ID2D1PathGeometry> {
     type Pt = (f32, f32);
     type Corner = (Pt, Pt, Pt);
@@ -277,26 +371,26 @@ unsafe fn create_rounded_bolt_geometry(
     let (start_x, start_y) = CORNERS[0].0;
     sink.BeginFigure(
         D2D_POINT_2F {
-            x: start_x * s,
-            y: start_y * s,
+            x: offset.x + start_x * s,
+            y: offset.y + start_y * s,
         },
         D2D1_FIGURE_BEGIN_FILLED,
     );
     for (idx, &(p1, ctrl, p2)) in CORNERS.iter().enumerate() {
         if idx > 0 {
             sink.AddLine(D2D_POINT_2F {
-                x: p1.0 * s,
-                y: p1.1 * s,
+                x: offset.x + p1.0 * s,
+                y: offset.y + p1.1 * s,
             });
         }
         sink.AddQuadraticBezier(&D2D1_QUADRATIC_BEZIER_SEGMENT {
             point1: D2D_POINT_2F {
-                x: ctrl.0 * s,
-                y: ctrl.1 * s,
+                x: offset.x + ctrl.0 * s,
+                y: offset.y + ctrl.1 * s,
             },
             point2: D2D_POINT_2F {
-                x: p2.0 * s,
-                y: p2.1 * s,
+                x: offset.x + p2.0 * s,
+                y: offset.y + p2.1 * s,
             },
         });
     }

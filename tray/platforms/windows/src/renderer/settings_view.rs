@@ -1,17 +1,18 @@
 //! Settings view cards, WinUI 3 ComboBox dropdowns, ToggleSwitches, and updater card.
 
 use super::anim::{
-    CommunityLinkKind, HitRegion, HitTarget, OpenDropdown, UiState, UpdateUiStatus, CARD_RADIUS,
-    CONTROL_RADIUS, HEADER_HEIGHT, OUTER_PADDING, SETTINGS_ACTION_BUTTON_H,
-    SETTINGS_ACTION_BUTTON_W_EN, SETTINGS_ACTION_BUTTON_W_ZH, SETTINGS_CARD_GAP, SETTINGS_CARD_H,
-    SETTINGS_ICON_BUTTON_GAP, SETTINGS_ICON_BUTTON_SIZE, SETTINGS_SUBROW_H,
+    CommunityLinkKind, HitRegion, HitTarget, OpenDropdown, SettingsSection, UiState,
+    UpdateUiStatus, CARD_RADIUS, CONTROL_RADIUS, HEADER_HEIGHT, OUTER_PADDING,
+    SETTINGS_ACTION_BUTTON_H, SETTINGS_ACTION_BUTTON_W_EN, SETTINGS_ACTION_BUTTON_W_ZH,
+    SETTINGS_CARD_GAP, SETTINGS_CARD_H, SETTINGS_ICON_BUTTON_GAP, SETTINGS_ICON_BUTTON_SIZE,
+    SETTINGS_SUBROW_H,
 };
 use super::widgets::{
     draw_community_icon, draw_community_icon_button, draw_elevated_card, draw_standard_button,
     draw_subtle_icon_button, draw_text, draw_win11_toggle_switch, rect_xywh, rounded_rect,
     PaintBrush, TextFormats, GLYPH_BACK, GLYPH_CHEVRON_DOWN, GLYPH_CHEVRON_UP, GLYPH_CLOCK,
     GLYPH_COLOR_THEME, GLYPH_INFO, GLYPH_LANGUAGE, GLYPH_PEOPLE, GLYPH_PIN, GLYPH_POWER,
-    GLYPH_RINGER, GLYPH_RINGER_SILENT,
+    GLYPH_RINGER, GLYPH_RINGER_SILENT, GLYPH_SETTINGS,
 };
 use crate::i18n::Lang;
 use crate::theme::{with_alpha, Palette, SystemTheme};
@@ -21,6 +22,59 @@ use windows::Win32::Graphics::Direct2D::{
     ID2D1Factory, ID2D1HwndRenderTarget, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
 };
 use wireless_battery_tray_core::{LanguageMode, ThemeMode, TraySnapshot};
+
+fn expander_card_height(subrow_count: usize, progress: f32) -> f32 {
+    SETTINGS_CARD_H + ((subrow_count as f32) * SETTINGS_SUBROW_H * progress).round()
+}
+
+fn settings_animated_content_height(snapshot: &TraySnapshot, ui: &UiState, now: Instant) -> f32 {
+    let monitoring_rows = if snapshot.config.low_battery_notify {
+        3
+    } else {
+        2
+    };
+    OUTER_PADDING * 2.0
+        + expander_card_height(
+            4,
+            ui.settings_sections.progress(SettingsSection::General, now),
+        )
+        + expander_card_height(
+            monitoring_rows,
+            ui.settings_sections
+                .progress(SettingsSection::Monitoring, now),
+        )
+        + expander_card_height(
+            4,
+            ui.settings_sections.progress(SettingsSection::About, now),
+        )
+        + SETTINGS_CARD_GAP * 2.0
+}
+
+/// Target logical height (DIPs) of the scrollable settings content area.
+pub(super) fn settings_content_height(snapshot: &TraySnapshot, ui: &UiState) -> f32 {
+    let general_p = if ui.settings_sections.general {
+        1.0
+    } else {
+        0.0
+    };
+    let monitoring_p = if ui.settings_sections.monitoring {
+        1.0
+    } else {
+        0.0
+    };
+    let about_p = if ui.settings_sections.about { 1.0 } else { 0.0 };
+    let monitoring_rows = if snapshot.config.low_battery_notify {
+        3
+    } else {
+        2
+    };
+
+    OUTER_PADDING * 2.0
+        + expander_card_height(4, general_p)
+        + expander_card_height(monitoring_rows, monitoring_p)
+        + expander_card_height(4, about_p)
+        + SETTINGS_CARD_GAP * 2.0
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(super) unsafe fn draw_settings_view(
@@ -44,7 +98,7 @@ pub(super) unsafe fn draw_settings_view(
     let back_rect = rect_xywh(12.0, 10.0, 32.0, 32.0);
     draw_subtle_icon_button(
         rt,
-        formats,
+        &formats.icon_header,
         brush,
         hit_regions,
         back_rect,
@@ -78,15 +132,9 @@ pub(super) unsafe fn draw_settings_view(
         None,
     );
 
-    // --- Flat Independent WinUI 3 SettingsCards (4px gap) ---
-    let subrow_extra = if snapshot.config.low_battery_notify {
-        SETTINGS_SUBROW_H
-    } else {
-        0.0
-    };
+    // --- Collapsible Categorized WinUI 3 SettingsCards ---
     *viewport_height = (height - HEADER_HEIGHT).max(1.0);
-    *content_height =
-        OUTER_PADDING * 2.0 + SETTINGS_CARD_H * 10.0 + SETTINGS_CARD_GAP * 9.0 + subrow_extra;
+    *content_height = settings_animated_content_height(snapshot, ui, now);
     let max_scroll = (*content_height - *viewport_height).max(0.0);
     ui.scroll_offset = ui.scroll_offset.clamp(0.0, max_scroll);
 
@@ -104,408 +152,597 @@ pub(super) unsafe fn draw_settings_view(
     let inner_w = width - pad_x * 2.0;
     let mut y = HEADER_HEIGHT + OUTER_PADDING - ui.scroll_offset;
     let combo_w = 104.0;
-    let combo_h = 32.0;
+    let combo_h = 30.0;
 
-    // Card 1: Theme (ComboBox)
-    let theme_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    let theme_combo_rect = rect_xywh(
-        theme_card.right - 14.0 - combo_w,
-        theme_card.top + (SETTINGS_CARD_H - combo_h) * 0.5,
-        combo_w,
-        combo_h,
-    );
-    draw_settings_card_base(
-        rt,
-        formats,
-        brush,
-        theme_card,
-        GLYPH_COLOR_THEME,
-        lang.setting_theme_title(),
-        lang.setting_theme_desc(snapshot.config.theme_mode, system_theme.app_dark),
-        combo_w + 22.0,
-        palette,
-        false,
-        false,
-    );
-    draw_combobox_button(
+    let mut theme_combo_rect: Option<D2D_RECT_F> = None;
+    let mut lang_combo_rect: Option<D2D_RECT_F> = None;
+    let mut poll_combo_rect: Option<D2D_RECT_F> = None;
+
+    // --- Expander Card 1: General ---
+    let general_expanded = ui.settings_sections.general;
+    let general_progress = ui.settings_sections.progress(SettingsSection::General, now);
+    let general_card = rect_xywh(pad_x, y, inner_w, expander_card_height(4, general_progress));
+    draw_expander_card_shell(
         rt,
         formats,
         brush,
         hit_regions,
-        theme_combo_rect,
-        lang.theme_mode_label(snapshot.config.theme_mode),
-        OpenDropdown::ThemeMode,
+        general_card,
+        GLYPH_SETTINGS,
+        lang.settings_section_general(),
+        lang.settings_section_general_desc(),
+        SettingsSection::General,
+        general_expanded,
         palette,
         ui,
     );
-    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+    if general_progress > 0.01 {
+        let mut sub_y = general_card.top + SETTINGS_CARD_H;
+        let clip_h = (general_card.bottom - general_card.top - SETTINGS_CARD_H - 1.0).max(0.0);
+        let mut sub_hits = Vec::new();
+        rt.PushAxisAlignedClip(
+            &rect_xywh(
+                general_card.left + 1.0,
+                general_card.top + SETTINGS_CARD_H,
+                (inner_w - 2.0).max(1.0),
+                clip_h,
+            ),
+            D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+        );
 
-    // Card 2: Language (ComboBox)
-    let lang_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    let lang_combo_rect = rect_xywh(
-        lang_card.right - 14.0 - combo_w,
-        lang_card.top + (SETTINGS_CARD_H - combo_h) * 0.5,
-        combo_w,
-        combo_h,
-    );
-    draw_settings_card_base(
-        rt,
-        formats,
-        brush,
-        lang_card,
-        GLYPH_LANGUAGE,
-        lang.setting_language_title(),
-        lang.setting_language_desc(snapshot.config.language),
-        combo_w + 22.0,
-        palette,
-        false,
-        false,
-    );
-    draw_combobox_button(
-        rt,
-        formats,
-        brush,
-        hit_regions,
-        lang_combo_rect,
-        lang.language_mode_label(snapshot.config.language),
-        OpenDropdown::Language,
-        palette,
-        ui,
-    );
-    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+        // Subrow 1: Theme
+        let sub_rect = draw_expander_subrow_chrome(
+            rt,
+            formats,
+            brush,
+            general_card,
+            sub_y,
+            Some(GLYPH_COLOR_THEME),
+            lang.setting_theme_title(),
+            lang.setting_theme_desc(snapshot.config.theme_mode, system_theme.app_dark),
+            combo_w + 22.0,
+            None,
+            palette,
+            ui,
+        );
+        let rect = rect_xywh(
+            general_card.right - 14.0 - combo_w,
+            sub_rect.top + (SETTINGS_SUBROW_H - combo_h) * 0.5,
+            combo_w,
+            combo_h,
+        );
+        theme_combo_rect = Some(rect);
+        draw_combobox_button(
+            rt,
+            formats,
+            brush,
+            &mut sub_hits,
+            rect,
+            lang.theme_mode_label(snapshot.config.theme_mode),
+            OpenDropdown::ThemeMode,
+            palette,
+            ui,
+        );
+        sub_y += SETTINGS_SUBROW_H;
 
-    // Card 3: Poll Interval (ComboBox)
-    let poll_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    let poll_combo_rect = rect_xywh(
-        poll_card.right - 14.0 - combo_w,
-        poll_card.top + (SETTINGS_CARD_H - combo_h) * 0.5,
-        combo_w,
-        combo_h,
-    );
-    draw_settings_card_base(
-        rt,
-        formats,
-        brush,
-        poll_card,
-        GLYPH_CLOCK,
-        lang.setting_poll_title(),
-        lang.setting_poll_desc(),
-        combo_w + 22.0,
-        palette,
-        false,
-        false,
-    );
-    let poll_label = lang.poll_interval_label(snapshot.config.poll_interval_secs);
-    draw_combobox_button(
-        rt,
-        formats,
-        brush,
-        hit_regions,
-        poll_combo_rect,
-        &poll_label,
-        OpenDropdown::PollInterval,
-        palette,
-        ui,
-    );
-    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+        // Subrow 2: Language
+        let sub_rect = draw_expander_subrow_chrome(
+            rt,
+            formats,
+            brush,
+            general_card,
+            sub_y,
+            Some(GLYPH_LANGUAGE),
+            lang.setting_language_title(),
+            lang.setting_language_desc(snapshot.config.language),
+            combo_w + 22.0,
+            None,
+            palette,
+            ui,
+        );
+        let rect = rect_xywh(
+            general_card.right - 14.0 - combo_w,
+            sub_rect.top + (SETTINGS_SUBROW_H - combo_h) * 0.5,
+            combo_w,
+            combo_h,
+        );
+        lang_combo_rect = Some(rect);
+        draw_combobox_button(
+            rt,
+            formats,
+            brush,
+            &mut sub_hits,
+            rect,
+            lang.language_mode_label(snapshot.config.language),
+            OpenDropdown::Language,
+            palette,
+            ui,
+        );
+        sub_y += SETTINGS_SUBROW_H;
 
-    // Card 4: Low Battery Alert + nested Silent Notifications sub-option
-    let notify_card_h = draw_low_battery_card(
-        rt,
-        formats,
-        brush,
-        hit_regions,
+        // Subrow 3: Show Pin Button
+        let pin_target = HitTarget::ToggleShowPinButton;
+        let sub_rect = draw_expander_subrow_chrome(
+            rt,
+            formats,
+            brush,
+            general_card,
+            sub_y,
+            Some(GLYPH_PIN),
+            lang.setting_show_pin_button_title(),
+            lang.setting_show_pin_button_desc(),
+            64.0,
+            Some(&pin_target),
+            palette,
+            ui,
+        );
+        let pin_hovered = ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(&pin_target);
+        let pin_pressed = ui.open_dropdown.is_none() && ui.pressed.as_ref() == Some(&pin_target);
+        draw_win11_toggle_switch(
+            rt,
+            brush,
+            general_card.right - 14.0 - 40.0,
+            sub_rect.top + (SETTINGS_SUBROW_H - 20.0) * 0.5,
+            ui.toggle_show_pin_button_anim.value(now),
+            pin_hovered,
+            pin_pressed,
+            palette,
+        );
+        sub_hits.push(HitRegion {
+            rect: sub_rect,
+            target: pin_target,
+        });
+        sub_y += SETTINGS_SUBROW_H;
+
+        // Subrow 4: Launch at Startup
+        let auto_target = HitTarget::ToggleAutostart;
+        let sub_rect = draw_expander_subrow_chrome(
+            rt,
+            formats,
+            brush,
+            general_card,
+            sub_y,
+            Some(GLYPH_POWER),
+            lang.setting_autostart_title(),
+            lang.setting_autostart_desc(),
+            64.0,
+            Some(&auto_target),
+            palette,
+            ui,
+        );
+        let auto_hovered = ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(&auto_target);
+        let auto_pressed = ui.open_dropdown.is_none() && ui.pressed.as_ref() == Some(&auto_target);
+        draw_win11_toggle_switch(
+            rt,
+            brush,
+            general_card.right - 14.0 - 40.0,
+            sub_rect.top + (SETTINGS_SUBROW_H - 20.0) * 0.5,
+            ui.toggle_autostart_anim.value(now),
+            auto_hovered,
+            auto_pressed,
+            palette,
+        );
+        sub_hits.push(HitRegion {
+            rect: sub_rect,
+            target: auto_target,
+        });
+
+        rt.PopAxisAlignedClip();
+        if general_progress > 0.95 {
+            hit_regions.extend(sub_hits);
+        }
+    }
+    y += (general_card.bottom - general_card.top) + SETTINGS_CARD_GAP;
+
+    // --- Expander Card 2: Monitoring & Alerts ---
+    let monitoring_expanded = ui.settings_sections.monitoring;
+    let monitoring_progress = ui
+        .settings_sections
+        .progress(SettingsSection::Monitoring, now);
+    let monitoring_rows = if snapshot.config.low_battery_notify {
+        3
+    } else {
+        2
+    };
+    let monitoring_card = rect_xywh(
         pad_x,
         y,
         inner_w,
+        expander_card_height(monitoring_rows, monitoring_progress),
+    );
+    draw_expander_card_shell(
+        rt,
+        formats,
+        brush,
+        hit_regions,
+        monitoring_card,
+        GLYPH_RINGER,
+        lang.settings_section_monitoring(),
+        lang.settings_section_monitoring_desc(),
+        SettingsSection::Monitoring,
+        monitoring_expanded,
         palette,
-        lang,
-        snapshot,
         ui,
-        now,
     );
-    y += notify_card_h + SETTINGS_CARD_GAP;
+    if monitoring_progress > 0.01 {
+        let mut sub_y = monitoring_card.top + SETTINGS_CARD_H;
+        let clip_h =
+            (monitoring_card.bottom - monitoring_card.top - SETTINGS_CARD_H - 1.0).max(0.0);
+        let mut sub_hits = Vec::new();
+        rt.PushAxisAlignedClip(
+            &rect_xywh(
+                monitoring_card.left + 1.0,
+                monitoring_card.top + SETTINGS_CARD_H,
+                (inner_w - 2.0).max(1.0),
+                clip_h,
+            ),
+            D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+        );
 
-    // Card 5: Launch at Startup (ToggleSwitch)
-    let auto_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    let auto_target = HitTarget::ToggleAutostart;
-    let auto_hovered = ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(&auto_target);
-    let auto_pressed = ui.open_dropdown.is_none() && ui.pressed.as_ref() == Some(&auto_target);
-    draw_settings_card_base(
-        rt,
-        formats,
-        brush,
-        auto_card,
-        GLYPH_POWER,
-        lang.setting_autostart_title(),
-        lang.setting_autostart_desc(),
-        64.0,
-        palette,
-        auto_hovered,
-        auto_pressed,
-    );
-    draw_win11_toggle_switch(
-        rt,
-        brush,
-        auto_card.right - 14.0 - 40.0,
-        auto_card.top + (SETTINGS_CARD_H - 20.0) * 0.5,
-        ui.toggle_autostart_anim.value(now),
-        auto_hovered,
-        auto_pressed,
-        palette,
-    );
-    hit_regions.push(HitRegion {
-        rect: auto_card,
-        target: auto_target,
-    });
-    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+        // Subrow 1: Poll Interval
+        let sub_rect = draw_expander_subrow_chrome(
+            rt,
+            formats,
+            brush,
+            monitoring_card,
+            sub_y,
+            Some(GLYPH_CLOCK),
+            lang.setting_poll_title(),
+            lang.setting_poll_desc(),
+            combo_w + 22.0,
+            None,
+            palette,
+            ui,
+        );
+        let rect = rect_xywh(
+            monitoring_card.right - 14.0 - combo_w,
+            sub_rect.top + (SETTINGS_SUBROW_H - combo_h) * 0.5,
+            combo_w,
+            combo_h,
+        );
+        poll_combo_rect = Some(rect);
+        let poll_label = lang.poll_interval_label(snapshot.config.poll_interval_secs);
+        draw_combobox_button(
+            rt,
+            formats,
+            brush,
+            &mut sub_hits,
+            rect,
+            &poll_label,
+            OpenDropdown::PollInterval,
+            palette,
+            ui,
+        );
+        sub_y += SETTINGS_SUBROW_H;
 
-    // Card 6: Show Pin Button (ToggleSwitch)
-    let pin_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    let pin_target = HitTarget::ToggleShowPinButton;
-    let pin_hovered = ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(&pin_target);
-    let pin_pressed = ui.open_dropdown.is_none() && ui.pressed.as_ref() == Some(&pin_target);
-    draw_settings_card_base(
-        rt,
-        formats,
-        brush,
-        pin_card,
-        GLYPH_PIN,
-        lang.setting_show_pin_button_title(),
-        lang.setting_show_pin_button_desc(),
-        64.0,
-        palette,
-        pin_hovered,
-        pin_pressed,
-    );
-    draw_win11_toggle_switch(
-        rt,
-        brush,
-        pin_card.right - 14.0 - 40.0,
-        pin_card.top + (SETTINGS_CARD_H - 20.0) * 0.5,
-        ui.toggle_show_pin_button_anim.value(now),
-        pin_hovered,
-        pin_pressed,
-        palette,
-    );
-    hit_regions.push(HitRegion {
-        rect: pin_card,
-        target: pin_target,
-    });
-    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+        // Subrow 2: Low Battery Alert
+        let notify_target = HitTarget::ToggleLowBatteryNotify;
+        let sub_rect = draw_expander_subrow_chrome(
+            rt,
+            formats,
+            brush,
+            monitoring_card,
+            sub_y,
+            Some(GLYPH_RINGER),
+            lang.setting_low_battery_title(),
+            lang.setting_low_battery_desc(
+                snapshot.config.low_battery_notify,
+                snapshot.config.low_battery_silent,
+            ),
+            64.0,
+            Some(&notify_target),
+            palette,
+            ui,
+        );
+        let notify_hovered =
+            ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(&notify_target);
+        let notify_pressed =
+            ui.open_dropdown.is_none() && ui.pressed.as_ref() == Some(&notify_target);
+        draw_win11_toggle_switch(
+            rt,
+            brush,
+            monitoring_card.right - 14.0 - 40.0,
+            sub_rect.top + (SETTINGS_SUBROW_H - 20.0) * 0.5,
+            ui.toggle_notify_anim.value(now),
+            notify_hovered,
+            notify_pressed,
+            palette,
+        );
+        sub_hits.push(HitRegion {
+            rect: sub_rect,
+            target: notify_target,
+        });
+        sub_y += SETTINGS_SUBROW_H;
 
-    let action_btn_w = if lang.is_zh() {
-        SETTINGS_ACTION_BUTTON_W_ZH
-    } else {
-        SETTINGS_ACTION_BUTTON_W_EN
-    };
-    let action_btn_h = SETTINGS_ACTION_BUTTON_H;
-
-    // Card 7: Version & Check for Updates
-    let ver_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    let ver_desc = match &ui.update_status {
-        UpdateUiStatus::Idle => lang.setting_version_desc(&snapshot.app_version),
-        UpdateUiStatus::Checking => lang.setting_version_checking().to_owned(),
-        UpdateUiStatus::UpToDate => lang.setting_version_up_to_date(&snapshot.app_version),
-        UpdateUiStatus::Available { latest_version, .. } => {
-            lang.setting_version_available(latest_version)
+        // Subrow 3 (optional): Silent Notifications
+        if snapshot.config.low_battery_notify {
+            let silent_target = HitTarget::ToggleLowBatterySilent;
+            let sub_rect = draw_expander_subrow_chrome(
+                rt,
+                formats,
+                brush,
+                monitoring_card,
+                sub_y,
+                Some(GLYPH_RINGER_SILENT),
+                lang.setting_silent_title(),
+                lang.setting_silent_desc(),
+                64.0,
+                Some(&silent_target),
+                palette,
+                ui,
+            );
+            let silent_hovered =
+                ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(&silent_target);
+            let silent_pressed =
+                ui.open_dropdown.is_none() && ui.pressed.as_ref() == Some(&silent_target);
+            draw_win11_toggle_switch(
+                rt,
+                brush,
+                monitoring_card.right - 14.0 - 40.0,
+                sub_rect.top + (SETTINGS_SUBROW_H - 20.0) * 0.5,
+                ui.toggle_silent_anim.value(now),
+                silent_hovered,
+                silent_pressed,
+                palette,
+            );
+            sub_hits.push(HitRegion {
+                rect: sub_rect,
+                target: silent_target,
+            });
         }
-        UpdateUiStatus::Failed => lang.setting_version_failed().to_owned(),
-    };
-    let btn_label = match &ui.update_status {
-        UpdateUiStatus::Checking => lang.btn_checking_updates(),
-        UpdateUiStatus::Available { .. } => lang.btn_download_update(),
-        UpdateUiStatus::Idle | UpdateUiStatus::UpToDate | UpdateUiStatus::Failed => {
-            lang.btn_check_updates()
+
+        rt.PopAxisAlignedClip();
+        if monitoring_progress > 0.95 {
+            hit_regions.extend(sub_hits);
         }
-    };
-    draw_settings_card_base(
+    }
+    y += (monitoring_card.bottom - monitoring_card.top) + SETTINGS_CARD_GAP;
+
+    // --- Expander Card 3: About & Support ---
+    let about_expanded = ui.settings_sections.about;
+    let about_progress = ui.settings_sections.progress(SettingsSection::About, now);
+    let about_card = rect_xywh(pad_x, y, inner_w, expander_card_height(4, about_progress));
+    let about_desc = lang.settings_section_about_desc(&snapshot.app_version);
+    draw_expander_card_shell(
         rt,
         formats,
         brush,
-        ver_card,
+        hit_regions,
+        about_card,
         GLYPH_INFO,
-        lang.setting_version_title(),
-        &ver_desc,
-        action_btn_w + 22.0,
-        palette,
-        false,
-        false,
-    );
-    let btn_rect = rect_xywh(
-        ver_card.right - 14.0 - action_btn_w,
-        ver_card.top + (SETTINGS_CARD_H - action_btn_h) * 0.5,
-        action_btn_w,
-        action_btn_h,
-    );
-    let btn_alpha = if matches!(ui.update_status, UpdateUiStatus::Checking) {
-        0.55
-    } else {
-        1.0
-    };
-    draw_standard_button(
-        rt,
-        formats,
-        brush,
-        hit_regions,
-        btn_rect,
-        None,
-        btn_label,
-        HitTarget::CheckUpdates,
+        lang.settings_section_about(),
+        &about_desc,
+        SettingsSection::About,
+        about_expanded,
         palette,
         ui,
-        btn_alpha,
     );
-    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+    if about_progress > 0.01 {
+        let mut sub_y = about_card.top + SETTINGS_CARD_H;
+        let clip_h = (about_card.bottom - about_card.top - SETTINGS_CARD_H - 1.0).max(0.0);
+        let mut sub_hits = Vec::new();
+        rt.PushAxisAlignedClip(
+            &rect_xywh(
+                about_card.left + 1.0,
+                about_card.top + SETTINGS_CARD_H,
+                (inner_w - 2.0).max(1.0),
+                clip_h,
+            ),
+            D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+        );
+        let action_btn_w = if lang.is_zh() {
+            SETTINGS_ACTION_BUTTON_W_ZH
+        } else {
+            SETTINGS_ACTION_BUTTON_W_EN
+        };
+        let action_btn_h = SETTINGS_ACTION_BUTTON_H;
 
-    // Card 8: Source Code
-    let source_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    draw_settings_card_base(
-        rt,
-        formats,
-        brush,
-        source_card,
-        "",
-        lang.setting_source_title(),
-        lang.setting_source_desc(),
-        action_btn_w + 22.0,
-        palette,
-        false,
-        false,
-    );
-    draw_community_icon(
-        d2d,
-        rt,
-        formats,
-        brush,
-        CommunityLinkKind::SourceRepo,
-        rect_xywh(source_card.left + 17.0, source_card.top + 20.0, 16.0, 16.0),
-        &palette.icon_stroke,
-    );
-    let source_btn_rect = rect_xywh(
-        source_card.right - 14.0 - action_btn_w,
-        source_card.top + (SETTINGS_CARD_H - action_btn_h) * 0.5,
-        action_btn_w,
-        action_btn_h,
-    );
-    draw_standard_button(
-        rt,
-        formats,
-        brush,
-        hit_regions,
-        source_btn_rect,
-        None,
-        lang.open_repository_label(),
-        HitTarget::OpenCommunityLink(CommunityLinkKind::SourceRepo),
-        palette,
-        ui,
-        1.0,
-    );
-    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+        // Subrow 1: Version & Updates
+        let ver_desc = match &ui.update_status {
+            UpdateUiStatus::Idle => lang.setting_version_desc(&snapshot.app_version),
+            UpdateUiStatus::Checking => lang.setting_version_checking().to_owned(),
+            UpdateUiStatus::UpToDate => lang.setting_version_up_to_date(&snapshot.app_version),
+            UpdateUiStatus::Available { latest_version, .. } => {
+                lang.setting_version_available(latest_version)
+            }
+            UpdateUiStatus::Failed => lang.setting_version_failed().to_owned(),
+        };
+        let btn_label = match &ui.update_status {
+            UpdateUiStatus::Checking => lang.btn_checking_updates(),
+            UpdateUiStatus::Available { .. } => lang.btn_download_update(),
+            UpdateUiStatus::Idle | UpdateUiStatus::UpToDate | UpdateUiStatus::Failed => {
+                lang.btn_check_updates()
+            }
+        };
+        let sub_rect = draw_expander_subrow_chrome(
+            rt,
+            formats,
+            brush,
+            about_card,
+            sub_y,
+            Some(GLYPH_INFO),
+            lang.setting_version_title(),
+            &ver_desc,
+            action_btn_w + 22.0,
+            None,
+            palette,
+            ui,
+        );
+        let btn_rect = rect_xywh(
+            about_card.right - 14.0 - action_btn_w,
+            sub_rect.top + (SETTINGS_SUBROW_H - action_btn_h) * 0.5,
+            action_btn_w,
+            action_btn_h,
+        );
+        let btn_alpha = if matches!(ui.update_status, UpdateUiStatus::Checking) {
+            0.55
+        } else {
+            1.0
+        };
+        draw_standard_button(
+            rt,
+            formats,
+            brush,
+            &mut sub_hits,
+            btn_rect,
+            None,
+            btn_label,
+            HitTarget::CheckUpdates,
+            palette,
+            ui,
+            btn_alpha,
+        );
+        sub_y += SETTINGS_SUBROW_H;
 
-    // Card 9: Feedback
-    let feedback_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    draw_settings_card_base(
-        rt,
-        formats,
-        brush,
-        feedback_card,
-        "",
-        lang.setting_feedback_title(),
-        lang.setting_feedback_desc(),
-        action_btn_w + 22.0,
-        palette,
-        false,
-        false,
-    );
-    draw_community_icon(
-        d2d,
-        rt,
-        formats,
-        brush,
-        CommunityLinkKind::BugReport,
-        rect_xywh(
-            feedback_card.left + 17.0,
-            feedback_card.top + 20.0,
-            16.0,
-            16.0,
-        ),
-        &palette.icon_stroke,
-    );
-    let feedback_btn_rect = rect_xywh(
-        feedback_card.right - 14.0 - action_btn_w,
-        feedback_card.top + (SETTINGS_CARD_H - action_btn_h) * 0.5,
-        action_btn_w,
-        action_btn_h,
-    );
-    draw_standard_button(
-        rt,
-        formats,
-        brush,
-        hit_regions,
-        feedback_btn_rect,
-        None,
-        lang.submit_feedback_label(),
-        HitTarget::OpenCommunityLink(CommunityLinkKind::BugReport),
-        palette,
-        ui,
-        1.0,
-    );
-    y += SETTINGS_CARD_H + SETTINGS_CARD_GAP;
+        // Subrow 2: Source Code
+        let sub_rect = draw_expander_subrow_chrome(
+            rt,
+            formats,
+            brush,
+            about_card,
+            sub_y,
+            None,
+            lang.setting_source_title(),
+            lang.setting_source_desc(),
+            action_btn_w + 22.0,
+            None,
+            palette,
+            ui,
+        );
+        draw_community_icon(
+            d2d,
+            rt,
+            formats,
+            brush,
+            CommunityLinkKind::SourceRepo,
+            rect_xywh(about_card.left + 26.0, sub_rect.top + 16.0, 15.0, 15.0),
+            &palette.text_secondary,
+        );
+        let source_btn_rect = rect_xywh(
+            about_card.right - 14.0 - action_btn_w,
+            sub_rect.top + (SETTINGS_SUBROW_H - action_btn_h) * 0.5,
+            action_btn_w,
+            action_btn_h,
+        );
+        draw_standard_button(
+            rt,
+            formats,
+            brush,
+            &mut sub_hits,
+            source_btn_rect,
+            None,
+            lang.open_repository_label(),
+            HitTarget::OpenCommunityLink(CommunityLinkKind::SourceRepo),
+            palette,
+            ui,
+            1.0,
+        );
+        sub_y += SETTINGS_SUBROW_H;
 
-    // Card 10: Community (QQ & Discord)
-    let community_card = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    let icon_btn_size = SETTINGS_ICON_BUTTON_SIZE;
-    let icon_gap = SETTINGS_ICON_BUTTON_GAP;
-    let community_buttons_w = icon_btn_size * 2.0 + icon_gap;
-    draw_settings_card_base(
-        rt,
-        formats,
-        brush,
-        community_card,
-        GLYPH_PEOPLE,
-        lang.setting_community_title(),
-        lang.setting_community_desc(),
-        community_buttons_w + 22.0,
-        palette,
-        false,
-        false,
-    );
-    let community_btn_y = community_card.top + (SETTINGS_CARD_H - icon_btn_size) * 0.5;
-    let discord_rect = rect_xywh(
-        community_card.right - 14.0 - icon_btn_size,
-        community_btn_y,
-        icon_btn_size,
-        icon_btn_size,
-    );
-    let qq_rect = rect_xywh(
-        discord_rect.left - icon_gap - icon_btn_size,
-        community_btn_y,
-        icon_btn_size,
-        icon_btn_size,
-    );
-    draw_community_icon_button(
-        d2d,
-        rt,
-        formats,
-        brush,
-        hit_regions,
-        qq_rect,
-        CommunityLinkKind::Qq,
-        palette,
-        ui,
-    );
-    draw_community_icon_button(
-        d2d,
-        rt,
-        formats,
-        brush,
-        hit_regions,
-        discord_rect,
-        CommunityLinkKind::Discord,
-        palette,
-        ui,
-    );
+        // Subrow 3: Feedback
+        let sub_rect = draw_expander_subrow_chrome(
+            rt,
+            formats,
+            brush,
+            about_card,
+            sub_y,
+            None,
+            lang.setting_feedback_title(),
+            lang.setting_feedback_desc(),
+            action_btn_w + 22.0,
+            None,
+            palette,
+            ui,
+        );
+        draw_community_icon(
+            d2d,
+            rt,
+            formats,
+            brush,
+            CommunityLinkKind::BugReport,
+            rect_xywh(about_card.left + 26.0, sub_rect.top + 16.0, 15.0, 15.0),
+            &palette.text_secondary,
+        );
+        let feedback_btn_rect = rect_xywh(
+            about_card.right - 14.0 - action_btn_w,
+            sub_rect.top + (SETTINGS_SUBROW_H - action_btn_h) * 0.5,
+            action_btn_w,
+            action_btn_h,
+        );
+        draw_standard_button(
+            rt,
+            formats,
+            brush,
+            &mut sub_hits,
+            feedback_btn_rect,
+            None,
+            lang.submit_feedback_label(),
+            HitTarget::OpenCommunityLink(CommunityLinkKind::BugReport),
+            palette,
+            ui,
+            1.0,
+        );
+        sub_y += SETTINGS_SUBROW_H;
+
+        // Subrow 4: Community (QQ & Discord)
+        let icon_btn_size = SETTINGS_ICON_BUTTON_SIZE;
+        let icon_gap = SETTINGS_ICON_BUTTON_GAP;
+        let community_buttons_w = icon_btn_size * 2.0 + icon_gap;
+        let sub_rect = draw_expander_subrow_chrome(
+            rt,
+            formats,
+            brush,
+            about_card,
+            sub_y,
+            Some(GLYPH_PEOPLE),
+            lang.setting_community_title(),
+            lang.setting_community_desc(),
+            community_buttons_w + 22.0,
+            None,
+            palette,
+            ui,
+        );
+        let community_btn_y = sub_rect.top + (SETTINGS_SUBROW_H - icon_btn_size) * 0.5;
+        let discord_rect = rect_xywh(
+            about_card.right - 14.0 - icon_btn_size,
+            community_btn_y,
+            icon_btn_size,
+            icon_btn_size,
+        );
+        let qq_rect = rect_xywh(
+            discord_rect.left - icon_gap - icon_btn_size,
+            community_btn_y,
+            icon_btn_size,
+            icon_btn_size,
+        );
+        draw_community_icon_button(
+            d2d,
+            rt,
+            formats,
+            brush,
+            &mut sub_hits,
+            qq_rect,
+            CommunityLinkKind::Qq,
+            palette,
+            ui,
+        );
+        draw_community_icon_button(
+            d2d,
+            rt,
+            formats,
+            brush,
+            &mut sub_hits,
+            discord_rect,
+            CommunityLinkKind::Discord,
+            palette,
+            ui,
+        );
+
+        rt.PopAxisAlignedClip();
+        if about_progress > 0.95 {
+            hit_regions.extend(sub_hits);
+        }
+    }
 
     if max_scroll > 0.5 {
         let track_top = HEADER_HEIGHT + 10.0;
@@ -530,142 +767,146 @@ pub(super) unsafe fn draw_settings_view(
         let anim = ui.dropdown_anim.value(now);
         match open {
             OpenDropdown::ThemeMode => {
-                let options = [
-                    (
-                        HitTarget::SetThemeMode(ThemeMode::System),
-                        lang.theme_mode_label(ThemeMode::System),
-                        snapshot.config.theme_mode == ThemeMode::System,
-                    ),
-                    (
-                        HitTarget::SetThemeMode(ThemeMode::Light),
-                        lang.theme_mode_label(ThemeMode::Light),
-                        snapshot.config.theme_mode == ThemeMode::Light,
-                    ),
-                    (
-                        HitTarget::SetThemeMode(ThemeMode::Dark),
-                        lang.theme_mode_label(ThemeMode::Dark),
-                        snapshot.config.theme_mode == ThemeMode::Dark,
-                    ),
-                ];
-                draw_dropdown_flyout(
-                    rt,
-                    formats,
-                    brush,
-                    hit_regions,
-                    theme_combo_rect,
-                    height,
-                    &options,
-                    anim,
-                    palette,
-                    ui,
-                );
+                if let Some(combo_rect) = theme_combo_rect {
+                    let options = [
+                        (
+                            HitTarget::SetThemeMode(ThemeMode::System),
+                            lang.theme_mode_label(ThemeMode::System),
+                            snapshot.config.theme_mode == ThemeMode::System,
+                        ),
+                        (
+                            HitTarget::SetThemeMode(ThemeMode::Light),
+                            lang.theme_mode_label(ThemeMode::Light),
+                            snapshot.config.theme_mode == ThemeMode::Light,
+                        ),
+                        (
+                            HitTarget::SetThemeMode(ThemeMode::Dark),
+                            lang.theme_mode_label(ThemeMode::Dark),
+                            snapshot.config.theme_mode == ThemeMode::Dark,
+                        ),
+                    ];
+                    draw_dropdown_flyout(
+                        rt,
+                        formats,
+                        brush,
+                        hit_regions,
+                        combo_rect,
+                        height,
+                        &options,
+                        anim,
+                        palette,
+                        ui,
+                    );
+                }
             }
             OpenDropdown::Language => {
-                let options = [
-                    (
-                        HitTarget::SetLanguageMode(LanguageMode::System),
-                        lang.language_mode_label(LanguageMode::System),
-                        snapshot.config.language == LanguageMode::System,
-                    ),
-                    (
-                        HitTarget::SetLanguageMode(LanguageMode::ZhCn),
-                        lang.language_mode_label(LanguageMode::ZhCn),
-                        snapshot.config.language == LanguageMode::ZhCn,
-                    ),
-                    (
-                        HitTarget::SetLanguageMode(LanguageMode::En),
-                        lang.language_mode_label(LanguageMode::En),
-                        snapshot.config.language == LanguageMode::En,
-                    ),
-                ];
-                draw_dropdown_flyout(
-                    rt,
-                    formats,
-                    brush,
-                    hit_regions,
-                    lang_combo_rect,
-                    height,
-                    &options,
-                    anim,
-                    palette,
-                    ui,
-                );
+                if let Some(combo_rect) = lang_combo_rect {
+                    let options = [
+                        (
+                            HitTarget::SetLanguageMode(LanguageMode::System),
+                            lang.language_mode_label(LanguageMode::System),
+                            snapshot.config.language == LanguageMode::System,
+                        ),
+                        (
+                            HitTarget::SetLanguageMode(LanguageMode::ZhCn),
+                            lang.language_mode_label(LanguageMode::ZhCn),
+                            snapshot.config.language == LanguageMode::ZhCn,
+                        ),
+                        (
+                            HitTarget::SetLanguageMode(LanguageMode::En),
+                            lang.language_mode_label(LanguageMode::En),
+                            snapshot.config.language == LanguageMode::En,
+                        ),
+                    ];
+                    draw_dropdown_flyout(
+                        rt,
+                        formats,
+                        brush,
+                        hit_regions,
+                        combo_rect,
+                        height,
+                        &options,
+                        anim,
+                        palette,
+                        ui,
+                    );
+                }
             }
             OpenDropdown::PollInterval => {
-                let options = [
-                    (
-                        HitTarget::SetPollInterval(300),
-                        lang.poll_interval_label(300),
-                        snapshot.config.poll_interval_secs == 300,
-                    ),
-                    (
-                        HitTarget::SetPollInterval(900),
-                        lang.poll_interval_label(900),
-                        snapshot.config.poll_interval_secs == 900,
-                    ),
-                    (
-                        HitTarget::SetPollInterval(1800),
-                        lang.poll_interval_label(1800),
-                        snapshot.config.poll_interval_secs == 1800,
-                    ),
-                    (
-                        HitTarget::SetPollInterval(3600),
-                        lang.poll_interval_label(3600),
-                        snapshot.config.poll_interval_secs == 3600,
-                    ),
-                    (
-                        HitTarget::SetPollInterval(0),
-                        lang.poll_interval_label(0),
-                        snapshot.config.poll_interval_secs == 0,
-                    ),
-                ];
-                draw_dropdown_flyout(
-                    rt,
-                    formats,
-                    brush,
-                    hit_regions,
-                    poll_combo_rect,
-                    height,
-                    &options,
-                    anim,
-                    palette,
-                    ui,
-                );
+                if let Some(combo_rect) = poll_combo_rect {
+                    let options = [
+                        (
+                            HitTarget::SetPollInterval(300),
+                            lang.poll_interval_label(300),
+                            snapshot.config.poll_interval_secs == 300,
+                        ),
+                        (
+                            HitTarget::SetPollInterval(900),
+                            lang.poll_interval_label(900),
+                            snapshot.config.poll_interval_secs == 900,
+                        ),
+                        (
+                            HitTarget::SetPollInterval(1800),
+                            lang.poll_interval_label(1800),
+                            snapshot.config.poll_interval_secs == 1800,
+                        ),
+                        (
+                            HitTarget::SetPollInterval(3600),
+                            lang.poll_interval_label(3600),
+                            snapshot.config.poll_interval_secs == 3600,
+                        ),
+                        (
+                            HitTarget::SetPollInterval(0),
+                            lang.poll_interval_label(0),
+                            snapshot.config.poll_interval_secs == 0,
+                        ),
+                    ];
+                    draw_dropdown_flyout(
+                        rt,
+                        formats,
+                        brush,
+                        hit_regions,
+                        combo_rect,
+                        height,
+                        &options,
+                        anim,
+                        palette,
+                        ui,
+                    );
+                }
             }
         }
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-unsafe fn draw_low_battery_card(
+unsafe fn draw_expander_card_shell(
     rt: &ID2D1HwndRenderTarget,
     formats: &TextFormats,
     brush: &PaintBrush,
     hit_regions: &mut Vec<HitRegion>,
-    pad_x: f32,
-    y: f32,
-    inner_w: f32,
+    card_rect: D2D_RECT_F,
+    glyph: &str,
+    title: &str,
+    desc: &str,
+    section: SettingsSection,
+    expanded: bool,
     palette: &Palette,
-    lang: Lang,
-    snapshot: &TraySnapshot,
     ui: &UiState,
-    now: Instant,
-) -> f32 {
-    let show_subrow = snapshot.config.low_battery_notify;
-    let notify_card_h = if show_subrow {
-        SETTINGS_CARD_H + SETTINGS_SUBROW_H
-    } else {
-        SETTINGS_CARD_H
-    };
-    let notify_card = rect_xywh(pad_x, y, inner_w, notify_card_h);
-    let notify_header_rect = rect_xywh(pad_x, y, inner_w, SETTINGS_CARD_H);
-    let notify_target = HitTarget::ToggleLowBatteryNotify;
-    let notify_hovered = ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(&notify_target);
-    let notify_pressed = ui.open_dropdown.is_none() && ui.pressed.as_ref() == Some(&notify_target);
+) {
+    let header_rect = rect_xywh(
+        card_rect.left,
+        card_rect.top,
+        card_rect.right - card_rect.left,
+        SETTINGS_CARD_H,
+    );
+    let target = HitTarget::ToggleSettingsSection(section);
+    let hovered = ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(&target);
+    let pressed = ui.open_dropdown.is_none() && ui.pressed.as_ref() == Some(&target);
 
-    let card_bg = if !show_subrow && notify_pressed {
+    let card_bg = if !expanded && pressed {
         palette.card_bg_pressed
-    } else if !show_subrow && notify_hovered {
+    } else if !expanded && hovered {
         palette.card_bg_hover
     } else {
         palette.card_bg
@@ -673,35 +914,35 @@ unsafe fn draw_low_battery_card(
     draw_elevated_card(
         rt,
         brush,
-        notify_card,
+        card_rect,
         CARD_RADIUS,
         card_bg,
         palette.card_border,
         palette,
     );
 
-    if show_subrow && (notify_hovered || notify_pressed) {
-        let row_fill = if notify_pressed {
+    if expanded && (hovered || pressed) {
+        let row_fill = if pressed {
             &palette.subtle_pressed
         } else {
             &palette.subtle_hover
         };
         rt.PushAxisAlignedClip(
             &D2D_RECT_F {
-                left: notify_card.left + 1.0,
-                top: notify_card.top + 1.0,
-                right: notify_card.right - 1.0,
-                bottom: notify_card.top + SETTINGS_CARD_H,
+                left: card_rect.left + 1.0,
+                top: card_rect.top + 1.0,
+                right: card_rect.right - 1.0,
+                bottom: card_rect.top + SETTINGS_CARD_H,
             },
             D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
         );
         rt.FillRoundedRectangle(
             &rounded_rect(
                 D2D_RECT_F {
-                    left: notify_card.left + 1.0,
-                    top: notify_card.top + 1.0,
-                    right: notify_card.right - 1.0,
-                    bottom: notify_card.bottom - 1.0,
+                    left: card_rect.left + 1.0,
+                    top: card_rect.top + 1.0,
+                    right: card_rect.right - 1.0,
+                    bottom: card_rect.bottom - 1.0,
                 },
                 CARD_RADIUS - 1.0,
             ),
@@ -714,166 +955,132 @@ unsafe fn draw_low_battery_card(
         rt,
         formats,
         brush,
-        notify_header_rect,
-        GLYPH_RINGER,
-        lang.setting_low_battery_title(),
-        lang.setting_low_battery_desc(
-            snapshot.config.low_battery_notify,
-            snapshot.config.low_battery_silent,
-        ),
-        64.0,
+        header_rect,
+        glyph,
+        title,
+        desc,
+        42.0,
         palette,
     );
-    draw_win11_toggle_switch(
+
+    let chevron = if expanded {
+        GLYPH_CHEVRON_UP
+    } else {
+        GLYPH_CHEVRON_DOWN
+    };
+    draw_text(
         rt,
+        chevron,
+        &formats.icon_chevron,
+        rect_xywh(
+            header_rect.right - 34.0,
+            header_rect.top,
+            20.0,
+            SETTINGS_CARD_H,
+        ),
+        &palette.text_secondary,
         brush,
-        notify_header_rect.right - 14.0 - 40.0,
-        notify_header_rect.top + (SETTINGS_CARD_H - 20.0) * 0.5,
-        ui.toggle_notify_anim.value(now),
-        notify_hovered,
-        notify_pressed,
-        palette,
     );
+
     hit_regions.push(HitRegion {
-        rect: notify_header_rect,
-        target: notify_target,
+        rect: header_rect,
+        target,
     });
-
-    if show_subrow {
-        let sub_top = notify_card.top + SETTINGS_CARD_H;
-        let sub_rect = rect_xywh(
-            notify_card.left + 1.0,
-            sub_top,
-            (notify_card.right - notify_card.left) - 2.0,
-            SETTINGS_SUBROW_H - 1.0,
-        );
-        let silent_target = HitTarget::ToggleLowBatterySilent;
-        let silent_hovered =
-            ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(&silent_target);
-        let silent_pressed =
-            ui.open_dropdown.is_none() && ui.pressed.as_ref() == Some(&silent_target);
-
-        rt.PushAxisAlignedClip(&sub_rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-        let sub_bg_color = if silent_pressed {
-            palette.card_bg_pressed
-        } else if silent_hovered {
-            palette.card_bg_hover
-        } else {
-            palette.card_drawer_bg
-        };
-        rt.FillRoundedRectangle(
-            &rounded_rect(
-                D2D_RECT_F {
-                    left: notify_card.left + 0.5,
-                    top: notify_card.top + 0.5,
-                    right: notify_card.right - 0.5,
-                    bottom: notify_card.bottom - 0.5,
-                },
-                CARD_RADIUS - 0.5,
-            ),
-            brush.color(&sub_bg_color),
-        );
-        rt.PopAxisAlignedClip();
-
-        rt.DrawLine(
-            D2D_POINT_2F {
-                x: notify_card.left + 1.0,
-                y: sub_top + 0.5,
-            },
-            D2D_POINT_2F {
-                x: notify_card.right - 1.0,
-                y: sub_top + 0.5,
-            },
-            brush.color(&palette.divider),
-            1.0,
-            None,
-        );
-
-        draw_text(
-            rt,
-            GLYPH_RINGER_SILENT,
-            &formats.icon_small,
-            rect_xywh(notify_card.left + 26.0, sub_top, 18.0, SETTINGS_SUBROW_H),
-            &palette.text_secondary,
-            brush,
-        );
-        let sub_text_x = notify_card.left + 48.0;
-        let sub_text_w = ((notify_card.right - notify_card.left) - 48.0 - 64.0).max(60.0);
-        draw_text(
-            rt,
-            lang.setting_silent_title(),
-            &formats.body,
-            rect_xywh(sub_text_x, sub_top + 7.0, sub_text_w, 18.0),
-            &palette.text_primary,
-            brush,
-        );
-        draw_text(
-            rt,
-            lang.setting_silent_desc(),
-            &formats.caption,
-            rect_xywh(sub_text_x, sub_top + 25.0, sub_text_w, 16.0),
-            &palette.text_secondary,
-            brush,
-        );
-        draw_win11_toggle_switch(
-            rt,
-            brush,
-            notify_card.right - 14.0 - 40.0,
-            sub_top + (SETTINGS_SUBROW_H - 20.0) * 0.5,
-            ui.toggle_silent_anim.value(now),
-            silent_hovered,
-            silent_pressed,
-            palette,
-        );
-        hit_regions.push(HitRegion {
-            rect: sub_rect,
-            target: silent_target,
-        });
-    }
-    notify_card_h
 }
 
 #[allow(clippy::too_many_arguments)]
-unsafe fn draw_settings_card_base(
+unsafe fn draw_expander_subrow_chrome(
     rt: &ID2D1HwndRenderTarget,
     formats: &TextFormats,
     brush: &PaintBrush,
-    rect: D2D_RECT_F,
-    glyph: &str,
+    card_rect: D2D_RECT_F,
+    sub_top: f32,
+    glyph: Option<&str>,
     title: &str,
     desc: &str,
     right_reserved_w: f32,
+    row_target: Option<&HitTarget>,
     palette: &Palette,
-    hovered: bool,
-    pressed: bool,
-) {
-    let bg = if pressed {
+    ui: &UiState,
+) -> D2D_RECT_F {
+    let sub_rect = rect_xywh(
+        card_rect.left + 1.0,
+        sub_top,
+        (card_rect.right - card_rect.left) - 2.0,
+        SETTINGS_SUBROW_H - 1.0,
+    );
+    let hovered =
+        row_target.is_some_and(|t| ui.open_dropdown.is_none() && ui.hovered.as_ref() == Some(t));
+    let pressed =
+        row_target.is_some_and(|t| ui.open_dropdown.is_none() && ui.pressed.as_ref() == Some(t));
+
+    rt.PushAxisAlignedClip(&sub_rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    let sub_bg_color = if pressed {
         palette.card_bg_pressed
     } else if hovered {
         palette.card_bg_hover
     } else {
-        palette.card_bg
+        palette.card_drawer_bg
     };
-    draw_elevated_card(
-        rt,
-        brush,
-        rect,
-        CARD_RADIUS,
-        bg,
-        palette.card_border,
-        palette,
+    rt.FillRoundedRectangle(
+        &rounded_rect(
+            D2D_RECT_F {
+                left: card_rect.left + 0.5,
+                top: card_rect.top + 0.5,
+                right: card_rect.right - 0.5,
+                bottom: card_rect.bottom - 0.5,
+            },
+            CARD_RADIUS - 0.5,
+        ),
+        brush.color(&sub_bg_color),
     );
-    draw_settings_row_content(
+    rt.PopAxisAlignedClip();
+
+    rt.DrawLine(
+        D2D_POINT_2F {
+            x: card_rect.left + 1.0,
+            y: sub_top + 0.5,
+        },
+        D2D_POINT_2F {
+            x: card_rect.right - 1.0,
+            y: sub_top + 0.5,
+        },
+        brush.color(&palette.divider),
+        1.0,
+        None,
+    );
+
+    if let Some(g) = glyph {
+        draw_text(
+            rt,
+            g,
+            &formats.icon_small,
+            rect_xywh(card_rect.left + 24.0, sub_top, 18.0, SETTINGS_SUBROW_H),
+            &palette.text_secondary,
+            brush,
+        );
+    }
+
+    let sub_text_x = card_rect.left + 48.0;
+    let sub_text_w = ((card_rect.right - card_rect.left) - 48.0 - right_reserved_w).max(60.0);
+    draw_text(
         rt,
-        formats,
-        brush,
-        rect,
-        glyph,
         title,
-        desc,
-        right_reserved_w,
-        palette,
+        &formats.body,
+        rect_xywh(sub_text_x, sub_top + 7.0, sub_text_w, 18.0),
+        &palette.text_primary,
+        brush,
     );
+    draw_text(
+        rt,
+        desc,
+        &formats.caption,
+        rect_xywh(sub_text_x, sub_top + 25.0, sub_text_w, 16.0),
+        &palette.text_secondary,
+        brush,
+    );
+
+    sub_rect
 }
 
 #[allow(clippy::too_many_arguments)]

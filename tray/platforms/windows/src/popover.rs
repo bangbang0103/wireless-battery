@@ -147,6 +147,7 @@ impl VsyncPacer {
         if guard.active != active {
             guard.active = active;
             if active {
+                self.frame_pending.store(false, Ordering::Release);
                 cvar.notify_one();
             } else {
                 self.frame_pending.store(false, Ordering::Release);
@@ -754,7 +755,25 @@ unsafe extern "system" fn popover_wnd_proc(
             if let Ok(mut inner) = cell.core.try_borrow_mut() {
                 inner.vsync.mark_frame_consumed();
                 if visible {
+                    let mut shrunk = false;
+                    if inner.ui.pending_settings_shrink
+                        && !inner.ui.settings_sections.is_animating(Instant::now())
+                    {
+                        inner.ui.pending_settings_shrink = false;
+                        let upd = compute_position_and_resize(&mut inner, None, false);
+                        apply_window_pos(hwnd, upd);
+                        shrunk = true;
+                    }
                     paint_inner(&mut inner);
+                    if !shrunk
+                        && inner.ui.pending_settings_shrink
+                        && !inner.ui.settings_sections.is_animating(Instant::now())
+                    {
+                        inner.ui.pending_settings_shrink = false;
+                        let upd = compute_position_and_resize(&mut inner, None, false);
+                        apply_window_pos(hwnd, upd);
+                        paint_inner(&mut inner);
+                    }
                 }
                 sync_vsync_pacer(&mut inner);
             }
@@ -1070,6 +1089,7 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) -> ClickOutcome {
         HitTarget::BackToMain => {
             inner.ui.view = PopoverView::Main;
             inner.ui.scroll_offset = 0.0;
+            inner.ui.pending_settings_shrink = false;
             inner.ui.close_dropdown_menu();
             inner.ui.hovered = None;
             inner.ui.pressed = None;
@@ -1134,6 +1154,21 @@ fn handle_click(inner: &mut PopoverInner, target: HitTarget) -> ClickOutcome {
                 }
             }
             out.action = Some(PopoverAction::ToggleShowPinButton);
+        }
+        HitTarget::ToggleSettingsSection(section) => {
+            let now = Instant::now();
+            let was_expanded = inner.ui.settings_sections.is_expanded(section);
+            inner.ui.close_dropdown_menu();
+            inner.ui.settings_sections.toggle(section, now);
+            if was_expanded {
+                // Defer window shrink until the collapse animation finishes so Acrylic never flickers.
+                inner.ui.pending_settings_shrink = true;
+            } else {
+                inner.ui.pending_settings_shrink = false;
+                out.pos = compute_position_and_resize(inner, None, false);
+            }
+            sync_vsync_pacer(inner);
+            out.repaint = true;
         }
         HitTarget::CheckUpdates => match &inner.ui.update_status {
             UpdateUiStatus::Checking => {}

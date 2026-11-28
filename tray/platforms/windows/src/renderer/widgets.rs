@@ -431,7 +431,7 @@ pub(super) unsafe fn draw_win11_toggle_switch(
 #[allow(clippy::too_many_arguments)]
 pub(super) unsafe fn draw_subtle_icon_button(
     rt: &ID2D1HwndRenderTarget,
-    formats: &TextFormats,
+    icon_format: &IDWriteTextFormat,
     brush: &PaintBrush,
     hit_regions: &mut Vec<HitRegion>,
     rect: D2D_RECT_F,
@@ -463,7 +463,7 @@ pub(super) unsafe fn draw_subtle_icon_button(
     } else {
         palette.text_secondary
     };
-    draw_text(rt, glyph, &formats.icon_header, rect, &glyph_color, brush);
+    draw_text(rt, glyph, icon_format, rect, &glyph_color, brush);
     hit_regions.push(HitRegion {
         rect,
         target: target.clone(),

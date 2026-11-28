@@ -15,12 +15,12 @@ mod settings_view;
 mod widgets;
 
 use self::anim::{
-    HitRegion, FOOTER_HEIGHT, LIST_VERTICAL_PAD, OUTER_PADDING, POPOVER_MAX_HEIGHT_DIP,
-    ROW_COLLAPSED_H, ROW_EXPANDED_EXTRA_H, SETTINGS_CARD_GAP, SETTINGS_CARD_H, SETTINGS_SUBROW_H,
-    WINDOW_CORNER_RADIUS,
+    HitRegion, FOOTER_HEIGHT, LIST_VERTICAL_PAD, POPOVER_MAX_HEIGHT_DIP, ROW_COLLAPSED_H,
+    ROW_EXPANDED_EXTRA_H, WINDOW_CORNER_RADIUS,
 };
 use self::widgets::{draw_toast, rounded_rect, PaintBrush, TextFormats};
 use crate::i18n::Lang;
+use crate::icon::create_app_icon_bitmap;
 use crate::theme::{Palette, SystemTheme};
 use std::time::Instant;
 use windows::Win32::Foundation::HWND;
@@ -28,10 +28,10 @@ use windows::Win32::Graphics::Direct2D::Common::{
     D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_COLOR_F, D2D1_PIXEL_FORMAT, D2D_RECT_F, D2D_SIZE_U,
 };
 use windows::Win32::Graphics::Direct2D::{
-    D2D1CreateFactory, ID2D1Factory, ID2D1HwndRenderTarget, D2D1_FACTORY_TYPE_SINGLE_THREADED,
-    D2D1_HWND_RENDER_TARGET_PROPERTIES, D2D1_PRESENT_OPTIONS_IMMEDIATELY,
-    D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_DEFAULT,
-    D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE,
+    D2D1CreateFactory, ID2D1Bitmap, ID2D1Factory, ID2D1HwndRenderTarget,
+    D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_HWND_RENDER_TARGET_PROPERTIES,
+    D2D1_PRESENT_OPTIONS_IMMEDIATELY, D2D1_RENDER_TARGET_PROPERTIES,
+    D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE,
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWriteCreateFactory, IDWriteFactory, DWRITE_FACTORY_TYPE_SHARED,
@@ -62,6 +62,7 @@ pub struct PopoverRenderer {
     formats: TextFormats,
     target: Option<ID2D1HwndRenderTarget>,
     brush: Option<PaintBrush>,
+    app_icon: Option<(u32, ID2D1Bitmap)>,
     hit_regions: Vec<HitRegion>,
     content_height: f32,
     viewport_height: f32,
@@ -80,6 +81,7 @@ impl PopoverRenderer {
             formats,
             target: None,
             brush: None,
+            app_icon: None,
             hit_regions: Vec::new(),
             content_height: 0.0,
             viewport_height: 0.0,
@@ -89,19 +91,9 @@ impl PopoverRenderer {
     /// Compute the ideal logical height (DIPs) for the current snapshot and view.
     pub fn desired_height_dip(&self, snapshot: &TraySnapshot, ui: &UiState) -> f32 {
         match ui.view {
-            PopoverView::Settings => {
-                let subrow_extra = if snapshot.config.low_battery_notify {
-                    SETTINGS_SUBROW_H
-                } else {
-                    0.0
-                };
-                (HEADER_HEIGHT
-                    + OUTER_PADDING * 2.0
-                    + SETTINGS_CARD_H * 10.0
-                    + SETTINGS_CARD_GAP * 9.0
-                    + subrow_extra)
-                    .min(POPOVER_MAX_HEIGHT_DIP)
-            }
+            PopoverView::Settings => (HEADER_HEIGHT
+                + settings_view::settings_content_height(snapshot, ui))
+            .min(POPOVER_MAX_HEIGHT_DIP),
             PopoverView::Main => {
                 if snapshot.devices.is_empty() {
                     return HEADER_HEIGHT + 204.0 + FOOTER_HEIGHT;
@@ -155,6 +147,8 @@ impl PopoverRenderer {
             surface.dpi,
         )?;
         let scale = (surface.dpi as f32) / 96.0;
+        let icon_px = ((15.0 * scale).round() as u32).clamp(16, 128);
+        let app_icon_bmp = self.ensure_app_icon(&rt, icon_px);
         let width = (surface.pixel_width as f32) / scale;
         let height = (surface.pixel_height as f32) / scale;
         let palette = Palette::for_theme(surface.effective_dark, surface.system_theme.accent_rgb);
@@ -196,6 +190,7 @@ impl PopoverRenderer {
                     main_view::draw_main_view(
                         &self.dwrite,
                         &rt,
+                        app_icon_bmp.as_ref(),
                         &self.formats,
                         &brush,
                         &mut self.hit_regions,
@@ -266,9 +261,25 @@ impl PopoverRenderer {
             if end_result.is_err() {
                 self.target = None;
                 self.brush = None;
+                self.app_icon = None;
             }
         }
         Ok(())
+    }
+
+    fn ensure_app_icon(
+        &mut self,
+        rt: &ID2D1HwndRenderTarget,
+        pixel_size: u32,
+    ) -> Option<ID2D1Bitmap> {
+        if let Some((cached_px, bmp)) = &self.app_icon {
+            if *cached_px == pixel_size {
+                return Some(bmp.clone());
+            }
+        }
+        let bmp = create_app_icon_bitmap(rt, pixel_size)?;
+        self.app_icon = Some((pixel_size, bmp.clone()));
+        Some(bmp)
     }
 
     fn ensure_target(

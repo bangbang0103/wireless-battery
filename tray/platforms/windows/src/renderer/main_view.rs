@@ -15,7 +15,8 @@ use crate::theme::{with_alpha, Palette};
 use std::time::Instant;
 use windows::Win32::Graphics::Direct2D::Common::{D2D1_COLOR_F, D2D_POINT_2F, D2D_RECT_F};
 use windows::Win32::Graphics::Direct2D::{
-    ID2D1HwndRenderTarget, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1_ELLIPSE, D2D1_ROUNDED_RECT,
+    ID2D1Bitmap, ID2D1HwndRenderTarget, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, D2D1_ELLIPSE, D2D1_ROUNDED_RECT,
 };
 use windows::Win32::Graphics::DirectWrite::IDWriteFactory;
 use wireless_battery::{BatteryLevel, ChargeState, Freshness, Precision, Reachability};
@@ -25,6 +26,7 @@ use wireless_battery_tray_core::{DeviceView, TrayIconState, TraySnapshot};
 pub(super) unsafe fn draw_main_view(
     dwrite: &IDWriteFactory,
     rt: &ID2D1HwndRenderTarget,
+    app_icon: Option<&ID2D1Bitmap>,
     formats: &TextFormats,
     brush: &PaintBrush,
     hit_regions: &mut Vec<HitRegion>,
@@ -41,16 +43,36 @@ pub(super) unsafe fn draw_main_view(
     let compact = ui.is_compact_pinned(snapshot);
     if !compact {
         // --- Win11 Flyout Header (52 DIPs) ---
-        let title_max_w = if snapshot.config.show_pin_button {
-            width - 100.0
+        let brand_icon_size = 15.0;
+        let brand_icon_gap = 8.0;
+        let brand_icon_rect = rect_xywh(
+            OUTER_PADDING,
+            (HEADER_HEIGHT - brand_icon_size) * 0.5,
+            brand_icon_size,
+            brand_icon_size,
+        );
+        let title_x = if let Some(bmp) = app_icon {
+            rt.DrawBitmap(
+                bmp,
+                Some(&brand_icon_rect),
+                1.0,
+                D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+                None,
+            );
+            OUTER_PADDING + brand_icon_size + brand_icon_gap
         } else {
-            width - 64.0
+            OUTER_PADDING
+        };
+        let title_max_w = if snapshot.config.show_pin_button {
+            width - 100.0 - (title_x - OUTER_PADDING)
+        } else {
+            width - 64.0 - (title_x - OUTER_PADDING)
         };
         draw_text(
             rt,
             "Wireless Battery",
             &formats.title,
-            rect_xywh(OUTER_PADDING, 10.0, title_max_w, 32.0),
+            rect_xywh(title_x, 10.0, title_max_w, 32.0),
             &palette.text_primary,
             brush,
         );
@@ -69,7 +91,7 @@ pub(super) unsafe fn draw_main_view(
             let pin_glyph = if ui.pinned { GLYPH_PINNED } else { GLYPH_PIN };
             draw_subtle_icon_button(
                 rt,
-                formats,
+                &formats.icon_header,
                 brush,
                 hit_regions,
                 pin_rect,
@@ -82,7 +104,7 @@ pub(super) unsafe fn draw_main_view(
         }
         draw_subtle_icon_button(
             rt,
-            formats,
+            &formats.icon_header,
             brush,
             hit_regions,
             settings_rect,
@@ -359,7 +381,7 @@ unsafe fn draw_footer(
     };
     let quit_rect = rect_xywh(width - 12.0 - 48.0, list_bottom + 8.0, 48.0, 32.0);
     let status_x = OUTER_PADDING + 13.0;
-    let refresh_size = 26.0;
+    let refresh_size = 20.0;
     let refresh_gap = 4.0;
     let max_status_w = (quit_rect.left - 8.0 - refresh_size - refresh_gap - status_x).max(40.0);
     let measured_w = measure_text_width(
@@ -386,7 +408,7 @@ unsafe fn draw_footer(
     );
     draw_subtle_icon_button(
         rt,
-        formats,
+        &formats.icon_small,
         brush,
         hit_regions,
         refresh_rect,

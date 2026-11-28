@@ -49,6 +49,48 @@ impl Lang {
         }
     }
 
+    pub const fn settings_section_general(self) -> &'static str {
+        match self {
+            Self::ZhCn => "常规",
+            Self::En => "General",
+        }
+    }
+
+    pub const fn settings_section_general_desc(self) -> &'static str {
+        match self {
+            Self::ZhCn => "主题、语言、置顶按钮与开机自启",
+            Self::En => "Theme, language, pin button & startup",
+        }
+    }
+
+    pub const fn settings_section_monitoring(self) -> &'static str {
+        match self {
+            Self::ZhCn => "监控与提醒",
+            Self::En => "Monitoring & Alerts",
+        }
+    }
+
+    pub const fn settings_section_monitoring_desc(self) -> &'static str {
+        match self {
+            Self::ZhCn => "轮询间隔、低电量警告与静默通知",
+            Self::En => "Poll interval, low battery & silent alerts",
+        }
+    }
+
+    pub const fn settings_section_about(self) -> &'static str {
+        match self {
+            Self::ZhCn => "关于与支持",
+            Self::En => "About & Support",
+        }
+    }
+
+    pub fn settings_section_about_desc(self, version: &str) -> String {
+        match self {
+            Self::ZhCn => format!("当前版本 {version} · 源码、反馈与社区"),
+            Self::En => format!("Version {version} · Source, feedback & community"),
+        }
+    }
+
     pub const fn quit(self) -> &'static str {
         match self {
             Self::ZhCn => "退出",
