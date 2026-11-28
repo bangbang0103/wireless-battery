@@ -8,17 +8,31 @@ enum CommunityLinkKind: Equatable {
     case discord
 }
 
+private enum SettingsPage: Equatable {
+    case root
+    case general
+    case monitoring
+    case about
+}
+
 struct SettingsView: View {
     @ObservedObject var store: TrayStore
     let onBack: () -> Void
+    @State private var currentPage: SettingsPage = .root
     @State private var toastMessage: String?
     @State private var toastIsSuccess = true
-    @State private var generalExpanded = true
-    @State private var monitoringExpanded = false
-    @State private var aboutExpanded = false
 
     private var lang: AppLanguage {
         store.language
+    }
+
+    private var headerTitle: String {
+        switch currentPage {
+        case .root: return lang.settingsTitle
+        case .general: return lang.settingsSectionGeneral
+        case .monitoring: return lang.settingsSectionMonitoring
+        case .about: return lang.settingsSectionAbout
+        }
     }
 
     var body: some View {
@@ -26,7 +40,15 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             // Native macOS navigation header
             HStack {
-                Button(action: onBack) {
+                Button {
+                    if currentPage == .root {
+                        onBack()
+                    } else {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            currentPage = .root
+                        }
+                    }
+                } label: {
                     HStack(spacing: 3) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 11, weight: .semibold))
@@ -36,7 +58,7 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.borderless)
                 Spacer()
-                Text(lang.settingsTitle)
+                Text(headerTitle)
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Color.clear.frame(width: 44, height: 1)
@@ -48,241 +70,20 @@ struct SettingsView: View {
 
             // Native macOS Ventura/Sonoma/Sequoia grouped inset Settings containers
             ScrollView {
-                VStack(spacing: 8) {
-                    // Section 1: General (expanded by default)
-                    MacCollapsibleSettingsGroup(
-                        icon: "gearshape",
-                        title: lang.settingsSectionGeneral,
-                        subtitle: lang.settingsSectionGeneralDesc,
-                        isExpanded: $generalExpanded
-                    ) {
-                        MacPickerRow(
-                            icon: "circle.lefthalf.filled",
-                            title: lang.settingThemeTitle
-                        ) {
-                            Picker("", selection: Binding(
-                                get: { cfg.themeMode },
-                                set: { next in
-                                    var u = cfg
-                                    u.themeMode = next
-                                    store.updateConfig(u)
-                                }
-                            )) {
-                                Text(lang.themeLabel("system")).tag("system")
-                                Text(lang.themeLabel("light")).tag("light")
-                                Text(lang.themeLabel("dark")).tag("dark")
-                            }
-                            .pickerStyle(.menu)
-                            .labelsHidden()
-                            .controlSize(.small)
-                            .fixedSize()
-                        }
-
-                        Divider().padding(.leading, 38)
-
-                        MacPickerRow(
-                            icon: "globe",
-                            title: lang.settingLanguageTitle
-                        ) {
-                            Picker("", selection: Binding(
-                                get: { cfg.language },
-                                set: { next in
-                                    var u = cfg
-                                    u.language = next
-                                    store.updateConfig(u)
-                                }
-                            )) {
-                                Text(lang.languageLabel("system")).tag("system")
-                                Text(lang.languageLabel("zh_cn")).tag("zh_cn")
-                                Text(lang.languageLabel("en")).tag("en")
-                            }
-                            .pickerStyle(.menu)
-                            .labelsHidden()
-                            .controlSize(.small)
-                            .fixedSize()
-                        }
-
-                        Divider().padding(.leading, 38)
-
-                        MacToggleRow(
-                            icon: "pin",
-                            title: lang.settingShowPinButtonTitle,
-                            subtitle: lang.settingShowPinButtonDesc,
-                            isOn: Binding(
-                                get: { cfg.showPinButton },
-                                set: { v in
-                                    var u = cfg
-                                    u.showPinButton = v
-                                    store.updateConfig(u)
-                                }
-                            )
-                        )
-
-                        Divider().padding(.leading, 38)
-
-                        MacToggleRow(
-                            icon: "power",
-                            title: lang.settingAutostartTitle,
-                            subtitle: lang.settingAutostartDesc,
-                            isOn: Binding(
-                                get: { cfg.autostart },
-                                set: { v in
-                                    var u = cfg
-                                    u.autostart = v
-                                    store.updateConfig(u)
-                                }
-                            )
-                        )
-                        .disabled(!store.isBundledApp)
-                        .help(store.isBundledApp ? lang.settingAutostartHelpBundled : lang.settingAutostartHelpUnbundled)
-                    }
-
-                    // Section 2: Monitoring & Alerts (collapsed by default)
-                    MacCollapsibleSettingsGroup(
-                        icon: "bell.badge",
-                        title: lang.settingsSectionMonitoring,
-                        subtitle: lang.settingsSectionMonitoringDesc,
-                        isExpanded: $monitoringExpanded
-                    ) {
-                        MacPickerRow(
-                            icon: "clock",
-                            title: lang.settingPollTitle,
-                            subtitle: lang.settingPollDesc
-                        ) {
-                            Picker("", selection: Binding(
-                                get: { cfg.pollIntervalSecs },
-                                set: { next in
-                                    var u = cfg
-                                    u.pollIntervalSecs = next
-                                    store.updateConfig(u)
-                                }
-                            )) {
-                                Text(lang.pollLabel(300)).tag(UInt64(300))
-                                Text(lang.pollLabel(900)).tag(UInt64(900))
-                                Text(lang.pollLabel(1800)).tag(UInt64(1800))
-                                Text(lang.pollLabel(3600)).tag(UInt64(3600))
-                                Text(lang.pollLabel(0)).tag(UInt64(0))
-                                if ![300, 900, 1800, 3600, 0].contains(cfg.pollIntervalSecs) {
-                                    Text(lang.pollLabel(cfg.pollIntervalSecs)).tag(cfg.pollIntervalSecs)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .labelsHidden()
-                            .controlSize(.small)
-                            .fixedSize()
-                        }
-
-                        Divider().padding(.leading, 38)
-
-                        MacToggleRow(
-                            icon: "bell.badge",
-                            title: lang.settingLowBatteryTitle,
-                            subtitle: lang.lowBatteryDesc(enabled: cfg.lowBatteryNotify, silent: cfg.lowBatterySilent),
-                            isOn: Binding(
-                                get: { cfg.lowBatteryNotify },
-                                set: { v in
-                                    var u = cfg
-                                    u.lowBatteryNotify = v
-                                    withAnimation(.easeInOut(duration: 0.16)) {
-                                        store.updateConfig(u)
-                                    }
-                                }
-                            )
-                        )
-
-                        if cfg.lowBatteryNotify {
-                            Divider().padding(.leading, 38)
-
-                            MacToggleRow(
-                                icon: "bell.slash",
-                                title: lang.settingSilentTitle,
-                                subtitle: lang.settingSilentDesc,
-                                indented: true,
-                                isOn: Binding(
-                                    get: { cfg.lowBatterySilent },
-                                    set: { v in
-                                        var u = cfg
-                                        u.lowBatterySilent = v
-                                        store.updateConfig(u)
-                                    }
-                                )
-                            )
-                        }
-                    }
-
-                    // Section 3: About & Support (collapsed by default)
-                    MacCollapsibleSettingsGroup(
-                        icon: "info.circle",
-                        title: lang.settingsSectionAbout,
-                        subtitle: lang.settingsSectionAboutDesc(store.snapshot.appVersion),
-                        isExpanded: $aboutExpanded
-                    ) {
-                        MacPickerRow(
-                            icon: "info.circle",
-                            title: lang.settingVersionTitle,
-                            subtitle: versionSubtitle
-                        ) {
-                            Button(versionActionLabel) {
-                                if case let .available(_, url) = store.updateStatus,
-                                   TrayStore.isValidUpdateURL(url)
-                                {
-                                    NSWorkspace.shared.open(url)
-                                } else {
-                                    store.checkForUpdates()
-                                }
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(store.updateStatus == .checking)
-                        }
-
-                        Divider().padding(.leading, 38)
-
-                        MacCommunityRow(
-                            kind: .sourceRepo,
-                            title: lang.settingSourceTitle,
-                            subtitle: lang.settingSourceDesc
-                        ) {
-                            Button(lang.openRepositoryLabel) {
-                                handleCommunityLinkTap(.sourceRepo)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
-
-                        Divider().padding(.leading, 38)
-
-                        MacCommunityRow(
-                            kind: .bugReport,
-                            title: lang.settingFeedbackTitle,
-                            subtitle: lang.settingFeedbackDesc
-                        ) {
-                            Button(lang.submitFeedbackLabel) {
-                                handleCommunityLinkTap(.bugReport)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
-
-                        Divider().padding(.leading, 38)
-
-                        MacPickerRow(
-                            icon: "person.2",
-                            title: lang.settingCommunityTitle,
-                            subtitle: lang.settingCommunityDesc
-                        ) {
-                            HStack(spacing: 3) {
-                                CommunityIconButton(kind: .qq, accessibilityLabel: "QQ") {
-                                    handleCommunityLinkTap(.qq)
-                                }
-                                CommunityIconButton(kind: .discord, accessibilityLabel: "Discord") {
-                                    handleCommunityLinkTap(.discord)
-                                }
-                            }
-                        }
+                VStack(spacing: 10) {
+                    switch currentPage {
+                    case .root:
+                        rootMenuView
+                    case .general:
+                        generalPage(cfg: cfg)
+                    case .monitoring:
+                        monitoringPage(cfg: cfg)
+                    case .about:
+                        aboutPage
                     }
                 }
                 .padding(14)
+                .animation(.easeInOut(duration: 0.16), value: currentPage)
             }
             .frame(maxHeight: 620)
         }
@@ -303,6 +104,267 @@ struct SettingsView: View {
                 .padding(.bottom, 64)
                 .allowsHitTesting(false)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+        }
+    }
+
+    // MARK: - Pages
+
+    private var rootMenuView: some View {
+        MacSettingsGroup {
+            MacNavigationRow(
+                icon: "gearshape",
+                title: lang.settingsSectionGeneral,
+                subtitle: lang.settingsSectionGeneralDesc
+            ) {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    currentPage = .general
+                }
+            }
+
+            Divider().padding(.leading, 38)
+
+            MacNavigationRow(
+                icon: "bell.badge",
+                title: lang.settingsSectionMonitoring,
+                subtitle: lang.settingsSectionMonitoringDesc
+            ) {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    currentPage = .monitoring
+                }
+            }
+
+            Divider().padding(.leading, 38)
+
+            MacNavigationRow(
+                icon: "info.circle",
+                title: lang.settingsSectionAbout,
+                subtitle: lang.settingsSectionAboutDesc(store.snapshot.appVersion)
+            ) {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    currentPage = .about
+                }
+            }
+        }
+    }
+
+    private func generalPage(cfg: TrayConfigModel) -> some View {
+        MacSettingsGroup {
+            MacPickerRow(
+                icon: "circle.lefthalf.filled",
+                title: lang.settingThemeTitle
+            ) {
+                Picker("", selection: Binding(
+                    get: { cfg.themeMode },
+                    set: { next in
+                        var u = cfg
+                        u.themeMode = next
+                        store.updateConfig(u)
+                    }
+                )) {
+                    Text(lang.themeLabel("system")).tag("system")
+                    Text(lang.themeLabel("light")).tag("light")
+                    Text(lang.themeLabel("dark")).tag("dark")
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+            }
+
+            Divider().padding(.leading, 38)
+
+            MacPickerRow(
+                icon: "globe",
+                title: lang.settingLanguageTitle
+            ) {
+                Picker("", selection: Binding(
+                    get: { cfg.language },
+                    set: { next in
+                        var u = cfg
+                        u.language = next
+                        store.updateConfig(u)
+                    }
+                )) {
+                    Text(lang.languageLabel("system")).tag("system")
+                    Text(lang.languageLabel("zh_cn")).tag("zh_cn")
+                    Text(lang.languageLabel("en")).tag("en")
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+            }
+
+            Divider().padding(.leading, 38)
+
+            MacToggleRow(
+                icon: "pin",
+                title: lang.settingShowPinButtonTitle,
+                subtitle: lang.settingShowPinButtonDesc,
+                isOn: Binding(
+                    get: { cfg.showPinButton },
+                    set: { v in
+                        var u = cfg
+                        u.showPinButton = v
+                        store.updateConfig(u)
+                    }
+                )
+            )
+
+            Divider().padding(.leading, 38)
+
+            MacToggleRow(
+                icon: "power",
+                title: lang.settingAutostartTitle,
+                subtitle: lang.settingAutostartDesc,
+                isOn: Binding(
+                    get: { cfg.autostart },
+                    set: { v in
+                        var u = cfg
+                        u.autostart = v
+                        store.updateConfig(u)
+                    }
+                )
+            )
+            .disabled(!store.isBundledApp)
+            .help(store.isBundledApp ? lang.settingAutostartHelpBundled : lang.settingAutostartHelpUnbundled)
+        }
+    }
+
+    private func monitoringPage(cfg: TrayConfigModel) -> some View {
+        MacSettingsGroup {
+            MacPickerRow(
+                icon: "clock",
+                title: lang.settingPollTitle,
+                subtitle: lang.settingPollDesc
+            ) {
+                Picker("", selection: Binding(
+                    get: { cfg.pollIntervalSecs },
+                    set: { next in
+                        var u = cfg
+                        u.pollIntervalSecs = next
+                        store.updateConfig(u)
+                    }
+                )) {
+                    Text(lang.pollLabel(300)).tag(UInt64(300))
+                    Text(lang.pollLabel(900)).tag(UInt64(900))
+                    Text(lang.pollLabel(1800)).tag(UInt64(1800))
+                    Text(lang.pollLabel(3600)).tag(UInt64(3600))
+                    Text(lang.pollLabel(0)).tag(UInt64(0))
+                    if ![300, 900, 1800, 3600, 0].contains(cfg.pollIntervalSecs) {
+                        Text(lang.pollLabel(cfg.pollIntervalSecs)).tag(cfg.pollIntervalSecs)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+            }
+
+            Divider().padding(.leading, 38)
+
+            MacToggleRow(
+                icon: "bell.badge",
+                title: lang.settingLowBatteryTitle,
+                subtitle: lang.lowBatteryDesc(enabled: cfg.lowBatteryNotify, silent: cfg.lowBatterySilent),
+                isOn: Binding(
+                    get: { cfg.lowBatteryNotify },
+                    set: { v in
+                        var u = cfg
+                        u.lowBatteryNotify = v
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            store.updateConfig(u)
+                        }
+                    }
+                )
+            )
+
+            if cfg.lowBatteryNotify {
+                Divider().padding(.leading, 38)
+
+                MacToggleRow(
+                    icon: "bell.slash",
+                    title: lang.settingSilentTitle,
+                    subtitle: lang.settingSilentDesc,
+                    indented: true,
+                    isOn: Binding(
+                        get: { cfg.lowBatterySilent },
+                        set: { v in
+                            var u = cfg
+                            u.lowBatterySilent = v
+                            store.updateConfig(u)
+                        }
+                    )
+                )
+            }
+        }
+    }
+
+    private var aboutPage: some View {
+        MacSettingsGroup {
+            MacPickerRow(
+                icon: "info.circle",
+                title: lang.settingVersionTitle,
+                subtitle: versionSubtitle
+            ) {
+                Button(versionActionLabel) {
+                    if case let .available(_, url) = store.updateStatus,
+                       TrayStore.isValidUpdateURL(url)
+                    {
+                        NSWorkspace.shared.open(url)
+                    } else {
+                        store.checkForUpdates()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(store.updateStatus == .checking)
+            }
+
+            Divider().padding(.leading, 38)
+
+            MacCommunityRow(
+                kind: .sourceRepo,
+                title: lang.settingSourceTitle,
+                subtitle: lang.settingSourceDesc
+            ) {
+                Button(lang.openRepositoryLabel) {
+                    handleCommunityLinkTap(.sourceRepo)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            Divider().padding(.leading, 38)
+
+            MacCommunityRow(
+                kind: .bugReport,
+                title: lang.settingFeedbackTitle,
+                subtitle: lang.settingFeedbackDesc
+            ) {
+                Button(lang.submitFeedbackLabel) {
+                    handleCommunityLinkTap(.bugReport)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            Divider().padding(.leading, 38)
+
+            MacPickerRow(
+                icon: "person.2",
+                title: lang.settingCommunityTitle,
+                subtitle: lang.settingCommunityDesc
+            ) {
+                HStack(spacing: 3) {
+                    CommunityIconButton(kind: .qq, accessibilityLabel: "QQ") {
+                        handleCommunityLinkTap(.qq)
+                    }
+                    CommunityIconButton(kind: .discord, accessibilityLabel: "Discord") {
+                        handleCommunityLinkTap(.discord)
+                    }
+                }
             }
         }
     }
@@ -378,56 +440,12 @@ struct SettingsView: View {
     }
 }
 
-private struct MacCollapsibleSettingsGroup<Content: View>: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    @Binding var isExpanded: Bool
+private struct MacSettingsGroup<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         VStack(spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: icon)
-                        .font(.system(size: 13.5))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 18, alignment: .center)
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(title)
-                            .font(.system(size: 12.5, weight: .semibold))
-                            .foregroundStyle(.primary)
-                        Text(subtitle)
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    Spacer(minLength: 8)
-
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if isExpanded {
-                VStack(spacing: 0) {
-                    Divider()
-                    content()
-                }
-                .background(Color.primary.opacity(0.025))
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+            content()
         }
         .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
         .overlay(
@@ -435,6 +453,51 @@ private struct MacCollapsibleSettingsGroup<Content: View>: View {
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
         )
         .clipped()
+    }
+}
+
+private struct MacNavigationRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18, alignment: .center)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(.primary)
+                    Text(subtitle)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(isHovered ? Color.primary.opacity(0.05) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
     }
 }
 
