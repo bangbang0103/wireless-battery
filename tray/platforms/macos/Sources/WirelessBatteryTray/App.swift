@@ -80,7 +80,14 @@ struct PopoverRootView: View {
         VStack(spacing: 0) {
             if showChrome {
                 // Native macOS Menu Bar Popover Header
-                HStack(spacing: 8) {
+                HStack(spacing: 7) {
+                    if let appIcon = NSApp.applicationIconImage {
+                        Image(nsImage: appIcon)
+                            .resizable()
+                            .interpolation(.high)
+                            .frame(width: 14, height: 14)
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                    }
                     Text("Wireless Battery")
                         .font(.system(size: 13, weight: .semibold))
                     if store.snapshot.refreshing {
@@ -88,23 +95,18 @@ struct PopoverRootView: View {
                             .controlSize(.mini)
                     }
                     Spacer()
-                    HeaderIconButton(
-                        systemName: pinController.isPinned ? "pin.fill" : "pin",
-                        active: pinController.isPinned,
-                        help: pinController.isPinned ? lang.pinHelpPinned : lang.pinHelpUnpinned
-                    ) {
-                        if inFloatingPanel {
-                            pinController.unpin()
-                        } else {
-                            pinController.toggle(store: store)
+                    if store.snapshot.config.showPinButton || inFloatingPanel {
+                        HeaderIconButton(
+                            systemName: pinController.isPinned ? "pin.fill" : "pin",
+                            active: pinController.isPinned,
+                            help: pinController.isPinned ? lang.pinHelpPinned : lang.pinHelpUnpinned
+                        ) {
+                            if inFloatingPanel {
+                                pinController.unpin()
+                            } else {
+                                pinController.toggle(store: store)
+                            }
                         }
-                    }
-                    HeaderIconButton(
-                        systemName: "arrow.clockwise",
-                        active: false,
-                        help: lang.refreshAllHelp
-                    ) {
-                        store.refreshAll()
                     }
                     HeaderIconButton(
                         systemName: "gearshape",
@@ -187,7 +189,7 @@ struct PopoverRootView: View {
                 Divider()
 
                 // Minimalist macOS Footer
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     Circle()
                         .fill(statusColor)
                         .frame(width: 6, height: 6)
@@ -203,6 +205,17 @@ struct PopoverRootView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    Button {
+                        store.refreshAll()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(lang.refreshAllHelp)
                     Spacer()
                     Button(lang.quitLabel) { NSApp.terminate(nil) }
                         .buttonStyle(.borderless)

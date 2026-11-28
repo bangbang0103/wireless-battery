@@ -11,6 +11,7 @@ struct TrayConfigModel: Codable, Equatable {
     var lowBatterySilent: Bool
     var lowBatteryThreshold: UInt8
     var autostart: Bool
+    var showPinButton: Bool
     var readTimeoutMs: UInt64
     var themeMode: String
     var language: String
@@ -22,6 +23,7 @@ struct TrayConfigModel: Codable, Equatable {
         case lowBatterySilent = "low_battery_silent"
         case lowBatteryThreshold = "low_battery_threshold"
         case autostart
+        case showPinButton = "show_pin_button"
         case readTimeoutMs = "read_timeout_ms"
         case themeMode = "theme_mode"
         case language
@@ -34,6 +36,7 @@ struct TrayConfigModel: Codable, Equatable {
         lowBatterySilent: Bool,
         lowBatteryThreshold: UInt8,
         autostart: Bool,
+        showPinButton: Bool,
         readTimeoutMs: UInt64,
         themeMode: String,
         language: String
@@ -44,6 +47,7 @@ struct TrayConfigModel: Codable, Equatable {
         self.lowBatterySilent = lowBatterySilent
         self.lowBatteryThreshold = lowBatteryThreshold
         self.autostart = autostart
+        self.showPinButton = showPinButton
         self.readTimeoutMs = readTimeoutMs
         self.themeMode = themeMode
         self.language = language
@@ -57,6 +61,7 @@ struct TrayConfigModel: Codable, Equatable {
         self.lowBatterySilent = try c.decodeIfPresent(Bool.self, forKey: .lowBatterySilent) ?? false
         self.lowBatteryThreshold = try c.decodeIfPresent(UInt8.self, forKey: .lowBatteryThreshold) ?? 15
         self.autostart = try c.decodeIfPresent(Bool.self, forKey: .autostart) ?? false
+        self.showPinButton = try c.decodeIfPresent(Bool.self, forKey: .showPinButton) ?? false
         self.readTimeoutMs = try c.decodeIfPresent(UInt64.self, forKey: .readTimeoutMs) ?? 5000
         self.themeMode = try c.decodeIfPresent(String.self, forKey: .themeMode) ?? "system"
         self.language = try c.decodeIfPresent(String.self, forKey: .language) ?? "system"
@@ -69,6 +74,7 @@ struct TrayConfigModel: Codable, Equatable {
         lowBatterySilent: false,
         lowBatteryThreshold: 15,
         autostart: false,
+        showPinButton: false,
         readTimeoutMs: 5000,
         themeMode: "system",
         language: "system"

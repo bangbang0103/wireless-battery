@@ -23,6 +23,22 @@ enum AppLanguage: Equatable {
     // MARK: - Main View
 
     var settingsTitle: String { isZh ? "设置" : "Settings" }
+    var settingsSectionGeneral: String { isZh ? "常规" : "General" }
+    var settingsSectionGeneralDesc: String {
+        isZh ? "主题、语言、置顶按钮与开机自启" : "Theme, language, pin button & startup"
+    }
+    var settingsSectionMonitoring: String { isZh ? "监控与提醒" : "Monitoring & Alerts" }
+    var settingsSectionMonitoringDesc: String {
+        isZh ? "轮询间隔、低电量警告与静默通知" : "Poll interval, low battery & silent alerts"
+    }
+    var settingsSectionAbout: String { isZh ? "关于与支持" : "About & Support" }
+    func settingsSectionAboutDesc(_ version: String) -> String {
+        isZh ? "当前版本 \(version) · 源码、反馈与社区" : "Version \(version) · Source, feedback & community"
+    }
+    var settingShowPinButtonTitle: String { isZh ? "显示置顶按钮" : "Show Pin Button" }
+    var settingShowPinButtonDesc: String {
+        isZh ? "在主面板顶部显示窗口置顶按钮" : "Show the pin-on-top button in the main header"
+    }
     var backLabel: String { isZh ? "返回" : "Back" }
     var quitLabel: String { isZh ? "退出" : "Quit" }
     var openPanelLabel: String { isZh ? "打开面板" : "Open Panel" }
